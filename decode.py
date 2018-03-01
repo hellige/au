@@ -12,6 +12,7 @@ from shared import FORMAT_VERSION
 # TODO support record terminator finding/tail -f mode
 # TODO support dictionary rebuilding via backlinks
 # TODO grep, etc?
+# TODO still null-terminate strings to make `strings` work?
 
 dictionary = []
 
@@ -220,10 +221,10 @@ def tokenize(file):
         elif b == "S":
             s = tok_table["S"]()
             v = io.StringIO()
-            b = next(bs, None)
-            while b != 0:
-                v.write(chr(b))
+            length = intbytes(bs)
+            for i in range(length):
                 b = next(bs, None)
+                v.write(chr(b))
             s.value = v.getvalue()
             yield s
         else:

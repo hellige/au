@@ -60,8 +60,9 @@ def encode_int(number, buf):
 
 def encode_string(string, buf):
     buf.write(b'S')
-    buf.write(string.encode('utf-8'))
-    buf.write(bytes([0]))
+    bs = string.encode('utf-8')
+    encode_int(len(bs), buf)
+    buf.write(bs)
 
 
 def encode_string_intern(string, buf, force_intern=False):
