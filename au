@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+
+import argparse
+import sys
+
+import encode
+import decode
+
+assert sys.version_info[0] >= 3, 'au requires python 3'
+
+parser = argparse.ArgumentParser(description="au file encoder/decoder")
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument("-e", "--encode", help="encode json input",
+                   action="store_true")
+group.add_argument("-d", "--decode", help="decode json input",
+                   action="store_true")
+parser.add_argument('filename', nargs='?',
+                    help="input filename or '-' for stdin")
+args = parser.parse_args()
+
+if args.encode:
+    if not args.filename or args.filename == '-':
+        encode.encode(sys.stdin)
+    else:
+        with open(args.filename, 'r') as instr:
+            encode.encode(instr)
+elif args.decode:
+    if not args.filename or args.filename == '-':
+        decode.decode(sys.stdin.buffer)
+    else:
+        with open(args.filename, 'rb') as instr:
+            decode.decode(instr)
