@@ -26,6 +26,12 @@ def decode(file):
         if r:
             json.dump(r, sys.stdout, separators=(',', ':'))
             print()
+        elif isinstance(r, collections.OrderedDict):
+            json.dump({}, sys.stdout, separators=(',', ':'))
+            print()
+        elif isinstance(r, list):
+            json.dump([], sys.stdout, separators=(',', ':'))
+            print()
 
 
 def advance(id=None):
