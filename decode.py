@@ -26,6 +26,12 @@ def decode(file):
         if r:
             json.dump(r, sys.stdout, separators=(',', ':'))
             print()
+        elif isinstance(r, collections.OrderedDict):
+            json.dump({}, sys.stdout, separators=(',', ':'))
+            print()
+        elif isinstance(r, list):
+            json.dump([], sys.stdout, separators=(',', ':'))
+            print()
 
 
 def advance(id=None):
@@ -43,7 +49,7 @@ def record():
             raise SyntaxError("Expected version number. Got %s" % token)
         if token.value != FORMAT_VERSION:
             raise SyntaxError("Wrong format version number: %s. Expected %s."
-                % (token.value, VERSION))
+                % (token.value, FORMAT_VERSION))
         advance()
         advance("E")
     elif token.id == 'C':
@@ -64,7 +70,7 @@ def record():
         advance("E")
         return v
     else:
-        raise SyntaxError("Token not allowed at start of record (%r)." % self.id)
+        raise SyntaxError("Token not allowed at start of record (%r)." % token.id)
 
 
 def value():
@@ -144,10 +150,6 @@ class FileBytes(object):
         self.file = file
         self.chunksize = chunksize
         self.pos = 0
-        self.cksum = 0
-
-    def reset_cksum(self):
-        self.cksum = 0
 
     def __iter__(self):
         while True:
@@ -155,8 +157,6 @@ class FileBytes(object):
             if chunk:
                 for b in chunk:
                     self.pos += 1
-                    self.cksum += b
-                    self.cksum %= 256
                     yield b
             else:
                 break
@@ -182,16 +182,10 @@ def tokenize(file):
     while b:
         b = chr(b)
         if b == "E":
-            cksum = ubs.cksum
-            actual = next(bs, None)
-            if cksum != actual:
-                raise SyntaxError("Bad checksum! Got %s, expected %s"
-                    % (actual, cksum))
             b = chr(next(bs, None))
             if b != '\n':
                 raise SyntaxError("Expected newline! Got %s [%s]" % (ord(b), b))
             s = tok_table["E"]()
-            ubs.reset_cksum()
             yield s
         elif b in ["C"]:
             s = tok_table["C"]()
@@ -200,13 +194,13 @@ def tokenize(file):
         elif b in ["A", "V"]:
             sor = ubs.pos - 1
             s = tok_table[b]()
-            d = bytearray()
-            for i in range(8): d.append(next(bs, None))
-            backref = struct.unpack('<q', d)[0]
+            backref = intbytes(bs)
             if last_dict + backref != sor:
                 raise SyntaxError("Must reload dictionary %s, %s vs %s!" % (last_dict, last_dict + backref, sor)) # TODO
             if b == "A":
                 last_dict = sor
+            else:
+                vLen = intbytes(bs)
             yield s
         elif b in ["X", "I", "J"]:
             s = tok_table[b]()
