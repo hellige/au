@@ -19,9 +19,6 @@ class AuStringIntern {
     using Dict = std::unordered_map<std::string, DictVal>;
     Dict dict;
 
-    static constexpr size_t INTERN_THRESH = 10;
-    static constexpr size_t INTERN_CACHE_SIZE = 10 * 1000;
-
     void pop(Dict::iterator it) {
       if (it != dict.end()) {
         inOrder.erase(it->second.second);
@@ -64,6 +61,9 @@ class AuStringIntern {
   static constexpr size_t TINY_STR = 4;
 
 public:
+  static constexpr size_t INTERN_THRESH = 10;
+  static constexpr size_t INTERN_CACHE_SIZE = 10 * 1000;
+
   AuStringIntern() : nextEntry(0) { }
 
   /// @return negative value means the string was not interned
