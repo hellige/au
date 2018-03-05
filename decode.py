@@ -43,7 +43,7 @@ def record():
             raise SyntaxError("Expected version number. Got %s" % token)
         if token.value != FORMAT_VERSION:
             raise SyntaxError("Wrong format version number: %s. Expected %s."
-                % (token.value, VERSION))
+                % (token.value, FORMAT_VERSION))
         advance()
         advance("E")
     elif token.id == 'C':
@@ -64,7 +64,7 @@ def record():
         advance("E")
         return v
     else:
-        raise SyntaxError("Token not allowed at start of record (%r)." % self.id)
+        raise SyntaxError("Token not allowed at start of record (%r)." % token.id)
 
 
 def value():
