@@ -1,6 +1,3 @@
-// g++ -std=c++17 -I /home/gburca/drw/heimdall/src/audit/ -g -o au au.cpp
-// ./au | od -t c
-// echo '{"key1":"value1","key2":-5000,"key3":false}' | ~/drw/au/au --encode - | od -t c
 #include "AuEncoder.h"
 
 #include <iostream>

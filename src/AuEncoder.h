@@ -214,17 +214,21 @@ public:
     msgBuf_.put(b ? 'T' : 'F');
     return *this;
   }
+
   AuFormatter &value(const char *s) { return value(std::string_view(s)); }
   AuFormatter &null() { msgBuf_.put('N'); return *this; }
   AuFormatter &value(std::nullptr_t) { return null(); }
+
   template <typename T>
   AuFormatter &value(const T *t) {
     if (t) value(*t);
     else null();
     return *this;
   }
+
   template<typename T>
   AuFormatter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
+
   template<typename T>
   AuFormatter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
 

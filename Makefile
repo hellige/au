@@ -5,6 +5,7 @@ GBM_DIR = external/benchmark
 GBM_INSTALL = $(GBM_DIR)/build
 
 # Points to the root of Google Test, relative to where this file is.
+# Google Benchmark downloads and builds it, so we reuse that build.
 # Remember to tweak this if you move this file.
 GTEST_DIR = $(GBM_INSTALL)/googletest
 
@@ -15,13 +16,14 @@ CPPFLAGS += -isystem $(GTEST_DIR)/include
 
 # Flags passed to the C++ compiler.
 CXXFLAGS += -g -Wall -Wextra -pthread -std=c++17
-BENCHMARK_FLAGS += -I $(GBM_INSTALL)/include
+BENCHMARK_FLAGS += -I src -I $(GBM_INSTALL)/include
 
 
 BENCHMARK_DIR = benchmarks
 BENCHMARK_SRCS = $(shell find $(BENCHMARK_DIR) -name '*.cpp')
 
-TESTS = unit_tests au
+TEST_DIR = tests
+TEST_SRCS = $(shell find $(TEST_DIR) -name '*.cpp')
 
 submodules:
 	@git submodule init
@@ -32,25 +34,26 @@ gbenchmark: submodules
 	cd $(GBM_INSTALL) && cmake .. -DMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=. -DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON && make install
 
 $(GTEST_DIR)/lib/libgtest_main.a: gbenchmark
+$(GBM_INSTALL)/lib/libbenchmark.a: gbenchmark
 
-all: $(TESTS)
-	./unit_tests
+all:
 
-clean :
-	rm -f $(TESTS) gtest.a gtest_main.a *.o
+clean:
+	rm -f au
+	rm -f test
 	rm -f benchmark
+	rm -rf $(GBM_INSTALL)
 	#cd $(GBM_INSTALL) && make clean
 
-test: au unit_tests
-	./unit_tests
+test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I src -lpthread $^ -o $@
+	./test
 
-au: au.cpp
-	$(CXX) -std=c++17 -g -o au au.cpp
-	./au | od -tcz -tu1
-
-unit_tests: unit_tests.cpp $(GTEST_DIR)/lib/libgtest_main.a
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
+au: src/au.cpp
+	$(CXX) -std=c++17 -I src -g $^ -o $@
+	./$@ | od -tcz -tu1
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(BENCHMARK_FLAGS) -o $@ $^
+	./benchmark
 
