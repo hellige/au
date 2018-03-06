@@ -14,21 +14,33 @@ GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
 # trailing _.
 GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
 
+GBM_DIR = benchmark
+GBM_INSTALL = benchmark/build
+
 # Flags passed to the preprocessor.
 # Set Google Test's header directory as a system directory, such that
 # the compiler doesn't generate warnings in Google Test headers.
 CPPFLAGS += -isystem $(GTEST_DIR)/include
+CPPFLAGS += -Ibenchmark/build/include
 
 # Flags passed to the C++ compiler.
 CXXFLAGS += -g -Wall -Wextra -pthread -std=c++17
+CXXFLAGS += -Lbenchmark/build/lib -lbenchmark
 
 TESTS = unit_tests au
+
+BENCHMARK_DIR = benchmarks
+BENCHMARK_SRCS = $(shell find $(BENCHMARK_DIR) -name '*.cpp')
 
 submodules: googletest
 	@git submodule init
 	@git submodule update
 
 gtest: submodules gtest.a gtest_main.a
+
+gbenchmark: submodules
+	mkdir -p $(GBM_INSTALL)
+	cd benchmark/build && cmake .. -DMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=. -DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON && make install
 
 all: gtest $(TESTS)
 
@@ -64,4 +76,7 @@ au: au.cpp
 
 unit_tests: unit_tests.cpp gtest_main.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
+
+au_benchmarks: $(BENCHMARK_SRCS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $^
 
