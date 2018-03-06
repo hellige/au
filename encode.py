@@ -124,20 +124,14 @@ class Buf(object):
     def __init__(self, out):
         self.out = out
         self.pos = 0
-        self.cksum = 0
 
     def write(self, bs):
         self.out.write(bs)
         self.pos += len(bs)
-        for b in bs:
-            self.cksum += b
-            self.cksum %= 256
 
     def term(self):
         self.write(b'E')
-        self.write(byte(self.cksum))
         self.write(b'\n')
-        self.cksum = 0
 
 
 def encode(stream):
@@ -152,21 +146,20 @@ def encode(stream):
     for line in stream.readlines():
         node = json.loads(line)
         buf = io.BytesIO()
-        buf.write(b'V')
-        buf.write(bytes(8)) # save room for dict backlink
         encode_node(node, buf)
         if next_dumped_entry < next_entry:
             backlink = fp.pos - last_dict
             last_dict = fp.pos
             fp.write(b'A')
-            fp.write(struct.pack('<q', backlink))
+            encode_int(backlink, fp)
             while next_dumped_entry < next_entry:
                 encode_string(dict_in_order[next_dumped_entry], fp)
                 next_dumped_entry += 1
             fp.term()
-        buf.seek(1)
         backlink = fp.pos - last_dict
-        buf.write(struct.pack('<q', backlink))
+        fp.write(b'V')
+        encode_int(backlink, fp)
+        encode_int(buf.tell(), fp)
         fp.write(buf.getvalue())
         fp.term()
 
