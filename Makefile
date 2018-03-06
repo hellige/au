@@ -36,7 +36,7 @@ gbenchmark: submodules
 $(GTEST_DIR)/lib/libgtest_main.a: gbenchmark
 $(GBM_INSTALL)/lib/libbenchmark.a: gbenchmark
 
-all:
+all: au
 
 clean:
 	rm -f au
@@ -50,7 +50,7 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 	./test
 
 au: src/au.cpp
-	$(CXX) -std=c++17 -I src -g $^ -o $@
+	$(CXX) -std=c++17 -Isrc -Iinclude -g $^ -o $@
 	./$@ | od -tcz -tu1
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a
