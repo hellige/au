@@ -243,6 +243,24 @@ private:
 
 }
 
+struct NoopHandler {
+  void onRecordEnd() {}
+  void onObjectStart() {}
+  void onObjectEnd() {}
+  void onArrayStart() {}
+  void onArrayEnd() {}
+  void onNull() {}
+  void onBool(bool) {}
+  void onInt(int64_t) {}
+  void onDouble(double) {}
+  void onDictRef(size_t) {}
+  void onDictClear() {}
+  void onDictAddStart() {}
+  void onDictAddEnd() {}
+  void onStringStart(size_t) {}
+  void onStringEnd() {}
+  void onStringFragment(std::string_view) {}
+};
 
 class AuDecoder {
   std::string filename_;
@@ -254,6 +272,16 @@ public:
   void decode() const {
     FileByteSource source(filename_);
     JsonHandler handler;
+    try {
+      Parser(source, handler).parseStream();
+    } catch (parse_error &e) {
+      std::cout << e.what << std::endl;
+    }
+  }
+
+  void decodeNoop() const {
+    FileByteSource source(filename_);
+    NoopHandler handler;
     try {
       Parser(source, handler).parseStream();
     } catch (parse_error &e) {
