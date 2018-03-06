@@ -1,12 +1,18 @@
 #include "AuEncoder.h"
+#include "AuDecoder.h"
 
 #include <iostream>
 #include <sstream>
 #include <cmath>
+#include <string>
 
 using namespace std;
 
-int main() {
+void decode(const std::string &fname) {
+  AuDecoder(fname).decode();
+}
+
+void encode() {
   std::ostringstream os;
   Au au(os);
 
@@ -45,4 +51,13 @@ int main() {
   au.encode([](AuFormatter &f) { f.value("valToIntern"); });
 
   cout << os.str();
+}
+
+int main(int argc, char **argv) {
+  if (argc == 2) {
+    decode(std::string(argv[1]));
+  } else {
+    encode();
+  }
+  return 0;
 }
