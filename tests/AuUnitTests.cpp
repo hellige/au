@@ -144,6 +144,13 @@ TEST_F(AuFormatterTest, FlatMap) {
     EXPECT_EQ(std::string("{S\x04Key1S\x06value1S\04key1S\x06Value1}"), os.str());
 }
 
+TEST_F(AuFormatterTest, NestedMap) {
+    formatter.map("k1", "v1", "nested", formatter.mapVals([&](auto &sink){
+        sink(std::string_view("k2"), "v2");
+    }));
+    EXPECT_EQ(std::string("{S\2k1S\2v1X\0{S\2k2S\2v2}}", 22), os.str());
+}
+
 TEST_F(AuFormatterTest, EmptyArray) {
     formatter.array();
     EXPECT_EQ(std::string("[]"), os.str());
@@ -152,6 +159,13 @@ TEST_F(AuFormatterTest, EmptyArray) {
 TEST_F(AuFormatterTest, FlatArray) {
     formatter.array(1, 2, 3);
     EXPECT_EQ(std::string("[I\1I\2I\3]"), os.str());
+}
+
+TEST_F(AuFormatterTest, NestedArray) {
+    formatter.array(1, 2, formatter.arrayVals([&](){
+        formatter.value(3).value(4);
+    }));
+    EXPECT_EQ(std::string("[I\1I\2[I\3I\4]]"), os.str());
 }
 
 TEST(Au, creation) {
