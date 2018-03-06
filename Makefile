@@ -35,7 +35,7 @@ all: gtest $(TESTS)
 clean :
 	rm -f $(TESTS) gtest.a gtest_main.a *.o
 
-test: unit_tests
+test: au unit_tests
 	./unit_tests
 
 # Builds gtest.a and gtest_main.a.

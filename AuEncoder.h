@@ -58,9 +58,9 @@ class AuStringIntern {
   std::unordered_map<std::string, size_t> dictionary;
   UsageTracker internCache;
   size_t nextEntry;
-  static constexpr size_t TINY_STR = 4;
 
 public:
+  static constexpr size_t TINY_STR = 4;
   static constexpr size_t INTERN_THRESH = 10;
   static constexpr size_t INTERN_CACHE_SIZE = 10 * 1000;
 
@@ -136,8 +136,6 @@ public:
   AuFormatter(std::ostream &os, AuStringIntern &stringIntern)
     : msgBuf_(os), stringIntern(stringIntern) { }
 
-  AuStringIntern &getStringIntern() { return stringIntern; }
-
   class KeyValSink {
     AuFormatter &formatter_;
     KeyValSink(AuFormatter &formatter) : formatter_(formatter) {}
@@ -150,17 +148,19 @@ public:
   };
 
   template<typename... Args>
-  void map(Args&&... args) {
+  AuFormatter &map(Args&&... args) {
     msgBuf_.put('{');
     kvs(std::forward<Args>(args)...);
     msgBuf_.put('}');
+    return *this;
   }
 
   template<typename... Args>
-  void array(Args&&... args) {
+  AuFormatter &array(Args&&... args) {
     msgBuf_.put('[');
     vals(std::forward<Args>(args)...);
     msgBuf_.put(']');
+    return *this;
   }
 
   template <typename F>
@@ -184,46 +184,56 @@ public:
 
 
   template<class T>
-  void value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
+  AuFormatter &value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
     msgBuf_.put(i < 0 ? 'J' : 'I');
     if (i < 0) { i *= -1; }
     valueInt(i);
+    return *this;
   };
 
   template<class T>
-  void value(T f, typename std::enable_if<std::is_floating_point<T>::value>::type * = 0) {
+  AuFormatter &value(T f, typename std::enable_if<std::is_floating_point<T>::value>::type * = 0) {
     double d = f;
     static_assert(sizeof(d) == 8);
     msgBuf_.put('D');
     auto *dPtr = reinterpret_cast<char *>(&d);
     msgBuf_.write(dPtr, sizeof(d));
+    return *this;
   }
 
-  void value(std::string_view sv, bool intern = true) {
+  AuFormatter &value(std::string_view sv, bool intern = true) {
     if (intern) {
       encodeStringIntern(sv);
     } else {
       encodeString(sv);
     }
+    return *this;
   }
 
-  void value(bool b) { msgBuf_.put(b ? 'T' : 'F'); }
-  void value(const char *s) { value(std::string_view(s)); }
-  void null() { msgBuf_.put('N'); }
-  void value(std::nullptr_t) { null(); }
+  AuFormatter &value(bool b) {
+    msgBuf_.put(b ? 'T' : 'F');
+    return *this;
+  }
+  AuFormatter &value(const char *s) { return value(std::string_view(s)); }
+  AuFormatter &null() { msgBuf_.put('N'); return *this; }
+  AuFormatter &value(std::nullptr_t) { return null(); }
   template <typename T>
-  void value(const T *t) {
+  AuFormatter &value(const T *t) {
     if (t) value(*t);
     else null();
+    return *this;
   }
   template<typename T>
-  void value(const std::unique_ptr<T> &val) { value(val.get()); }
+  AuFormatter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
   template<typename T>
-  void value(const std::shared_ptr<T> &val) { value(val.get()); }
+  AuFormatter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
 
   template<typename T>
-  typename std::enable_if<std::is_enum<T>::value, void>::type
-  value(T val) { value(name(val)); }
+  AuFormatter &value(T val,
+      typename std::enable_if<std::is_enum<T>::value, void>::type * = 0)
+  {
+    return value(name(val));
+  }
 
   template<typename F>
   typename std::enable_if<HasOperatorApply<F>::value, void>::type
