@@ -74,6 +74,7 @@ public:
   void onNull() { writer_.Null(); }
   void onBool(bool v) { writer_.Bool(v); }
   void onInt(int64_t v) { writer_.Int64(v); }
+  void onUint(uint64_t v) { writer_.Uint64(v); }
   void onDouble(double v) {
     using namespace std::literals;
     if (std::isfinite(v)) writer_.Double(v);

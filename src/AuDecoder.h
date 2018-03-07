@@ -201,7 +201,7 @@ private:
 	case 'T': handler_.onBool(true); break;
 	case 'F': handler_.onBool(false); break;
 	case 'N': handler_.onNull(); break;
-	case 'I': handler_.onInt(readVarint()); break;
+	case 'I': handler_.onUint(readVarint()); break;
 	case 'J': handler_.onInt(-readVarint()); break;
 	case 'D': handler_.onDouble(readDouble()); break;
 	case 'X': handler_.onDictRef(readVarint()); break;
@@ -252,6 +252,7 @@ struct NoopHandler {
   void onNull() {}
   void onBool(bool) {}
   void onInt(int64_t) {}
+  void onUint(uint64_t) {}
   void onDouble(double) {}
   void onDictRef(size_t) {}
   void onDictClear() {}

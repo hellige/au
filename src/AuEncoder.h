@@ -1,9 +1,11 @@
 #pragma once
 
 #include <list>
+#include <map>
+#include <memory>
+#include <optional>
 #include <sstream>
 #include <string_view>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -51,6 +53,10 @@ class AuStringIntern {
       dict.clear();
       inOrder.clear();
     }
+
+    size_t size() const {
+      return dict.size();
+    }
   };
 
   std::vector<std::string> dictInOrder;
@@ -61,32 +67,34 @@ class AuStringIntern {
 
 public:
   static constexpr size_t TINY_STR = 4;
-  static constexpr size_t INTERN_THRESH = 10;
-  static constexpr size_t INTERN_CACHE_SIZE = 10 * 1000;
+  static constexpr size_t INTERN_THRESH = 50;
+  static constexpr size_t INTERN_CACHE_SIZE = 10000;
 
   AuStringIntern() : nextEntry(0) { }
 
   /// @return negative value means the string was not interned
-  ssize_t idx(std::string s, bool forceIntern = false) {
-    if (s.length() <= TINY_STR) return -1;
+  std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
+    if (s.length() <= TINY_STR) return std::optional<size_t>();
+    if (intern.has_value() && !intern.value()) return std::optional<size_t>();
 
     auto it = dictionary.find(s);
     if (it != dictionary.end()) {
       return it->second;
     }
 
+    bool forceIntern = intern.has_value() && intern.value();
     if (forceIntern || internCache.shouldIntern(s)) {
       dictionary[s] = nextEntry;
       dictInOrder.emplace_back(s);
       return nextEntry++;
     } else {
-      return -1;
+      return std::optional<size_t>();
     }
   }
 
   /// @return negative value means the string was not interned
-  ssize_t idx(std::string_view sv, bool forceIntern = false) {
-    return idx(std::string(sv), forceIntern);
+  auto idx(std::string_view sv, std::optional<bool> intern) {
+    return idx(std::string(sv), intern);
   }
 
   const std::vector<std::string> &dict() const { return dictInOrder; }
@@ -96,6 +104,11 @@ public:
     dictInOrder.clear();
     nextEntry = 0;
     if (clearUsageTracker) internCache.clear();
+  }
+
+  // For debug/profiling
+  size_t cacheSize() const {
+    return internCache.size();
   }
 };
 
@@ -109,13 +122,14 @@ class AuFormatter {
     msgBuf_.write(sv.data(), sv.length());
   }
 
-  void encodeStringIntern(const std::string_view sv, bool forceIntern = false) {
-    auto idx = stringIntern.idx(sv, forceIntern);
-    if (idx < 0) {
+  void encodeStringIntern(const std::string_view sv,
+                          std::optional<bool> intern) {
+    auto idx = stringIntern.idx(sv, intern);
+    if (!idx) {
       encodeString(sv);
     } else {
       msgBuf_.put('X');
-      valueInt(idx);
+      valueInt(*idx);
     }
   }
 
@@ -182,6 +196,11 @@ public:
     };
   }
 
+  // Interface to support SAX handlers
+  AuFormatter &startMap() { msgBuf_.put('{'); return *this; }
+  AuFormatter &endMap() { msgBuf_.put('}'); return *this; }
+  AuFormatter &startArray() { msgBuf_.put('['); return *this; }
+  AuFormatter &endArray() { msgBuf_.put(']'); return *this; }
 
   template<class T>
   AuFormatter &value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
@@ -201,11 +220,19 @@ public:
     return *this;
   }
 
-  AuFormatter &value(std::string_view sv, bool intern = true) {
-    if (intern) {
-      encodeStringIntern(sv);
-    } else {
+  /**
+   * @param sv
+   * @param intern If uninitialized, it will intern (or not) based on frequency
+   * of the string. If true, it will force interning (subject to tiny string
+   * limits). If false, it will force in-lining.
+   * @return
+   */
+  AuFormatter &value(const std::string_view sv,
+                     std::optional<bool> intern = std::optional<bool>()) {
+    if (intern.has_value() && !intern.value()) {
       encodeString(sv);
+    } else {
+      encodeStringIntern(sv, intern);
     }
     return *this;
   }
@@ -216,6 +243,9 @@ public:
   }
 
   AuFormatter &value(const char *s) { return value(std::string_view(s)); }
+  AuFormatter &value(const std::string &s) {
+    return value(std::string_view(s.c_str(), s.length()));
+  }
   AuFormatter &null() { msgBuf_.put('N'); return *this; }
   AuFormatter &value(std::nullptr_t) { return null(); }
 
@@ -334,8 +364,10 @@ public:
     std::ostringstream os;
     AuFormatter formatter(os, stringIntern);
     f(formatter);
-    formatter.term();
-    write(os.str());
+    if (os.tellp() != 0) {
+      formatter.term();
+      write(os.str());
+    }
   }
 
   void clearDictionary(bool clearUsageTracker = false) {
@@ -347,4 +379,10 @@ public:
     af.term();
   }
 
+  auto getStats() const {
+    return std::unordered_map<std::string, int> {
+        {"DictSize", stringIntern.dict().size()},
+        {"CacheSize", stringIntern.cacheSize()}
+    };
+  }
 };

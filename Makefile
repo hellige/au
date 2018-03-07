@@ -15,7 +15,7 @@ GTEST_DIR = $(GBM_INSTALL)/googletest
 CPPFLAGS += -isystem $(GTEST_DIR)/include
 
 # Flags passed to the C++ compiler.
-CXXFLAGS += -g -O3 -Wall -Wextra -pthread -std=c++17
+CXXFLAGS += -ggdb3 -Wall -Wextra -pthread -std=c++17 -O3
 BENCHMARK_FLAGS += -I src -I $(GBM_INSTALL)/include
 
 
@@ -49,9 +49,9 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I src -lpthread $^ -o $@
 	./test
 
-au: src/au.cpp
-	$(CXX) -std=c++17 -Wall -Wextra -Isrc -Iinclude -static -ggdb3 -O3 $^ -o $@
-	./$@ canned | od -tcz -tu1
+au: src/main.cpp
+	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static $^ -o $@
+	#./$@ canned | od -tcz -tu1
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(BENCHMARK_FLAGS) -o $@ $^
