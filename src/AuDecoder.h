@@ -15,6 +15,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+// TODO add explicit 4-byte float support
+// TODO add small int and small dict-ref support
+// TODO add short string-length support (roll into 'S')
+// TODO add position tracking and length validation
+
 #define THROW(stuff) \
   do { \
     std::ostringstream _message; \
