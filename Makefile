@@ -51,7 +51,7 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 
 au: src/au.cpp
 	$(CXX) -std=c++17 -Wall -Wextra -Isrc -Iinclude -static -ggdb3 -O3 $^ -o $@
-	./$@ | od -tcz -tu1
+	./$@ canned | od -tcz -tu1
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(BENCHMARK_FLAGS) -o $@ $^
