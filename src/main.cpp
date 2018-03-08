@@ -49,15 +49,11 @@ int help(int, char **) {
 
 int cat(int argc, char **argv) {
   if (argc == 0) {
-    std::cout << "stdin" << std::endl; // TODO decode stdin
+    AuDecoder("-").decode();
   } else {
     for (int i = 0; i < argc; i++) {
       std::string filename(argv[i]);
-      if (filename == "-") {
-          std::cout << "stdin" << std::endl; // TODO decode stdin
-      } else {
-        AuDecoder(filename).decode();
-      }
+      AuDecoder(filename).decode();
     }
   }
   return 0;
@@ -162,6 +158,13 @@ int json2au(int argc, char **argv) {
 
   fclose(inF);
   return res.Code();
+}
+
+int stats(int argc, char **argv) {
+  for (int i = 0; i < argc; i++) {
+
+  }
+  return 0;
 }
 
 }

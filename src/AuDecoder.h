@@ -43,7 +43,11 @@ class FileByteSource {
 
 public:
   FileByteSource(const std::string &fname) : cur_(nullptr), limit_(nullptr) {
-    fd_ = ::open(fname.c_str(), O_RDONLY);
+    if (fname == "-") {
+      fd_ = fileno(stdin);
+    } else {
+      fd_ = ::open(fname.c_str(), O_RDONLY);
+    }
     if (fd_ == -1)
       throw std::runtime_error("open");
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
