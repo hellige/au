@@ -33,8 +33,8 @@ gbenchmark: submodules
 	mkdir -p $(GBM_INSTALL)
 	cd $(GBM_INSTALL) && cmake .. -DMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=. -DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON && make install
 
-$(GTEST_DIR)/lib/libgtest_main.a: gbenchmark
-$(GBM_INSTALL)/lib/libbenchmark.a: gbenchmark
+#$(GTEST_DIR)/lib/libgtest_main.a: gbenchmark
+#$(GBM_INSTALL)/lib/libbenchmark.a: gbenchmark
 
 all: au
 
@@ -51,6 +51,9 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 
 au: src/main.cpp
 	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static $^ -o $@
+
+au-perf: src/main.cpp
+	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static -pg $^ -o $@
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(BENCHMARK_FLAGS) -o $@ $^

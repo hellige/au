@@ -145,9 +145,9 @@ private:
       (void)backref; // TODO
       handler_.onDictAddStart();
       while (source_.peek() != 'E') {
-    	if (source_.next() != 'S')
-    		THROW("Expected a string"); // TODO
-    	parseString();
+    	  if (source_.next() != 'S')
+    		  THROW("Expected a string"); // TODO
+    	  parseString();
       }
       handler_.onDictAddEnd();
       term();
@@ -287,6 +287,16 @@ public:
   void decodeNoop() const {
     FileByteSource source(filename_);
     NoopHandler handler;
+    try {
+      Parser(source, handler).parseStream();
+    } catch (parse_error &e) {
+      std::cout << e.what << std::endl;
+    }
+  }
+
+  template <typename H>
+  void decode(H &handler) const {
+    FileByteSource source(filename_);
     try {
       Parser(source, handler).parseStream();
     } catch (parse_error &e) {

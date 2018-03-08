@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <list>
 #include <map>
 #include <memory>
@@ -29,6 +30,13 @@ class AuStringIntern {
     }
 
   public:
+    const size_t INTERN_THRESH;
+    const size_t INTERN_CACHE_SIZE;
+
+    UsageTracker(size_t internThresh, size_t internCacheSize)
+        : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize)
+    {}
+
     bool shouldIntern(const std::string &str) {
       auto it = dict.find(str);
       if (it != dict.end()) {
@@ -59,56 +67,84 @@ class AuStringIntern {
     }
   };
 
-  std::vector<std::string> dictInOrder;
+  struct InternEntry {
+    size_t internIndex;
+    size_t occurences;
+  };
+
+  std::vector<std::string> dictInOrder_;
   /// The string and its intern index
-  std::unordered_map<std::string, size_t> dictionary;
-  UsageTracker internCache;
-  size_t nextEntry;
+  std::unordered_map<std::string, InternEntry> dictionary_;
+  size_t nextEntry_;
+  const size_t TINY_STR;
+  UsageTracker internCache_;
 
 public:
-  static constexpr size_t TINY_STR = 4;
-  static constexpr size_t INTERN_THRESH = 50;
-  static constexpr size_t INTERN_CACHE_SIZE = 10000;
 
-  AuStringIntern() : nextEntry(0) { }
+  AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
+                 size_t internCacheSize = 1000)
+      : nextEntry_(0), TINY_STR(tinyStr),
+        internCache_(internThresh, internCacheSize)
+  { }
 
-  /// @return negative value means the string was not interned
   std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
     if (s.length() <= TINY_STR) return std::optional<size_t>();
     if (intern.has_value() && !intern.value()) return std::optional<size_t>();
 
-    auto it = dictionary.find(s);
-    if (it != dictionary.end()) {
-      return it->second;
+    auto it = dictionary_.find(s);
+    if (it != dictionary_.end()) {
+      it->second.occurences++;
+      return it->second.internIndex;
     }
 
     bool forceIntern = intern.has_value() && intern.value();
-    if (forceIntern || internCache.shouldIntern(s)) {
-      dictionary[s] = nextEntry;
-      dictInOrder.emplace_back(s);
-      return nextEntry++;
+    if (forceIntern || internCache_.shouldIntern(s)) {
+      dictionary_[s] = {nextEntry_, 1};
+      dictInOrder_.emplace_back(s);
+      return nextEntry_++;
     } else {
       return std::optional<size_t>();
     }
   }
 
-  /// @return negative value means the string was not interned
   auto idx(std::string_view sv, std::optional<bool> intern) {
     return idx(std::string(sv), intern);
   }
 
-  const std::vector<std::string> &dict() const { return dictInOrder; }
+  const std::vector<std::string> &dict() const { return dictInOrder_; }
 
   void clear(bool clearUsageTracker) {
-    dictionary.clear();
-    dictInOrder.clear();
-    nextEntry = 0;
-    if (clearUsageTracker) internCache.clear();
+    dictionary_.clear();
+    dictInOrder_.clear();
+    nextEntry_ = 0;
+    if (clearUsageTracker) internCache_.clear();
+  }
+
+  size_t purge(size_t threshold) {
+    // Note: We can't modify dictInOrder_ or else the internIndex will no longer
+    // match.
+    size_t purged = 0;
+    for (auto it = dictionary_.begin(); it != dictionary_.end(); ) {
+      if (it->second.occurences < threshold) {
+        it = dictionary_.erase(it);
+        purged++;
+      } else {
+        ++it;
+      }
+    }
+    return purged;
   }
 
   // For debug/profiling
-  size_t cacheSize() const {
-    return internCache.size();
+  auto getStats() const {
+    return std::unordered_map<std::string, int> {
+        {"HashBucketCount", dictionary_.bucket_count()},
+        {"HashLoadFactor", dictionary_.load_factor()},
+        {"MaxLoadFactor", dictionary_.max_load_factor()},
+        {"HashSize", dictionary_.size()},
+        {"DictSize", dictInOrder_.size()},
+        {"CacheSize", internCache_.size()}
+    };
   }
 };
 
@@ -318,41 +354,52 @@ private:
 class Au {
   static constexpr int FORMAT_VERSION = 1;
   std::ostream &output_;
-  AuStringIntern stringIntern;
-  size_t lastDictLoc;
-  size_t lastDictSize;
+  AuStringIntern stringIntern_;
+  size_t lastDictLoc_;
+  size_t lastDictSize_;
+  size_t records_;
+  size_t purgeInterval_;
+  size_t purgeThreshold_;
 
   void exportDict() {
-    auto dict = stringIntern.dict();
-    if (dict.size() > lastDictSize) {
-      AuFormatter au(output_, stringIntern);
+    auto dict = stringIntern_.dict();
+    if (dict.size() > lastDictSize_) {
+      AuFormatter au(output_, stringIntern_);
       size_t newDictLoc = output_.tellp();
       au.raw('A');
-      au.valueInt(newDictLoc - lastDictLoc);
-      lastDictLoc = newDictLoc;
-      for (size_t i = lastDictSize; i < dict.size(); ++i) {
+      au.valueInt(newDictLoc - lastDictLoc_);
+      lastDictLoc_ = newDictLoc;
+      for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
         au.value(std::string_view(s.c_str(), s.length()), false);
       }
       au.term();
-      lastDictSize = dict.size();
+      lastDictSize_ = dict.size();
     }
   }
 
   void write(const std::string &msg) {
     exportDict();
-    AuFormatter au(output_, stringIntern);
+    AuFormatter au(output_, stringIntern_);
     size_t thisLoc = output_.tellp();
     au.raw('V');
-    au.valueInt(thisLoc - lastDictLoc);
+    au.valueInt(thisLoc - lastDictLoc_);
     au.valueInt(msg.length());
     output_ << msg;
+    records_++;
+
+    if (records_ % purgeInterval_ == 0) {
+      std::cerr << "Purged\n";
+      purgeDictionary(purgeThreshold_);
+    }
   }
 
 public:
 
-  Au(std::ostream &output) : output_(output), lastDictSize(0) {
-    AuFormatter af(output_, stringIntern);
+  Au(std::ostream &output, size_t purgeInterval, size_t purgeThreshold = 50)
+      : output_(output), lastDictSize_(0), records_(0),
+        purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold) {
+    AuFormatter af(output_, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
     af.term();
@@ -362,7 +409,7 @@ public:
   template <typename F>
   void encode(F &&f) {
     std::ostringstream os;
-    AuFormatter formatter(os, stringIntern);
+    AuFormatter formatter(os, stringIntern_);
     f(formatter);
     if (os.tellp() != 0) {
       formatter.term();
@@ -371,18 +418,20 @@ public:
   }
 
   void clearDictionary(bool clearUsageTracker = false) {
-    stringIntern.clear(clearUsageTracker);
-    lastDictSize = 0;
-    lastDictLoc = output_.tellp();
-    AuFormatter af(output_, stringIntern);
+    stringIntern_.clear(clearUsageTracker);
+    lastDictSize_ = 0;
+    lastDictLoc_ = output_.tellp();
+    AuFormatter af(output_, stringIntern_);
     af.raw('C');
     af.term();
   }
 
+  /// Removes strings that are used less than "threshold" times from the hash
+  void purgeDictionary(size_t threshold) {
+    stringIntern_.purge(threshold);
+  }
+
   auto getStats() const {
-    return std::unordered_map<std::string, int> {
-        {"DictSize", stringIntern.dict().size()},
-        {"CacheSize", stringIntern.cacheSize()}
-    };
+    return std::move(stringIntern_.getStats());
   }
 };

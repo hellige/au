@@ -102,8 +102,8 @@ public:
   }
 
   void onStringStart(size_t len) {
-	str_.clear();
-	str_.reserve(len);
+	  str_.clear();
+	  str_.reserve(len);
   }
 
   void onStringEnd() {
