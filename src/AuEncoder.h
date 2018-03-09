@@ -407,6 +407,8 @@ class Au {
     }
   }
 
+public:
+
   // Mimics std::ostringstream interface (except for str() and clear())
   class VectorBuffer {
     std::vector<char> v;
@@ -430,8 +432,6 @@ class Au {
       v.clear();
     }
   };
-
-public:
 
   /**
    * @param output

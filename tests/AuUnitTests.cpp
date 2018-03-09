@@ -48,23 +48,23 @@ TEST(AuStringIntern, InternFrequentStrings) {
 }
 
 struct AuFormatterTest : public ::testing::Test {
-  std::ostringstream os;
+  Au::VectorBuffer buf;
   AuStringIntern stringIntern;
-  AuFormatter formatter;
+  AuFormatter<Au::VectorBuffer> formatter;
 
-  AuFormatterTest() : formatter(os, stringIntern) {}
+  AuFormatterTest() : formatter(buf, stringIntern) {}
 };
 
 TEST_F(AuFormatterTest, Null) {
   formatter.null();
   formatter.value(nullptr);
-  EXPECT_EQ(std::string("NN"), os.str());
+  EXPECT_EQ(std::string("NN"), buf.str());
 }
 
 TEST_F(AuFormatterTest, Bool) {
   formatter.value(true);
   formatter.value(false);
-  EXPECT_EQ(std::string("TF"), os.str());
+  EXPECT_EQ(std::string("TF"), buf.str());
 }
 
 #define C(v) static_cast<char>(v)
@@ -87,7 +87,7 @@ TEST_F(AuFormatterTest, Int) {
       'I', C(0xff), 0x01, // 0xff
       'I', C(0x80), 0x02, // 0x100
   };
-  EXPECT_EQ(std::string(ints.data(), ints.size()), os.str());
+  EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, Int64) {
@@ -105,19 +105,19 @@ TEST_F(AuFormatterTest, Int64) {
       'I', C(0xff), C(0xff), C(0xff), C(0xff), C(0xff), C(0xff), C(0xff),
       C(0xff), C(0xff), C(0x01)
   };
-  EXPECT_EQ(std::string(ints.data(), ints.size()), os.str());
+  EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, Double) {
   double d = 5.9;
   formatter.value(d);
-  EXPECT_EQ(std::string("D\x9A\x99\x99\x99\x99\x99\x17\x40"), os.str());
+  EXPECT_EQ(std::string("D\x9A\x99\x99\x99\x99\x99\x17\x40"), buf.str());
 }
 
 TEST_F(AuFormatterTest, Float) {
   float f = 5.9;
   formatter.value(f);
-  EXPECT_EQ(std::string("D\0\0\0\xA0\x99\x99\x17\x40", 9), os.str());
+  EXPECT_EQ(std::string("D\0\0\0\xA0\x99\x99\x17\x40", 9), buf.str());
 }
 
 TEST_F(AuFormatterTest, NaN) {
@@ -137,7 +137,7 @@ TEST_F(AuFormatterTest, NaN) {
                              'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0xff),
                              ']'
   };
-  EXPECT_EQ(std::string(NaNs.data(), NaNs.size()), os.str());
+  EXPECT_EQ(std::string(NaNs.data(), NaNs.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, Inf) {
@@ -155,20 +155,20 @@ TEST_F(AuFormatterTest, Inf) {
                              'D', 0, 0, 0, 0, 0, 0, C(0xf0), C(0xff),
                              ']'
   };
-  EXPECT_EQ(std::string(Infs.data(), Infs.size()), os.str());
+  EXPECT_EQ(std::string(Infs.data(), Infs.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, ShortString) {
   formatter.value("str");
   std::vector<char> str = {'S', 0x03, 's', 't', 'r'};
-  EXPECT_EQ(std::string(str.data(), str.size()), os.str());
+  EXPECT_EQ(std::string(str.data(), str.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, LongString) {
   formatter.value("aLongerString");
   std::vector<char> str = {'S', 13, 'a', 'L', 'o', 'n', 'g', 'e', 'r', 'S', 't',
                            'r', 'i', 'n', 'g'};
-  EXPECT_EQ(std::string(str.data(), str.size()), os.str());
+  EXPECT_EQ(std::string(str.data(), str.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, InternString) {
@@ -178,41 +178,41 @@ TEST_F(AuFormatterTest, InternString) {
   formatter.value("aLongInternedString", true);
   formatter.value("another string", true);
 
-  EXPECT_EQ(std::string("X\0X\1", 4), os.str());
+  EXPECT_EQ(std::string("X\0X\1", 4), buf.str());
 }
 
 TEST_F(AuFormatterTest, EmptyMap) {
   formatter.map();
-  EXPECT_EQ(std::string("{}"), os.str());
+  EXPECT_EQ(std::string("{}"), buf.str());
 }
 
 TEST_F(AuFormatterTest, FlatMap) {
   formatter.map("Key1", "value1", "key1", "Value1");
-  EXPECT_EQ(std::string("{S\x04Key1S\x06value1S\04key1S\x06Value1}"), os.str());
+  EXPECT_EQ(std::string("{S\x04Key1S\x06value1S\04key1S\x06Value1}"), buf.str());
 }
 
 TEST_F(AuFormatterTest, NestedMap) {
   formatter.map("k1", "v1", "nested", formatter.mapVals([&](auto &sink) {
     sink(std::string_view("k2"), "v2");
   }));
-  EXPECT_EQ(std::string("{S\2k1S\2v1X\0{S\2k2S\2v2}}", 22), os.str());
+  EXPECT_EQ(std::string("{S\2k1S\2v1X\0{S\2k2S\2v2}}", 22), buf.str());
 }
 
 TEST_F(AuFormatterTest, EmptyArray) {
   formatter.array();
-  EXPECT_EQ(std::string("[]"), os.str());
+  EXPECT_EQ(std::string("[]"), buf.str());
 }
 
 TEST_F(AuFormatterTest, FlatArray) {
   formatter.array(1, 2, 3);
-  EXPECT_EQ(std::string("[I\1I\2I\3]"), os.str());
+  EXPECT_EQ(std::string("[I\1I\2I\3]"), buf.str());
 }
 
 TEST_F(AuFormatterTest, NestedArray) {
   formatter.array(1, 2, formatter.arrayVals([&]() {
     formatter.value(3).value(4);
   }));
-  EXPECT_EQ(std::string("[I\1I\2[I\3I\4]]"), os.str());
+  EXPECT_EQ(std::string("[I\1I\2[I\3I\4]]"), buf.str());
 }
 
 TEST(Au, creation) {
