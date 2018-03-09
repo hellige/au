@@ -211,12 +211,12 @@ int json2au(int argc, char **argv) {
   }
 }
 
-struct StatsHandler : public NoopHandler {
+struct DictDumpHandler : public NoopHandler {
   bool dictAdd_;
   std::vector<char> str_;
   std::vector<std::string> dictEntries_;
 
-  StatsHandler() : dictAdd_(false) {}
+  DictDumpHandler() : dictAdd_(false) {}
 
   void onDictClear() {
     cout << "\n\nDictionary cleared ***********************\n\n\n";
@@ -253,7 +253,7 @@ struct StatsHandler : public NoopHandler {
 };
 
 int stats(int argc, char **argv) {
-  StatsHandler handler;
+  DictDumpHandler handler;
   if (argc == 0) {
     AuDecoder("-").decode(handler);
   } else {

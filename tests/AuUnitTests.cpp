@@ -29,15 +29,15 @@ TEST(AuStringIntern, ForceIntern) {
 }
 
 TEST(AuStringIntern, InternFrequentStrings) {
-  AuStringIntern si;
+  constexpr size_t INTERN_THRESH = 10;
+  AuStringIntern si(4, INTERN_THRESH, 1000);
   std::string str("Normal value");
 
   EXPECT_FALSE(si.idx(str, std::optional<bool>()));
   EXPECT_EQ(0, si.dict().size());
 
-  for (size_t i = 0;
-       i < AuStringIntern::INTERN_THRESH * 2 && !HasFailure(); ++i) {
-    if (i < AuStringIntern::INTERN_THRESH - 1) {
+  for (size_t i = 0; i < INTERN_THRESH * 2 && !HasFailure(); ++i) {
+    if (i < INTERN_THRESH - 1) {
       EXPECT_FALSE(si.idx(str, std::optional<bool>())) << "i = " << i;
       EXPECT_EQ(0, si.dict().size()) << "i = " << i;
     } else {
