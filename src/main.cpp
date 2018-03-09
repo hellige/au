@@ -1,5 +1,6 @@
 #include "AuEncoder.h"
 #include "AuDecoder.h"
+#include "JsonHandler.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
@@ -214,37 +215,38 @@ int json2au(int argc, char **argv) {
 }
 
 int stats(int argc, char **argv) {
-  struct DictDumpHandler : public NoopHandler {
-    bool dictAdd_;
+  struct DictDumpHandler {
     std::vector<char> str_;
-    std::vector<std::string> dictEntries_;
 
-    DictDumpHandler() : dictAdd_(false) {}
+    DictDumpHandler() {
+      str_.reserve(1<<16);
+    }
+
+    void onRecordStart(size_t) {}
+
+    void onValue(size_t, size_t len, FileByteSource &source) {
+      source.skip(len);
+    }
 
     void onDictClear() {
       cout << "\n\nDictionary cleared ***********************\n\n\n";
     }
 
-    void onDictAddStart() { dictAdd_ = true; }
-    void onDictAddEnd() {
-      dictAdd_ = false;
-      for (auto &e : dictEntries_) {
-        std::cout << e << "\n";
-      }
+    void onDictAddStart(size_t) {
       std::cout << "\n";
-      dictEntries_.clear();
     }
 
     void onStringStart(size_t len) {
-      if (!dictAdd_) return;
       str_.clear();
       str_.reserve(len);
     }
+
     void onStringEnd() {
-      if (dictAdd_) dictEntries_.emplace_back(str_.data(), str_.size());
+      std::cout << std::string_view(str_.data(), str_.size()) << "\n";
     }
+
     void onStringFragment(std::string_view frag) {
-      if (dictAdd_) str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+      str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
     }
   };
 
@@ -261,21 +263,22 @@ int stats(int argc, char **argv) {
 }
 
 int grep(int argc, char **argv) {
-  struct GrepHandler : public NoopHandler {
-    void OnRecordEnd() {
-
-    }
-  };
-  GrepHandler handler;
-  if (argc == 0) {
-    AuDecoder("-").decode(handler);
-  } else {
-    for (int i = 0; i < argc; i++) {
-      std::string filename(argv[i]);
-      AuDecoder(filename).decode(handler);
-    }
-  }
-
+  (void)argc; (void)argv;
+//  struct GrepHandler : public NoopHandler {
+//    void OnRecordEnd() {
+//
+//    }
+//  };
+//  GrepHandler handler;
+//  if (argc == 0) {
+//    AuDecoder("-").decode(handler);
+//  } else {
+//    for (int i = 0; i < argc; i++) {
+//      std::string filename(argv[i]);
+//      AuDecoder(filename).decode(handler);
+//    }
+//  }
+//
   return 0;
 }
 
