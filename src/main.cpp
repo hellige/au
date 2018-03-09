@@ -127,7 +127,7 @@ public:
         0 == strncmp(str, "signed", length) ||
         0 == strncmp(str, "origFfeKey", length)) {
       //toInt = true; // This would make the diff fail
-      //intern = false;
+      intern = false;
     }
     return true;
   }
@@ -189,7 +189,7 @@ int json2au(int argc, char **argv) {
       auto stats = au.getStats();
       auto tNow = std::chrono::steady_clock::now();
       auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(tNow - lastTime);
-      cerr << "Processed: " << entriesProcessed << " entries in "
+      cerr << "Processed: " << stats["Records"] << " entries in "
            << elapsed.count() << "ms. DictSize: " << stats["DictSize"]
            << " DictDelta: " << stats["DictSize"] - lastDictSize
            << " HashSize: " << stats["HashSize"]

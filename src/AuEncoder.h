@@ -364,6 +364,7 @@ class Au {
   size_t records_;
   size_t purgeInterval_;
   size_t purgeThreshold_;
+  size_t clearThreshold_;
 
   void exportDict() {
     auto dict = stringIntern_.dict();
@@ -393,16 +394,30 @@ class Au {
     records_++;
 
     if (records_ % purgeInterval_ == 0) {
-      std::cerr << "Purged\n";
       purgeDictionary(purgeThreshold_);
+    }
+
+    if (lastDictSize_ > clearThreshold_) {
+      clearDictionary(true);
     }
   }
 
 public:
 
-  Au(std::ostream &output, size_t purgeInterval, size_t purgeThreshold = 50)
+  /**
+   *
+   * @param output
+   * @param purgeInterval The dictionary will be purged after this many records
+   * @param purgeThreshold Entries with a count less than this will be purged
+   * @param clearThreshold When the dictionary grows beyond this size, it will
+   * be cleared. Large dictionaries slow down encoding.
+   */
+  Au(std::ostream &output, size_t purgeInterval = 250'000,
+     size_t purgeThreshold = 50, size_t clearThreshold = 1400)
       : output_(output), lastDictSize_(0), records_(0),
-        purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold) {
+        purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
+        clearThreshold_(clearThreshold)
+  {
     AuFormatter af(output_, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
@@ -428,14 +443,18 @@ public:
     AuFormatter af(output_, stringIntern_);
     af.raw('C');
     af.term();
+    std::cerr << "Cleared\n";
   }
 
   /// Removes strings that are used less than "threshold" times from the hash
   void purgeDictionary(size_t threshold) {
     stringIntern_.purge(threshold);
+    std::cerr << "Purged\n";
   }
 
   auto getStats() const {
-    return std::move(stringIntern_.getStats());
+    auto stats = stringIntern_.getStats();
+    stats["Records"] = records_;
+    return stats;
   }
 };
