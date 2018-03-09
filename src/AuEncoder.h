@@ -152,8 +152,9 @@ public:
   }
 };
 
+template <typename Buffer>
 class AuFormatter {
-  std::ostream &msgBuf_;
+  Buffer &msgBuf_;
   AuStringIntern &stringIntern;
 
   void encodeString(const std::string_view sv) {
@@ -187,8 +188,8 @@ class AuFormatter {
   };
 
 public:
-  AuFormatter(std::ostream &os, AuStringIntern &stringIntern)
-    : msgBuf_(os), stringIntern(stringIntern) { }
+  AuFormatter(Buffer &buf, AuStringIntern &stringIntern)
+    : msgBuf_(buf), stringIntern(stringIntern) { }
 
   class KeyValSink {
     AuFormatter &formatter_;
@@ -384,6 +385,10 @@ class Au {
   }
 
   void write(const std::string &msg) {
+    write(std::string_view(msg.c_str(), msg.size()));
+  }
+
+  void write(const std::string_view &msg) {
     exportDict();
     AuFormatter au(output_, stringIntern_);
     size_t thisLoc = output_.tellp();
@@ -402,10 +407,33 @@ class Au {
     }
   }
 
+  // Mimics std::ostringstream interface (except for str() and clear())
+  class VectorBuffer {
+    std::vector<char> v;
+  public:
+    VectorBuffer(size_t size = 1024) {
+      v.reserve(size);
+    }
+    void put(char c) {
+      v.push_back(c);
+    }
+    void write(const char *data, size_t size) {
+      v.insert(v.end(), data, data + size);
+    }
+    size_t tellp() {
+      return v.size();
+    }
+    std::string_view str() {
+      return std::string_view(v.data(), v.size());
+    }
+    void clear() {
+      v.clear();
+    }
+  };
+
 public:
 
   /**
-   *
    * @param output
    * @param purgeInterval The dictionary will be purged after this many records
    * @param purgeThreshold Entries with a count less than this will be purged
@@ -427,13 +455,14 @@ public:
 
   template <typename F>
   void encode(F &&f) {
-    std::ostringstream os;
-    AuFormatter formatter(os, stringIntern_);
+    static VectorBuffer buf;
+    AuFormatter formatter(buf, stringIntern_);
     f(formatter);
-    if (os.tellp() != 0) {
+    if (buf.tellp() != 0) {
       formatter.term();
-      write(os.str());
+      write(buf.str());
     }
+    buf.clear();
   }
 
   void clearDictionary(bool clearUsageTracker = false) {

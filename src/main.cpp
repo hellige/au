@@ -65,8 +65,9 @@ int todo(int, char **) {
   return 1;
 }
 
-class JsonSaxHandler : public BaseReaderHandler<UTF8<>, JsonSaxHandler> {
-  AuFormatter &formatter;
+template <typename Buffer>
+class JsonSaxHandler : public BaseReaderHandler<UTF8<>, JsonSaxHandler<Buffer>> {
+  AuFormatter<Buffer> &formatter;
   std::optional<bool> intern;
   bool toInt;
 
@@ -96,7 +97,7 @@ class JsonSaxHandler : public BaseReaderHandler<UTF8<>, JsonSaxHandler> {
   }
 
 public:
-  explicit JsonSaxHandler(AuFormatter &formatter)
+  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter)
       : formatter(formatter), toInt(false)
   {}
 
@@ -177,7 +178,7 @@ int json2au(int argc, char **argv) {
   auto lastTime = std::chrono::steady_clock::now();
   size_t lastDictSize = 0;
   while (res) {
-    au.encode([&](AuFormatter &f) {
+    au.encode([&](auto &f) {
       JsonSaxHandler handler(f);
       static constexpr auto parseOpt = kParseStopWhenDoneFlag +
                                        kParseFullPrecisionFlag +
@@ -212,41 +213,41 @@ int json2au(int argc, char **argv) {
   }
 }
 
-struct DictDumpHandler : public NoopHandler {
-  bool dictAdd_;
-  std::vector<char> str_;
-  std::vector<std::string> dictEntries_;
-
-  DictDumpHandler() : dictAdd_(false) {}
-
-  void onDictClear() {
-    cout << "\n\nDictionary cleared ***********************\n\n\n";
-  }
-
-  void onDictAddStart() { dictAdd_ = true; }
-  void onDictAddEnd() {
-    dictAdd_ = false;
-    for (auto &e : dictEntries_) {
-      std::cout << e << "\n";
-    }
-    std::cout << "\n";
-    dictEntries_.clear();
-  }
-
-  void onStringStart(size_t len) {
-    if (!dictAdd_) return;
-    str_.clear();
-    str_.reserve(len);
-  }
-  void onStringEnd() {
-    if (dictAdd_) dictEntries_.emplace_back(str_.data(), str_.size());
-  }
-  void onStringFragment(std::string_view frag) {
-    if (dictAdd_) str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
-  }
-};
-
 int stats(int argc, char **argv) {
+  struct DictDumpHandler : public NoopHandler {
+    bool dictAdd_;
+    std::vector<char> str_;
+    std::vector<std::string> dictEntries_;
+
+    DictDumpHandler() : dictAdd_(false) {}
+
+    void onDictClear() {
+      cout << "\n\nDictionary cleared ***********************\n\n\n";
+    }
+
+    void onDictAddStart() { dictAdd_ = true; }
+    void onDictAddEnd() {
+      dictAdd_ = false;
+      for (auto &e : dictEntries_) {
+        std::cout << e << "\n";
+      }
+      std::cout << "\n";
+      dictEntries_.clear();
+    }
+
+    void onStringStart(size_t len) {
+      if (!dictAdd_) return;
+      str_.clear();
+      str_.reserve(len);
+    }
+    void onStringEnd() {
+      if (dictAdd_) dictEntries_.emplace_back(str_.data(), str_.size());
+    }
+    void onStringFragment(std::string_view frag) {
+      if (dictAdd_) str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+    }
+  };
+
   DictDumpHandler handler;
   if (argc == 0) {
     AuDecoder("-").decode(handler);
@@ -256,6 +257,25 @@ int stats(int argc, char **argv) {
       AuDecoder(filename).decode(handler);
     }
   }
+  return 0;
+}
+
+int grep(int argc, char **argv) {
+  struct GrepHandler : public NoopHandler {
+    void OnRecordEnd() {
+
+    }
+  };
+  GrepHandler handler;
+  if (argc == 0) {
+    AuDecoder("-").decode(handler);
+  } else {
+    for (int i = 0; i < argc; i++) {
+      std::string filename(argv[i]);
+      AuDecoder(filename).decode(handler);
+    }
+  }
+
   return 0;
 }
 
@@ -273,7 +293,7 @@ int main(int argc, char **argv) {
   commands["--help"] = help;
   commands["cat"] = cat;
   commands["tail"] = todo;
-  commands["grep"] = todo;
+  commands["grep"] = grep;
   commands["enc"] = todo;
   commands["json2au"] = json2au;
   commands["stats"] = stats;
