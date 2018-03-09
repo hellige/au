@@ -37,12 +37,13 @@ int usage(std::ostream &os) {
 int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
-    << "   canned   Dump a canned snippet\n"
     << "   cat      Decode listed files to stdout\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
     << "   enc      Encode listed files to stdout\n"
-    << "   json2au  Encode json to au (either can be '-')\n"
+    << "   json2au  <json_file> <au_file> [count]\n"
+    << "            Encode json to au (either file can be '-')\n"
+    << "            Optionally stops after count lines have been encoded\n"
     << "   stats    Display file statistics\n";
   return 0;
 }
@@ -88,6 +89,7 @@ class JsonSaxHandler : public BaseReaderHandler<UTF8<>, JsonSaxHandler> {
       formatter.value(i);
     } else {
       uint64_t u = strtoull(digits, &endptr, 10);
+      if (endptr - digits != length) return false;
       formatter.value(u);
     }
     return true;
@@ -109,10 +111,9 @@ public:
     if (toInt) {
       toInt = false;
       if (tryInt(str, length)) return true;
-    } else {
-      formatter.value(std::string_view(str, length), intern);
-      intern.reset();
     }
+    formatter.value(std::string_view(str, length), intern);
+    intern.reset();
     return true;
   }
   bool StartObject() { formatter.startMap(); return true; }
@@ -137,7 +138,7 @@ public:
 };
 
 int json2au(int argc, char **argv) {
-  if (argc < 2) {
+  if (argc < 2 || argc > 3) {
     return -1;
   }
   std::string inFName(argv[0]);
@@ -222,9 +223,7 @@ struct DictDumpHandler : public NoopHandler {
     cout << "\n\nDictionary cleared ***********************\n\n\n";
   }
 
-  void onDictAddStart() {
-    dictAdd_ = true;
-  }
+  void onDictAddStart() { dictAdd_ = true; }
   void onDictAddEnd() {
     dictAdd_ = false;
     for (auto &e : dictEntries_) {
@@ -240,15 +239,10 @@ struct DictDumpHandler : public NoopHandler {
     str_.reserve(len);
   }
   void onStringEnd() {
-    if (!dictAdd_) {
-      return;
-    } else {
-      dictEntries_.emplace_back(str_.data(), str_.size());
-    }
+    if (dictAdd_) dictEntries_.emplace_back(str_.data(), str_.size());
   }
   void onStringFragment(std::string_view frag) {
-    if (!dictAdd_) return;
-    str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+    if (dictAdd_) str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
   }
 };
 
