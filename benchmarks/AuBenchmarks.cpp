@@ -62,7 +62,7 @@ static void BM_CharBufCreateAndCopy(benchmark::State &state) {
 BENCHMARK(BM_CharBufCreateAndCopy)->Range(1, 1<<8);
 
 
-static void BM_StringInternInsert(benchmark::State &state, bool force) {
+static void BM_StringInternInsert(benchmark::State &state, bool force, size_t cnt = 1) {
   size_t elems = state.range(0);
   AuStringIntern stringIntern;
 
@@ -70,7 +70,10 @@ static void BM_StringInternInsert(benchmark::State &state, bool force) {
     for (size_t elem = 0; elem < elems; ++elem) {
       state.PauseTiming();
       std::ostringstream os;
-      os << "value_" << elem;
+      for (unsigned i = 0; i < cnt; ++i) {
+        os << "value_";
+      }
+      os << elem;
       auto val = os.str();
       state.ResumeTiming();
 
@@ -78,25 +81,31 @@ static void BM_StringInternInsert(benchmark::State &state, bool force) {
     }
   }
 }
-BENCHMARK_CAPTURE(BM_StringInternInsert, Forced,   true)->Range(1, 1<<16);
-BENCHMARK_CAPTURE(BM_StringInternInsert, Unforced, false)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternInsert, Forced_Short,   true,   1)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternInsert, Forced_Long,    true,  25)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternInsert, Unforced_Short, false,  1)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternInsert, Unforced_Long,  false, 25)->Range(1, 1<<16);
 
 
-static void BM_StringInternLookup(benchmark::State &state, bool force) {
+static void BM_StringInternLookup(benchmark::State &state, bool force, size_t cnt = 1) {
   size_t elems = state.range(0);
   AuStringIntern stringIntern;
   for (size_t i = 0; i < elems; ++i) {
     std::ostringstream os;
-    os << "value_" << i;
+    for (unsigned i = 0; i < cnt; ++i) {
+      os << "value_" << i;
+    }
     stringIntern.idx(os.str(), force);
   }
 
   for (auto _ : state) {
-    stringIntern.idx(std::string_view("value_58"));
+    stringIntern.idx(std::string_view("value_58"), std::optional<bool>());
   }
 }
-BENCHMARK_CAPTURE(BM_StringInternLookup, Forced,   true)->Range(1, 1<<16);
-BENCHMARK_CAPTURE(BM_StringInternLookup, Unforced, false)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternLookup, Forced_Short,   true,   1)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternLookup, Forced_Long,    true,  25)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternLookup, Unforced_Short, false,  1)->Range(1, 1<<16);
+BENCHMARK_CAPTURE(BM_StringInternLookup, Unforced_Long,  false, 25)->Range(1, 1<<16);
 
 
 BENCHMARK_MAIN();
