@@ -13,6 +13,8 @@
 
 // TODO disable rapidjson debug? is it just NDEBUG?
 
+// TODO this whole file should be split up and rearranged.
+
 class Dictionary {
   // TODO support arbitrary values in dictionary?
   std::vector<std::string> dictionary_; // TODO maybe a vector of string_view into a big buffer would be better
@@ -177,24 +179,12 @@ public:
   }
 };
 
-class AuDecoder {
+class AuDecoder { // TODO move
   std::string filename_;
 
 public:
   AuDecoder(const std::string &filename)
       : filename_(filename) {}
-
-  void decode() const {
-    FileByteSource source(filename_);
-    Dictionary dictionary;
-    JsonHandler valueHandler(dictionary);
-    RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
-    try {
-      RecordParser(source, recordHandler).parseStream();
-    } catch (parse_error &e) {
-      std::cout << e.what << std::endl;
-    }
-  }
 
   template <typename H>
   void decode(H &handler) const {

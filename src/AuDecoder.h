@@ -104,6 +104,22 @@ public:
     read(len, [](std::string_view) {});
   }
 
+  void seek(size_t abspos) {
+    // TODO assert abspos <= pos_
+    auto relseek = pos_ - abspos;
+    if (relseek <= static_cast<size_t>(cur_ - buf_)) {
+      cur_ -= relseek;
+      pos_ -= relseek;
+    } else {
+      // TODO
+      //  lseek underlying file
+      //  set cur_ = limit_ = buf
+      //  set pos_ = abspos (tellp)
+      //  read()
+      abort();
+    }
+  }
+
 private:
   bool read() {
     cur_ = limit_ = buf_;
@@ -113,8 +129,6 @@ private:
     if (!bytes_read) return false;
     limit_ = buf_ + bytes_read;
     return true;
-//        for(char *p = buf; (p = (char*) memchr(p, '\n', (buf + bytes_read) - p)); ++p)
-//            ++lines;
   }
 };
 
@@ -277,7 +291,7 @@ private:
 
 }
 
-struct NoopHandler {
+struct NoopValueHandler {
   void onObjectStart() {}
   void onObjectEnd() {}
   void onArrayStart() {}

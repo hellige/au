@@ -1,6 +1,7 @@
 #include "AuEncoder.h"
 #include "AuDecoder.h"
 #include "JsonHandler.h"
+#include "GrepHandler.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
@@ -50,12 +51,16 @@ int help(int, char **) {
 }
 
 int cat(int argc, char **argv) {
+  Dictionary dictionary;
+  JsonHandler valueHandler(dictionary);
+  RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
+
   if (argc == 0) {
-    AuDecoder("-").decode();
+    AuDecoder("-").decode(recordHandler);
   } else {
     for (int i = 0; i < argc; i++) {
       std::string filename(argv[i]);
-      AuDecoder(filename).decode();
+      AuDecoder(filename).decode(recordHandler);
     }
   }
   return 0;
@@ -263,27 +268,24 @@ int stats(int argc, char **argv) {
 }
 
 int grep(int argc, char **argv) {
-  (void)argc; (void)argv;
-//  struct GrepHandler : public NoopHandler {
-//    void OnRecordEnd() {
-//
-//    }
-//  };
-//  GrepHandler handler;
-//  if (argc == 0) {
-//    AuDecoder("-").decode(handler);
-//  } else {
-//    for (int i = 0; i < argc; i++) {
-//      std::string filename(argv[i]);
-//      AuDecoder(filename).decode(handler);
-//    }
-//  }
-//
+  Dictionary dictionary;
+  JsonHandler jsonHandler(dictionary);
+  GrepHandler<JsonHandler> grepHandler(
+      dictionary, jsonHandler, 60047061870829655ull);
+  RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
+
+  if (argc == 0) {
+    AuDecoder("-").decode(recordHandler);
+  } else {
+    for (int i = 0; i < argc; i++) {
+      std::string filename(argv[i]);
+      AuDecoder(filename).decode(recordHandler);
+    }
+  }
   return 0;
 }
 
 }
-
 
 int main(int argc, char **argv) {
   if (argc < 2) {
