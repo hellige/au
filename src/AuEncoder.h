@@ -19,13 +19,14 @@ class AuStringIntern {
     InOrder inOrder;
 
     using DictVal = std::pair<size_t, InOrder::iterator>;
-    using Dict = std::unordered_map<std::string, DictVal>;
+    using Dict = std::unordered_map<std::string_view, DictVal>;
     Dict dict;
 
     void pop(Dict::iterator it) {
       if (it != dict.end()) {
-        inOrder.erase(it->second.second);
+        auto listIt = it->second.second;
         dict.erase(it);
+        inOrder.erase(listIt);
       }
     }
 
@@ -38,7 +39,7 @@ class AuStringIntern {
     {}
 
     bool shouldIntern(const std::string &str) {
-      auto it = dict.find(str);
+      auto it = dict.find(std::string_view(str.c_str(), str.length()));
       if (it != dict.end()) {
         if (it->second.first >= INTERN_THRESH) {
           pop(it);
@@ -49,10 +50,13 @@ class AuStringIntern {
         }
       } else {
         if (inOrder.size() >= INTERN_CACHE_SIZE) {
-          pop(dict.find(inOrder.front()));
+          const auto &s = inOrder.front();
+          pop(dict.find(std::string_view(s.c_str(), s.length())));
         }
         inOrder.emplace_back(str);
-        dict[str] = {size_t(1), --(inOrder.end())};
+        const auto &s = inOrder.back();
+        std::string_view sv(s.c_str(), s.length());
+        dict[sv] = {size_t(1), --(inOrder.end())};
         return false;
       }
     }
