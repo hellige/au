@@ -472,13 +472,11 @@ public:
     AuFormatter af(output_, stringIntern_);
     af.raw('C');
     af.term();
-    std::cerr << "Cleared\n";
   }
 
   /// Removes strings that are used less than "threshold" times from the hash
   void purgeDictionary(size_t threshold) {
     stringIntern_.purge(threshold);
-    std::cerr << "Purged\n";
   }
 
   auto getStats() const {

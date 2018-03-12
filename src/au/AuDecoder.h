@@ -330,3 +330,38 @@ struct NoopValueHandler {
   void onStringEnd() {}
   void onStringFragment(std::string_view) {}
 };
+
+struct NoopRecordHandler {
+  virtual ~NoopRecordHandler() = default;
+
+  virtual void onRecordStart([[maybe_unused]] size_t absPos) {}
+  virtual void onValue([[maybe_unused]]size_t relDictPos, size_t len,
+               FileByteSource &source) {
+    source.skip(len);
+  }
+  virtual void onDictClear() {}
+  virtual void onDictAddStart([[maybe_unused]] size_t relDictPos) {}
+  virtual void onStringStart([[maybe_unused]] size_t strLen) {}
+  virtual void onStringEnd() {}
+  virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
+  virtual void onParseEnd() {}
+};
+
+class AuDecoder {
+  std::string filename_;
+
+public:
+  AuDecoder(const std::string &filename)
+      : filename_(filename) {}
+
+  template <typename H>
+  void decode(H &handler) const {
+    FileByteSource source(filename_);
+    try {
+      RecordParser(source, handler).parseStream();
+      handler.onParseEnd();
+    } catch (parse_error &e) {
+      std::cout << e.what() << std::endl;
+    }
+  }
+};

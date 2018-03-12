@@ -15,6 +15,7 @@ using namespace rapidjson;
 
 int json2au(int argc, char **argv);
 int canned(int argc, char **argv);
+int stats(int argc, char **argv);
 
 namespace {
 
@@ -37,7 +38,7 @@ int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
     << "   canned   Dump a canned snippet\n"
-    << "   cat      Decode listed files to stdout\n"
+    << "   cat      Decode listed files to stdout (au2json)\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
     << "   enc      Encode listed files to stdout\n"
@@ -69,54 +70,6 @@ int todo(int, char **) {
   return 1;
 }
 
-
-int stats(int argc, char **argv) {
-  struct DictDumpHandler {
-    std::vector<char> str_;
-
-    DictDumpHandler() {
-      str_.reserve(1<<16);
-  }
-
-    void onRecordStart(size_t) {}
-
-    void onValue(size_t, size_t len, FileByteSource &source) {
-      source.skip(len);
-    }
-
-    void onDictClear() {
-      cout << "\n\nDictionary cleared ***********************\n\n\n";
-    }
-
-    void onDictAddStart(size_t) {
-      std::cout << "\n";
-    }
-
-    void onStringStart(size_t len) {
-      str_.clear();
-      str_.reserve(len);
-    }
-
-    void onStringEnd() {
-      std::cout << std::string_view(str_.data(), str_.size()) << "\n";
-    }
-
-    void onStringFragment(std::string_view frag) {
-      str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
-    }
-  };
-
-  DictDumpHandler handler;
-  if (argc == 0) {
-    AuDecoder("-").decode(handler);
-  } else {
-    for (int i = 0; i < argc; i++) {
-      std::string filename(argv[i]);
-      AuDecoder(filename).decode(handler);
-    }
-  }
-  return 0;
-}
 
 int grep(int argc, char **argv) {
   Dictionary dictionary;
@@ -151,7 +104,7 @@ int main(int argc, char **argv) {
   commands["cat"] = cat;
   commands["tail"] = todo;
   commands["grep"] = grep;
-  commands["enc"] = todo;
+  commands["enc"] = json2au;
   commands["json2au"] = json2au;
   commands["stats"] = stats;
 

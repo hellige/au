@@ -2,6 +2,13 @@
 
 #include "AuDecoder.h"
 
+/**
+ * This ValueHandler looks for specific patterns, and if the pattern is found,
+ * rewinds the data stream to the start of the record, then delegates to another
+ * ValueHandler (the OutputHandler) to output the matched record.
+ *
+ * @tparam OutputHandler A ValueHandler to delegate matching records to.
+ */
 template <typename OutputHandler>
 class GrepHandler : public NoopValueHandler {
   OutputHandler &handler_;

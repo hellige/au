@@ -86,6 +86,8 @@ public:
   void onStringFragment(std::string_view frag) {
     str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
   }
+
+  void onParseEnd() {}
 };
 
 class JsonHandler {
@@ -176,23 +178,5 @@ public:
   void onStringFragment(std::string_view frag) {
     // TODO is this the best way to do this?
     str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
-  }
-};
-
-class AuDecoder { // TODO move
-  std::string filename_;
-
-public:
-  explicit AuDecoder(const std::string &filename)
-      : filename_(filename) {}
-
-  template <typename H>
-  void decode(H &handler) const {
-    FileByteSource source(filename_);
-    try {
-      RecordParser(source, handler).parseStream();
-    } catch (const parse_error &e) {
-      std::cout << e.what() << std::endl;
-    }
   }
 };
