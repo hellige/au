@@ -25,6 +25,12 @@
     throw parse_error(_message.str()); \
   } while (0)
 
+#define THROW_RT(stuff) \
+  do { \
+    std::ostringstream _message; \
+    _message << stuff; \
+    throw std::runtime_error(_message.str()); \
+  } while (0)
 
 namespace {
 
@@ -37,15 +43,15 @@ struct parse_error : std::runtime_error {
 class FileByteSource {
   static const auto BUFFER_SIZE = 16*1024;
 
-  int fd_;
-  size_t pos_;
-  char *cur_;
-  char *limit_;
-  char buf_[BUFFER_SIZE];
+  char buf_[BUFFER_SIZE]; //< Working buffer
+  int fd_;      //< Underlying data stream
+  size_t pos_;  //< Current position in the underlying data stream
+  char *cur_;   //< Current position in the working buffer
+  char *limit_; //< End of the current working buffer
 
 public:
-    explicit FileByteSource(const std::string &fname)
-      : pos_(0), cur_(nullptr), limit_(nullptr) {
+  explicit FileByteSource(const std::string &fname)
+      : pos_(0), cur_(buf_), limit_(buf_) {
     if (fname == "-") {
       fd_ = fileno(stdin);
     } else {
@@ -66,6 +72,7 @@ public:
     close(fd_); // TODO report error?
   }
 
+  /// Position in the underlying data stream
   size_t pos() const { return pos_; }
 
   int next() {
@@ -96,11 +103,11 @@ public:
           THROW("reached eof while trying to read " << len << " bytes");
       // limit_ > cur_, so cast to size_t is fine...
       auto first = std::min(len, static_cast<size_t>(limit_ - cur_));
-	  func(std::string_view(cur_, first));
+      func(std::string_view(cur_, first));
       pos_ += first;
-	  cur_ += first;
-	  len -= first;
-	}
+      cur_ += first;
+      len -= first;
+    }
   }
 
   void skip(size_t len) {
@@ -108,29 +115,43 @@ public:
   }
 
   void seek(size_t abspos) {
-    // TODO assert abspos <= pos_
+    if (abspos > pos_)
+      THROW_RT("seeking forward not supported");
     auto relseek = pos_ - abspos;
     if (relseek <= static_cast<size_t>(cur_ - buf_)) {
       cur_ -= relseek;
       pos_ -= relseek;
     } else {
-      // TODO
-      //  lseek underlying file
-      //  set cur_ = limit_ = buf
-      //  set pos_ = abspos (tellp)
-      //  read()
-      abort();
+      auto pos = lseek(fd_, abspos, SEEK_SET);
+      if (pos < 0) {
+        THROW_RT("failed to seek to desired location: " << strerror(errno));
+      }
+      cur_ = limit_ = buf_;
+      pos_ = static_cast<size_t>(pos);
+      if (!read())
+        THROW_RT("failed to read from new location");
     }
   }
 
 private:
   bool read() {
-	cur_ = limit_ = buf_;
-    size_t bytes_read = ::read(fd_, buf_, BUFFER_SIZE);
+    // Keep a minimum amount of consumed data in the buffer so we can seek back
+    // even in non-seekable data streams.
+    const auto minHistSz = (BUFFER_SIZE / 4);
+    if (cur_ > buf_ + minHistSz) {
+      auto startOfHistory = cur_ - minHistSz;
+      memmove(buf_, startOfHistory, limit_ - startOfHistory);
+      auto shift = startOfHistory - buf_;
+      cur_ -= shift;
+      limit_ -= shift;
+    }
+
+    const auto freeSpace = BUFFER_SIZE - (limit_ - buf_);
+    size_t bytes_read = ::read(fd_, limit_, freeSpace);
     if (bytes_read == (size_t)-1)
       throw std::runtime_error("read failed");
     if (!bytes_read) return false;
-    limit_ = buf_ + bytes_read;
+    limit_ += bytes_read;
     return true;
   }
 };

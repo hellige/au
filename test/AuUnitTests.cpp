@@ -1,4 +1,5 @@
 #include "AuEncoder.h"
+#include "AuDecoder.h"
 
 #include "gtest/gtest.h"
 
@@ -213,6 +214,12 @@ TEST_F(AuFormatterTest, NestedArray) {
     formatter.value(3).value(4);
   }));
   EXPECT_EQ(std::string("[I\1I\2[I\3I\4]]"), buf.str());
+}
+
+
+TEST(FileByteSource, SeekStdio) {
+  FileByteSource fbs("/dev/zero");
+  EXPECT_THROW(fbs.seek(5), std::runtime_error);
 }
 
 TEST(Au, creation) {
