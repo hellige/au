@@ -1,0 +1,26 @@
+grammar v1
+
+retrieve LIBPATH->lib
+retrieve INCLUDEPATH->include
+
+resource dist/**
+
+config default
+  include :compiler
+
+  include rapidjson/1.1.0-1-gcc7.2.0-1 # C library
+  append LIBPATH=@/dist/lib
+  append INCLUDEPATH=@/dist/include//mambo
+  append PATH=@/dist/bin
+end
+
+config compiler
+  include gcc/${GCC_VERSION}
+end
+
+config build
+  include :default
+  include afl/2.35b-2
+  include gtest/1.8.0-1-gcc${GCC_VERSION}
+  include benchmark/1.3.0-1-gcc${GCC_VERSION}
+end

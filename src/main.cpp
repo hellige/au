@@ -1,5 +1,5 @@
-#include "AuEncoder.h"
-#include "AuDecoder.h"
+#include "au/AuEncoder.h"
+#include "au/AuDecoder.h"
 #include "JsonHandler.h"
 #include "GrepHandler.h"
 
@@ -76,7 +76,7 @@ int stats(int argc, char **argv) {
 
     DictDumpHandler() {
       str_.reserve(1<<16);
-    }
+  }
 
     void onRecordStart(size_t) {}
 

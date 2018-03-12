@@ -1,5 +1,6 @@
 benchmark
 test
 au
+out
+.gcc_home
 .idea/dictionaries
-cmake-build-debug/

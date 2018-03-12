@@ -66,7 +66,7 @@ public:
   size_t pos() const { return pos_; }
 
   int next() {
-    while (cur_ == limit_) if (!read()) return EOF;
+	while (cur_ == limit_) if (!read()) return EOF;
     pos_++;
     return *cur_++;
   }
@@ -78,10 +78,10 @@ public:
 
   template <typename T>
   void read(T *t, size_t len) {
-    char *buf = static_cast<char *>(static_cast<void *>(t));
+	char *buf = static_cast<char *>(static_cast<void *>(t));
     read(len, [&](std::string_view fragment) {
-      ::memcpy(buf, fragment.data(), fragment.size());
-      buf += fragment.size();
+  	  ::memcpy(buf, fragment.data(), fragment.size());
+	  buf += fragment.size();
     });
   }
 
@@ -93,11 +93,11 @@ public:
           THROW("reached eof while trying to read " << len << " bytes");
       // limit_ > cur_, so cast to size_t is fine...
       auto first = std::min(len, static_cast<size_t>(limit_ - cur_));
-      func(std::string_view(cur_, first));
+	  func(std::string_view(cur_, first));
       pos_ += first;
-      cur_ += first;
-      len -= first;
-    }
+	  cur_ += first;
+	  len -= first;
+	}
   }
 
   void skip(size_t len) {
@@ -122,7 +122,7 @@ public:
 
 private:
   bool read() {
-    cur_ = limit_ = buf_;
+	cur_ = limit_ = buf_;
     size_t bytes_read = ::read(fd_, buf_, BUFFER_SIZE);
     if (bytes_read == (size_t)-1)
       throw std::runtime_error("read failed");
@@ -148,10 +148,10 @@ protected:
   }
 
   double readDouble() const {
-    double val;
-    static_assert(sizeof(val) == 8, "sizeof(double) must be 8");
-    source_.read(&val, sizeof(val));
-    return val;
+      double val;
+      static_assert(sizeof(val) == 8, "sizeof(double) must be 8");
+      source_.read(&val, sizeof(val));
+      return val;
   }
 
   uint64_t readVarint() const {
@@ -186,40 +186,40 @@ public:
   : BaseParser(source), handler_(handler) {}
 
   void value() const {
-    int c = source_.next();
-    switch (c) {
-      case 'T': handler_.onBool(true); break;
-      case 'F': handler_.onBool(false); break;
-      case 'N': handler_.onNull(); break;
-      case 'I': handler_.onUint(readVarint()); break;
+	int c = source_.next();
+	switch (c) {
+	case 'T': handler_.onBool(true); break;
+	case 'F': handler_.onBool(false); break;
+	case 'N': handler_.onNull(); break;
+	case 'I': handler_.onUint(readVarint()); break;
       case 'J': handler_.onInt(-readVarint()); break; // TODO this should check that readVarint() is not greater than signed int64 max
-      case 'D': handler_.onDouble(readDouble()); break;
-      case 'X': handler_.onDictRef(readVarint()); break;
+	case 'D': handler_.onDouble(readDouble()); break;
+	case 'X': handler_.onDictRef(readVarint()); break;
       case 'S': parseString(handler_); break;
-      case '[': parseArray(); break;
-      case '{': parseObject(); break;
-      default:
+	case '[': parseArray(); break;
+	case '{': parseObject(); break;
+	default:
         THROW("Unexpected character at start of value: '"
               << (char)c << "' (0x" << std::hex << c << ")");
-    }
+	}
   }
 
 private:
   void parseArray() const {
-    handler_.onArrayStart();
-    while (source_.peek() != ']') value();
-    expect(']');
-    handler_.onArrayEnd();
+	handler_.onArrayStart();
+	while (source_.peek() != ']') value();
+	expect(']');
+	handler_.onArrayEnd();
   }
 
   void parseObject() const {
-    handler_.onObjectStart();
-    while (source_.peek() != '}') {
-      value();
-      value();
-    }
-    expect('}');
-    handler_.onObjectEnd();
+	handler_.onObjectStart();
+	while (source_.peek() != '}') {
+		value();
+		value();
+	}
+	expect('}');
+	handler_.onObjectEnd();
   }
 };
 
@@ -234,7 +234,7 @@ public:
 
   void parseStream() const {
     while (source_.peek() != EOF) record();
-  }
+}
 
 private:
   void record() const {
