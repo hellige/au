@@ -69,8 +69,8 @@ public:
 
   void onValue(size_t relDictPos, size_t, FileByteSource &source) {
     if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onValue wrong backref: "
-                << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
+      THROW("onValue wrong backref: sor = " << sor_ << " relDictPos = " << relDictPos
+                                          << " lastDictPos = " << dictionary_.lastDictPos()); // TODO improve
     valueHandler_.onValue(source);
   }
 

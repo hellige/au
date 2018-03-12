@@ -13,24 +13,24 @@ struct DictDumpHandler : public NoopRecordHandler {
     str_.reserve(1 << 16);
   }
 
-  void onDictClear() {
+  void onDictClear() override {
     std::cout << "Dictionary cleared:\n";
   }
 
-  void onDictAddStart(size_t) {
+  void onDictAddStart(size_t) override {
     std::cout << "\tDictionary appended:\n";
   }
 
-  void onStringStart(size_t len) {
+  void onStringStart(size_t len) override {
     str_.clear();
     str_.reserve(len);
   }
 
-  void onStringEnd() {
+  void onStringEnd() override {
     std::cout << "\t\t" << std::string_view(str_.data(), str_.size()) << "\n";
   }
 
-  void onStringFragment(std::string_view frag) {
+  void onStringFragment(std::string_view frag) override {
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 };
@@ -40,12 +40,12 @@ struct SmallIntValueHandler : public NoopValueHandler {
   size_t countLt64;
   size_t countLt128;
   SmallIntValueHandler() : count(0), countLt64(0), countLt128(0) {}
-  void onInt(int64_t i) {
+  void onInt(int64_t i) override {
     count++;
     if (i < 64 && i > -64) countLt64++;
     if (i < 128 && i > -128) countLt128++;
   }
-  void onUint(uint64_t u) {
+  void onUint(uint64_t u) override {
     count++;
     if (u < 64) countLt64++;
     if (u < 128) countLt128++;
@@ -60,12 +60,12 @@ struct SmallIntValueHandler : public NoopValueHandler {
 struct SmallIntRecordHandler : public NoopRecordHandler {
   SmallIntValueHandler vh;
 
-  void onValue(size_t, size_t , FileByteSource &source) {
+  void onValue(size_t, size_t , FileByteSource &source) override {
     ValueParser<SmallIntValueHandler> parser(source, vh);
     parser.value();
   }
 
-  void onParseEnd() { vh.report(); }
+  void onParseEnd() override { vh.report(); }
 };
 
 }
