@@ -25,6 +25,8 @@ BENCHMARK_SRCS = $(shell find $(BENCHMARK_DIR) -name '*.cpp')
 TEST_DIR = tests
 TEST_SRCS = $(shell find $(TEST_DIR) -name '*.cpp')
 
+AU_SRCS = $(wildcard src/*.cpp)
+
 submodules:
 	@git submodule init
 	@git submodule update
@@ -49,10 +51,10 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I src -lpthread $^ -o $@
 	./test
 
-au: src/main.cpp src/Json2Au.cpp
+au: $(AU_SRCS)
 	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static $^ -o $@
 
-au-perf: src/main.cpp
+au-perf: $(AU_SRCS)
 	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static -pg $^ -o $@
 
 benchmark: $(BENCHMARK_SRCS) $(GBM_INSTALL)/lib/libbenchmark.a

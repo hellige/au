@@ -14,6 +14,7 @@ using namespace std;
 using namespace rapidjson;
 
 int json2au(int argc, char **argv);
+int canned(int argc, char **argv);
 
 namespace {
 
@@ -35,6 +36,7 @@ int usage(std::ostream &os) {
 int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
+    << "   canned   Dump a canned snippet\n"
     << "   cat      Decode listed files to stdout\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
@@ -145,6 +147,7 @@ int main(int argc, char **argv) {
   std::unordered_map<std::string, std::function<int(int, char **)>> commands;
   commands["--version"] = version;
   commands["--help"] = help;
+  commands["canned"] = canned;
   commands["cat"] = cat;
   commands["tail"] = todo;
   commands["grep"] = grep;
