@@ -1,12 +1,9 @@
-[submodule "external/benchmark"]
-	path = external/benchmark
-	url = https://github.com/google/benchmark.git
 [submodule "rapidjson"]
-	path = rapidjson
+	path = external/rapidjson
 	url = https://github.com/Tencent/rapidjson
 [submodule "googletest"]
-	path = googletest
+	path = external/googletest
 	url = https://github.com/google/googletest
 [submodule "benchmark"]
-	path = benchmark
+	path = external/benchmark
 	url = https://github.com/google/benchmark

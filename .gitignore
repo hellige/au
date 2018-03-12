@@ -1,6 +1,6 @@
 benchmark
 test
 au
-cmake-build-*
+out
 .gcc_home
 .idea/dictionaries

@@ -3,6 +3,7 @@
 set -e
 
 VERSION=7.2.0-1
+EXE=$(basename $0)
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 export FIG_REMOTE_URL=ftp://devnas/builds/Fig/repos
 
@@ -22,4 +23,4 @@ get_gcc_home() {
 
 GCC_HOME=$(get_gcc_home)
 
-${GCC_HOME}/bin/g++ -B/usr/lib/x86_64-linux-gnu -Wl,-rpath,${GCC_HOME}/lib64 "$@"
+${GCC_HOME}/bin/${EXE} -B/usr/lib/x86_64-linux-gnu -Wl,-rpath,${GCC_HOME}/lib64 "$@"
