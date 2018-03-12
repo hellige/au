@@ -49,7 +49,7 @@ test: $(TEST_SRCS) $(GTEST_DIR)/lib/libgtest_main.a $(GTEST_DIR)/lib/libgtest.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I src -lpthread $^ -o $@
 	./test
 
-au: src/main.cpp
+au: src/main.cpp src/Json2Au.cpp
 	$(CXX) $(CXXFLAGS) -Isrc -Iinclude -static $^ -o $@
 
 au-perf: src/main.cpp
