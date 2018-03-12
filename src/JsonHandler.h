@@ -9,8 +9,84 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "AuDecoder.h"
 
 // TODO disable rapidjson debug? is it just NDEBUG?
+
+// TODO this whole file should be split up and rearranged.
+
+class Dictionary {
+  // TODO support arbitrary values in dictionary?
+  std::vector<std::string> dictionary_; // TODO maybe a vector of string_view into a big buffer would be better
+  size_t lastDictPos_;
+
+public:
+  Dictionary() {
+    dictionary_.reserve(1<<16);
+  }
+
+  void add(size_t sor, std::string_view value) {
+    dictionary_.emplace_back(value);
+    lastDictPos_ = sor;
+  }
+
+  void clear(size_t sor) {
+    dictionary_.clear();
+    lastDictPos_ = sor;
+  }
+
+  size_t lastDictPos() const { return lastDictPos_; }
+  const std::string &operator[](size_t idx) const { return dictionary_[idx]; }
+  bool valid(size_t dictPos) const { return dictPos == lastDictPos_; }
+};
+
+template <typename ValueHandler>
+class RecordHandler {
+  Dictionary &dictionary_;
+  ValueHandler &valueHandler_;
+  std::vector<char> str_;
+  size_t sor_;
+
+public:
+  RecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
+      : dictionary_(dictionary), valueHandler_(valueHandler), sor_(0) {
+    str_.reserve(1<<16);
+  }
+
+  void onRecordStart(size_t pos) {
+    sor_ = pos;
+  }
+
+  void onDictClear() {
+    dictionary_.clear(sor_);
+  }
+
+  void onDictAddStart(size_t relDictPos) {
+    if (!dictionary_.valid(sor_ - relDictPos))
+      THROW("wrong backref: "
+            << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
+  }
+
+  void onValue(size_t relDictPos, size_t, FileByteSource &source) {
+    if (!dictionary_.valid(sor_ - relDictPos))
+      THROW("wrong backref: "
+                << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
+    valueHandler_.onValue(source);
+  }
+
+  void onStringStart(size_t len) {
+    str_.clear();
+    str_.reserve(len);
+  }
+
+  void onStringEnd() {
+    dictionary_.add(sor_, std::string_view(str_.data(), str_.size()));
+  }
+
+  void onStringFragment(std::string_view frag) {
+    str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+  }
+};
 
 class JsonHandler {
   rapidjson::StringBuffer buffer_;
@@ -38,26 +114,25 @@ class JsonHandler {
     }
   };
   OurWriter writer_;
-  // TODO support arbitrary values in dictionary?
-  std::vector<std::string> dictionary_; // TODO maybe a vector of string_view into a big buffer would be better
-  bool dictAdd_;
+  Dictionary &dictionary_;
 
 public:
-  JsonHandler()
-  : buffer_(nullptr, 1<<16),
-	writer_(buffer_),
-	dictAdd_(false) {
-	str_.reserve(1<<16);
-	dictionary_.reserve(1<<16);
+  JsonHandler(Dictionary &dictionary)
+      : buffer_(nullptr, 1<<16),
+        writer_(buffer_),
+        dictionary_(dictionary) {
+    str_.reserve(1<<16);
   }
 
-  void onRecordEnd() {
+  void onValue(FileByteSource &source) {
+    ValueParser<JsonHandler> parser(source, *this);
+    parser.value();
     // TODO this function is silly
     if (buffer_.GetSize()) {
       assert(writer_.IsComplete());
       std::cout
-	    << std::string_view(buffer_.GetString(), buffer_.GetSize())
-        << std::endl;
+          << std::string_view(buffer_.GetString(), buffer_.GetSize())
+          << std::endl;
     }
     // TODO doing this even if exceptions are thrown? bring some RAII?
     buffer_.Clear();
@@ -84,21 +159,9 @@ public:
   }
 
   void onDictRef(size_t idx) {
-	// TODO error handling, arbitary types? need to distinguish keys?
-	const auto &v = dictionary_[idx];
-	writer_.String(v.c_str(), v.size());
-  }
-
-  void onDictClear() {
-	dictionary_.clear();
-  }
-
-  void onDictAddStart() {
-    dictAdd_ = true;
-  }
-
-  void onDictAddEnd() {
-    dictAdd_ = false;
+    // TODO error handling, arbitary types? need to distinguish keys?
+    const auto &v = dictionary_[idx];
+    writer_.String(v.c_str(), v.size());
   }
 
   void onStringStart(size_t len) {
@@ -107,14 +170,29 @@ public:
   }
 
   void onStringEnd() {
-    if (dictAdd_)
-    	dictionary_.emplace_back(str_.data(), str_.size());
-    else
-    	writer_.String(str_.data(), str_.size());
+    writer_.String(str_.data(), str_.size());
   }
 
   void onStringFragment(std::string_view frag) {
     // TODO is this the best way to do this?
     str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+  }
+};
+
+class AuDecoder { // TODO move
+  std::string filename_;
+
+public:
+  AuDecoder(const std::string &filename)
+      : filename_(filename) {}
+
+  template <typename H>
+  void decode(H &handler) const {
+    FileByteSource source(filename_);
+    try {
+      RecordParser(source, handler).parseStream();
+    } catch (parse_error &e) {
+      std::cout << e.what << std::endl;
+    }
   }
 };

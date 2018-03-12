@@ -5,7 +5,7 @@ target_sources(au-cpp INTERFACE
 target_include_directories(au-cpp INTERFACE au)
 install(DIRECTORY au DESTINATION include)
 
-add_executable(au main.cpp)
+add_executable(au main.cpp Json2Au.cpp)
 target_link_libraries(au au-cpp)
 install(TARGETS au
         RUNTIME DESTINATION bin)

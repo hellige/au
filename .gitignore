@@ -1,2 +1,6 @@
+benchmark
+test
+au
 cmake-build-*
 .gcc_home
+.idea/dictionaries
