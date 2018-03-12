@@ -109,6 +109,8 @@ public:
 } // namespace
 
 int json2au(int argc, char **argv) {
+  argc -= 2; argv += 2;
+
   if (argc < 2 || argc > 3) {
     return -1;
   }

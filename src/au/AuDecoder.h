@@ -58,7 +58,7 @@ public:
       fd_ = ::open(fname.c_str(), O_RDONLY);
     }
     if (fd_ == -1)
-      throw std::runtime_error("open");
+      THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
     read();
   }

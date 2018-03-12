@@ -27,7 +27,7 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -static")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # External libraries/dependencies
-include_directories(SYSTEM external/rapidjson/include)
+include_directories(SYSTEM external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)
 set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
 add_subdirectory(external/benchmark)

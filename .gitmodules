@@ -7,3 +7,6 @@
 [submodule "benchmark"]
 	path = external/benchmark
 	url = https://github.com/google/benchmark
+[submodule "external/tclap"]
+	path = external/tclap
+	url = https://git.code.sf.net/p/tclap/code

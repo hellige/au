@@ -50,6 +50,7 @@ int help(int, char **) {
 }
 
 int cat(int argc, char **argv) {
+  argc -= 2; argv += 2;
   Dictionary dictionary;
   JsonHandler valueHandler(dictionary);
   RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
@@ -72,6 +73,7 @@ int todo(int, char **) {
 
 
 int grep(int argc, char **argv) {
+  argc -= 2; argv += 2;
   Dictionary dictionary;
   JsonHandler jsonHandler(dictionary);
   GrepHandler<JsonHandler> grepHandler(
@@ -115,6 +117,6 @@ int main(int argc, char **argv) {
     return usage(std::cerr);
   }
 
-  return it->second(argc-2, argv+2);
+  return it->second(argc, argv);
 }
 
