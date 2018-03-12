@@ -7,7 +7,6 @@ install(DIRECTORY au DESTINATION include)
 
 add_executable(au main.cpp)
 target_link_libraries(au au-cpp)
-add_dependencies(au FigUpToDate)
 install(TARGETS au
         RUNTIME DESTINATION bin)
 
