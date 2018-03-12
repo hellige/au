@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -316,19 +317,21 @@ private:
 }
 
 struct NoopValueHandler {
-  void onObjectStart() {}
-  void onObjectEnd() {}
-  void onArrayStart() {}
-  void onArrayEnd() {}
-  void onNull() {}
-  void onBool(bool) {}
-  void onInt(int64_t) {}
-  void onUint(uint64_t) {}
-  void onDouble(double) {}
-  void onDictRef(size_t) {}
-  void onStringStart(size_t) {}
-  void onStringEnd() {}
-  void onStringFragment(std::string_view) {}
+  virtual ~NoopValueHandler() = default;
+
+  virtual void onObjectStart() {}
+  virtual void onObjectEnd() {}
+  virtual void onArrayStart() {}
+  virtual void onArrayEnd() {}
+  virtual void onNull() {}
+  virtual void onBool(bool) {}
+  virtual void onInt(int64_t) {}
+  virtual void onUint(uint64_t) {}
+  virtual void onDouble(double) {}
+  virtual void onDictRef(size_t) {}
+  virtual void onStringStart(size_t) {}
+  virtual void onStringEnd() {}
+  virtual void onStringFragment(std::string_view) {}
 };
 
 struct NoopRecordHandler {

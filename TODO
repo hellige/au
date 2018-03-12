@@ -1,7 +1,7 @@
   au grep [-k "eventID"] <-i 12235 | [-f] "string i want">
     -k  --key
     -f  --full (exact full string match)
-	-i  --int  (search for numeric value)
+    -i  --int  (search for numeric value)
   au bisect -k eventId 123412321321
   au slice -k eventId 123412321321 13412312312
   au slice [-e] -k estdEventTime 2018-05-16T14:40:00 2018-05-16T15:40:00

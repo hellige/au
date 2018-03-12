@@ -16,6 +16,7 @@ using namespace rapidjson;
 int json2au(int argc, char **argv);
 int canned(int argc, char **argv);
 int stats(int argc, char **argv);
+int grep(int argc, char **argv);
 
 namespace {
 
@@ -69,26 +70,6 @@ int cat(int argc, char **argv) {
 int todo(int, char **) {
   std::cout << "not yet implemented." << std::endl; // TODO
   return 1;
-}
-
-
-int grep(int argc, char **argv) {
-  argc -= 2; argv += 2;
-  Dictionary dictionary;
-  JsonHandler jsonHandler(dictionary);
-  GrepHandler<JsonHandler> grepHandler(
-      dictionary, jsonHandler, 60047061870829655ull);
-  RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
-
-  if (argc == 0) {
-    AuDecoder("-").decode(recordHandler);
-  } else {
-    for (int i = 0; i < argc; i++) {
-      std::string filename(argv[i]);
-      AuDecoder(filename).decode(recordHandler);
-    }
-  }
-  return 0;
 }
 
 }

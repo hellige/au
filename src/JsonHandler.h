@@ -63,13 +63,13 @@ public:
 
   void onDictAddStart(size_t relDictPos) {
     if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("wrong backref: "
+      THROW("onDictAddStart wrong backref: "
             << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
   }
 
   void onValue(size_t relDictPos, size_t, FileByteSource &source) {
     if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("wrong backref: "
+      THROW("onValue wrong backref: "
                 << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
     valueHandler_.onValue(source);
   }
