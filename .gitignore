@@ -1,4 +1,2 @@
-au
-out
-.gcc_home
-.idea/dictionaries
+/out
+/.gcc_home
