@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <variant>
+#include <utility>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -28,11 +28,9 @@
 
 namespace {
 
-struct parse_error {
-  std::string what;
-
-  parse_error(const std::string &what)
-  : what(what) {}
+struct parse_error : std::runtime_error {
+  explicit parse_error(const std::string &what)
+  : std::runtime_error(what) {}
 };
 
 
@@ -46,7 +44,7 @@ class FileByteSource {
   char buf_[BUFFER_SIZE];
 
 public:
-  FileByteSource(const std::string &fname)
+    explicit FileByteSource(const std::string &fname)
       : pos_(0), cur_(nullptr), limit_(nullptr) {
     if (fname == "-") {
       fd_ = fileno(stdin);
@@ -58,6 +56,11 @@ public:
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
     read();
   }
+
+  FileByteSource(const FileByteSource &) = delete;
+  FileByteSource(FileByteSource &&) = delete;
+  FileByteSource &operator=(const FileByteSource &) = delete;
+  FileByteSource &operator=(FileByteSource &&) = delete;
 
   ~FileByteSource() {
     close(fd_); // TODO report error?
@@ -137,7 +140,7 @@ class BaseParser {
 protected:
   FileByteSource &source_;
 
-  BaseParser(FileByteSource &source)
+  explicit BaseParser(FileByteSource &source)
   : source_(source) {}
 
   void expect(char e) const {
@@ -158,7 +161,7 @@ protected:
     auto shift = 0u;
     uint64_t result = 0;
     while (true) { // TODO check that you're not reading more than 9 bytes
-      uint64_t i = source_.next();
+      uint64_t i = source_.next();// TODO what if the source is at the end?
       result |= (i & 0x7f) << shift;
       shift += 7;
       if (!(i & 0x80)) break;
@@ -206,20 +209,20 @@ public:
 
 private:
   void parseArray() const {
-	handler_.onArrayStart();
-	while (source_.peek() != ']') value();
-	expect(']');
-	handler_.onArrayEnd();
+    handler_.onArrayStart();
+    while (source_.peek() != ']') value();
+    expect(']');
+    handler_.onArrayEnd();
   }
 
   void parseObject() const {
-	handler_.onObjectStart();
-	while (source_.peek() != '}') {
-		value();
-		value();
-	}
-	expect('}');
-	handler_.onObjectEnd();
+    handler_.onObjectStart();
+    while (source_.peek() != '}') {
+      value();
+      value();
+    }
+    expect('}');
+    handler_.onObjectEnd();
   }
 };
 

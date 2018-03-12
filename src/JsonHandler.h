@@ -18,11 +18,11 @@
 class Dictionary {
   // TODO support arbitrary values in dictionary?
   std::vector<std::string> dictionary_; // TODO maybe a vector of string_view into a big buffer would be better
-  size_t lastDictPos_;
+  size_t lastDictPos_{};
 
 public:
   Dictionary() {
-    dictionary_.reserve(1<<16);
+    dictionary_.reserve(1u<<16);
   }
 
   void add(size_t sor, std::string_view value) {
@@ -105,7 +105,7 @@ class JsonHandler {
          RawDecode,
          rapidjson::ASCII<>> {
     template<typename... Args>
-    OurWriter(Args &&... args)
+    explicit OurWriter(Args &&... args)
     : Writer(std::forward<Args>(args)...) {}
 
     void Raw(std::string_view raw) {
@@ -117,11 +117,11 @@ class JsonHandler {
   Dictionary &dictionary_;
 
 public:
-  JsonHandler(Dictionary &dictionary)
-      : buffer_(nullptr, 1<<16),
+    explicit JsonHandler(Dictionary &dictionary)
+      : buffer_(nullptr, 1u<<16),
         writer_(buffer_),
         dictionary_(dictionary) {
-    str_.reserve(1<<16);
+    str_.reserve(1u<<16);
   }
 
   void onValue(FileByteSource &source) {
@@ -183,7 +183,7 @@ class AuDecoder { // TODO move
   std::string filename_;
 
 public:
-  AuDecoder(const std::string &filename)
+  explicit AuDecoder(const std::string &filename)
       : filename_(filename) {}
 
   template <typename H>
@@ -191,8 +191,8 @@ public:
     FileByteSource source(filename_);
     try {
       RecordParser(source, handler).parseStream();
-    } catch (parse_error &e) {
-      std::cout << e.what << std::endl;
+    } catch (const parse_error &e) {
+      std::cout << e.what() << std::endl;
     }
   }
 };
