@@ -182,11 +182,16 @@ protected:
   uint64_t readVarint() const {
     auto shift = 0u;
     uint64_t result = 0;
-    while (true) { // TODO check that you're not reading more than 9 bytes
-      uint64_t i = source_.next();// TODO what if the source is at the end?
-      result |= (i & 0x7f) << shift;
+    while (true) {
+      if (shift >= 64u)
+        THROW("Bad varint encoding");
+      int next = source_.next();
+      if (next == EOF)
+        THROW("Unexpected end of file");
+      auto i = static_cast<unsigned char>(next);
+      result |= (i & 0x7fu) << shift;
       shift += 7;
-      if (!(i & 0x80)) break;
+      if (!(i & 0x80u)) break;
     }
     return result;
   }
