@@ -22,7 +22,7 @@ class Dictionary {
 
 public:
   Dictionary() {
-    dictionary_.reserve(1u << 16);
+    dictionary_.reserve(1u << 16u);
   }
 
   void add(size_t sor, std::string_view value) {
@@ -161,9 +161,9 @@ public:
   void onDouble(double v) {
     using namespace std::literals;
     if (std::isfinite(v)) writer_.Double(v);
-    else if (std::isnan(v)) writer_.Raw("nan"s);
-    else if (v < 0) writer_.Raw("-inf"s);
-    else writer_.Raw("inf"s);
+    else if (std::isnan(v)) writer_.Raw("nan"sv);
+    else if (v < 0) writer_.Raw("-inf"sv);
+    else writer_.Raw("inf"sv);
   }
 
   void onDictRef(size_t idx) {
