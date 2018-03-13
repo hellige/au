@@ -404,7 +404,7 @@ public:
   void decode(H &handler) const {
     FileByteSource source(filename_);
     try {
-      RecordParser(source, handler).parseStream();
+      RecordParser<H>(source, handler).parseStream();
       handler.onParseEnd();
     } catch (parse_error &e) {
       std::cout << e.what() << std::endl;
