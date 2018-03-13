@@ -11,7 +11,7 @@
 using namespace std;
 
 /**
- * Pass the output through `od -tcz -tu1` to view the encoding.
+ * Pass the output through `od -tcz -tu1 -Ax` to view the encoding.
  *
  * @param argc
  * @param argv

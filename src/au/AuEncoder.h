@@ -377,10 +377,59 @@ private:
 };
 
 
+/// Need to keep track of bytes written to both files and cout
+class OutputTracker : public std::streambuf {
+  std::streambuf *dest_;
+  std::ostream *owner_;
+  size_t count_;
+  using int_type = typename std::streambuf::int_type;
+  using char_type = typename std::streambuf::char_type;
+  using traits_type = typename std::streambuf::traits_type;
+
+public:
+  OutputTracker(std::streambuf *dest)
+      : dest_(dest), owner_(nullptr), count_(0)
+  {}
+
+  OutputTracker(std::ostream &dest)
+      : dest_(dest.rdbuf()), owner_(&dest), count_(0)
+  {
+    owner_->rdbuf(this);
+  }
+
+  virtual ~OutputTracker() {
+    if (owner_ != nullptr) {
+      owner_->rdbuf(dest_);
+    }
+  }
+
+  size_t count() const {
+    return count_;
+  }
+
+  void reset() {
+    count_ = 0;
+  }
+
+protected:
+  virtual int_type overflow(int_type ch = traits_type::eof()) {
+    count_++;
+    return dest_->sputc(ch);
+  }
+
+//  virtual std::streamsize xsputn(const char_type *c, std::streamsize count) {
+//    count_ += count;
+//    return dest_->xsputn(c, count);
+//  }
+};
+
+
 class Au {
   static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
+  OutputTracker outputTracker_;
   AuStringIntern stringIntern_;
+  size_t pos_;
   size_t lastDictLoc_;
   size_t lastDictSize_;
   size_t records_;
@@ -389,26 +438,24 @@ class Au {
   size_t clearThreshold_;
 
   size_t tell() const {
-    auto pos = output_.tellp();
-    if (pos == -1) {
-      // TODO: what?
-    }
-    return static_cast<size_t>(pos);
+    return pos_;
   }
 
   void exportDict() {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
-      AuFormatter au(output_, stringIntern_);
+      OutputTracker tracker(output_);
+      AuFormatter af(output_, stringIntern_);
       auto newDictLoc = tell();
-      au.raw('A');
-      au.valueInt(newDictLoc - lastDictLoc_);
+      af.raw('A');
+      af.valueInt(newDictLoc - lastDictLoc_);
       lastDictLoc_ = newDictLoc;
       for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
-        au.value(std::string_view(s.c_str(), s.length()), false);
+        af.value(std::string_view(s.c_str(), s.length()), false);
       }
-      au.term();
+      af.term();
+      pos_ += tracker.count();
       lastDictSize_ = dict.size();
     }
   }
@@ -419,13 +466,16 @@ class Au {
 
   void write(const std::string_view &msg) {
     exportDict();
-    AuFormatter au(output_, stringIntern_);
+    OutputTracker tracker(output_);
+    AuFormatter af(output_, stringIntern_);
     auto thisLoc = tell();
-    au.raw('V');
-    au.valueInt(thisLoc - lastDictLoc_);
-    au.valueInt(msg.length());
+    af.raw('V');
+    af.valueInt(thisLoc - lastDictLoc_);
+    af.valueInt(msg.length());
     output_ << msg;
     records_++;
+
+    pos_ += tracker.count();
 
     if (records_ % purgeInterval_ == 0) {
       purgeDictionary(purgeThreshold_);
@@ -471,13 +521,17 @@ public:
    */
   Au(std::ostream &output, size_t purgeInterval = 250'000,
      size_t purgeThreshold = 50, size_t clearThreshold = 1400)
-      : output_(output), lastDictSize_(0), records_(0),
+      : output_(output), outputTracker_(output),
+        pos_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
-        clearThreshold_(clearThreshold) {
+        clearThreshold_(clearThreshold)
+  {
+    OutputTracker outputTracker(output_);
     AuFormatter af(output_, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
     af.term();
+    pos_ += outputTracker.count();
     clearDictionary();
   }
 
@@ -497,9 +551,11 @@ public:
     stringIntern_.clear(clearUsageTracker);
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
+    OutputTracker tracker(output_);
     AuFormatter af(output_, stringIntern_);
     af.raw('C');
     af.term();
+    pos_ += tracker.count();
   }
 
   /// Removes strings that are used less than "threshold" times from the hash
