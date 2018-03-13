@@ -11,12 +11,18 @@ int grep(int argc, char **argv) {
 
   try {
     TCLAP::CmdLine cmd("Grep sub-command", ' ', "1", true);
-    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"grep\"", true, "grep", "string");
-    TCLAP::MultiArg<std::string> key("k", "key", "Key to search for", false, "string");
-    TCLAP::MultiArg<uint64_t> uInt("u", "uint", "Unsigned integer", false, "uint64_t");
-    TCLAP::MultiArg<int64_t> sInt("s", "sint", "Signed integer", false, "int64_t");
-    TCLAP::MultiArg<std::string> str("f", "full", "Full string", false, "string");
-    TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files", false, "FileName");
+    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"grep\"",
+                                                 true, "grep", "string");
+    TCLAP::MultiArg<std::string> key("k", "key", "Key to search for",
+                                     false, "string");
+    TCLAP::MultiArg<uint64_t> uInt("u", "uint", "Unsigned integer",
+                                   false, "uint64_t");
+    TCLAP::MultiArg<int64_t> sInt("s", "sint", "Signed integer",
+                                  false, "int64_t");
+    TCLAP::MultiArg<std::string> str("f", "full", "Full string",
+                                     false, "string");
+    TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files",
+                                                    false, "FileName");
 
     cmd.add(subCmd);
     cmd.add(key);

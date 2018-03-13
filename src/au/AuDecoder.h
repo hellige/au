@@ -42,7 +42,7 @@ struct parse_error : std::runtime_error {
 
 
 class FileByteSource {
-  static const auto BUFFER_SIZE = 16 * 1024;
+  static const auto BUFFER_SIZE = 256 * 1024;
 
   char buf_[BUFFER_SIZE]; //< Working buffer
   int fd_;      //< Underlying data stream
@@ -138,7 +138,7 @@ private:
   bool read() {
     // Keep a minimum amount of consumed data in the buffer so we can seek back
     // even in non-seekable data streams.
-    const auto minHistSz = (BUFFER_SIZE / 4);
+    const auto minHistSz = (BUFFER_SIZE / 16);
     if (cur_ > buf_ + minHistSz) {
       auto startOfHistory = cur_ - minHistSz;
       memmove(buf_, startOfHistory, limit_ - startOfHistory);
