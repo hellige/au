@@ -126,7 +126,6 @@ TEST_F(AuFormatterTest, NaN) {
       std::numeric_limits<float>::quiet_NaN(),
       std::numeric_limits<double>::quiet_NaN(),
       std::numeric_limits<long double>::quiet_NaN(), // converted to double
-      0 / 0.0,
       std::sqrt(-1)
   );
 
@@ -134,7 +133,6 @@ TEST_F(AuFormatterTest, NaN) {
                              'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0x7f),
                              'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0x7f),
                              'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0x7f),
-                             'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0xff),
                              'D', 0, 0, 0, 0, 0, 0, C(0xf8), C(0xff),
                              ']'
   };
