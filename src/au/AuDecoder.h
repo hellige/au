@@ -226,8 +226,11 @@ public:
         handler_.onUint(readVarint());
         break;
       case 'J':
-        handler_.onInt(-readVarint());
-        break; // TODO this should check that readVarint() is not greater than signed int64 max
+        auto i = readVarint();
+        if (i > std::numeric_limits<int64_t>::min() * -1)
+          THROW("Signed int overflows int64_t: -" << i);
+        handler_.onInt(-i);
+        break;
       case 'D':
         handler_.onDouble(readDouble());
         break;
