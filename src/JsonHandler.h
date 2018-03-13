@@ -22,7 +22,7 @@ class Dictionary {
 
 public:
   Dictionary() {
-    dictionary_.reserve(1u<<16);
+    dictionary_.reserve(1u << 16);
   }
 
   void add(size_t sor, std::string_view value) {
@@ -43,7 +43,7 @@ public:
   }
 };
 
-template <typename ValueHandler>
+template<typename ValueHandler>
 class RecordHandler {
   Dictionary &dictionary_;
   ValueHandler &valueHandler_;
@@ -53,7 +53,7 @@ class RecordHandler {
 public:
   RecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
       : dictionary_(dictionary), valueHandler_(valueHandler), sor_(0) {
-    str_.reserve(1<<16);
+    str_.reserve(1 << 16);
   }
 
   void onRecordStart(size_t pos) {
@@ -67,13 +67,16 @@ public:
   void onDictAddStart(size_t relDictPos) {
     if (!dictionary_.valid(sor_ - relDictPos))
       THROW("onDictAddStart wrong backref: "
-            << sor_ << " " << relDictPos << " " << dictionary_.lastDictPos()); // TODO improve
+                << sor_ << " " << relDictPos << " "
+                << dictionary_.lastDictPos()); // TODO improve
   }
 
   void onValue(size_t relDictPos, size_t, FileByteSource &source) {
     if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onValue wrong backref: sor = " << sor_ << " relDictPos = " << relDictPos
-                                          << " lastDictPos = " << dictionary_.lastDictPos()); // TODO improve
+      THROW("onValue wrong backref: sor = " << sor_ << " relDictPos = "
+                                            << relDictPos
+                                            << " lastDictPos = "
+                                            << dictionary_.lastDictPos()); // TODO improve
     valueHandler_.onValue(source);
   }
 
@@ -87,7 +90,7 @@ public:
   }
 
   void onStringFragment(std::string_view frag) {
-    str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+    str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 
   void onParseEnd() {}
@@ -107,11 +110,11 @@ class JsonHandler {
     }
   };
   struct OurWriter : rapidjson::Writer<decltype(buffer_),
-         RawDecode,
-         rapidjson::ASCII<>> {
+      RawDecode,
+      rapidjson::ASCII<>> {
     template<typename... Args>
     explicit OurWriter(Args &&... args)
-    : Writer(std::forward<Args>(args)...) {}
+        : Writer(std::forward<Args>(args)...) {}
 
     void Raw(std::string_view raw) {
       Prefix(rapidjson::kNullType);
@@ -122,11 +125,11 @@ class JsonHandler {
   Dictionary &dictionary_;
 
 public:
-    explicit JsonHandler(Dictionary &dictionary)
-      : buffer_(nullptr, 1u<<16),
+  explicit JsonHandler(Dictionary &dictionary)
+      : buffer_(nullptr, 1u << 16),
         writer_(buffer_),
         dictionary_(dictionary) {
-    str_.reserve(1u<<16);
+    str_.reserve(1u << 16);
   }
 
   void onValue(FileByteSource &source) {
@@ -170,8 +173,8 @@ public:
   }
 
   void onStringStart(size_t len) {
-	  str_.clear();
-	  str_.reserve(len);
+    str_.clear();
+    str_.reserve(len);
   }
 
   void onStringEnd() {
@@ -180,6 +183,6 @@ public:
 
   void onStringFragment(std::string_view frag) {
     // TODO is this the best way to do this?
-    str_.insert(str_.end(), frag.data(), frag.data()+frag.size());
+    str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 };

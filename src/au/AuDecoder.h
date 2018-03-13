@@ -37,12 +37,12 @@ namespace {
 
 struct parse_error : std::runtime_error {
   explicit parse_error(const std::string &what)
-  : std::runtime_error(what) {}
+      : std::runtime_error(what) {}
 };
 
 
 class FileByteSource {
-  static const auto BUFFER_SIZE = 16*1024;
+  static const auto BUFFER_SIZE = 16 * 1024;
 
   char buf_[BUFFER_SIZE]; //< Working buffer
   int fd_;      //< Underlying data stream
@@ -77,7 +77,7 @@ public:
   size_t pos() const { return pos_; }
 
   int next() {
-	while (cur_ == limit_) if (!read()) return EOF;
+    while (cur_ == limit_) if (!read()) return EOF;
     pos_++;
     return *cur_++;
   }
@@ -87,16 +87,16 @@ public:
     return *cur_;
   }
 
-  template <typename T>
+  template<typename T>
   void read(T *t, size_t len) {
-	char *buf = static_cast<char *>(static_cast<void *>(t));
+    char *buf = static_cast<char *>(static_cast<void *>(t));
     read(len, [&](std::string_view fragment) {
-  	  ::memcpy(buf, fragment.data(), fragment.size());
-	  buf += fragment.size();
+      ::memcpy(buf, fragment.data(), fragment.size());
+      buf += fragment.size();
     });
   }
 
-  template <typename F>
+  template<typename F>
   void read(size_t len, F func) {
     while (len) {
       while (cur_ == limit_)
@@ -149,7 +149,7 @@ private:
 
     const auto freeSpace = BUFFER_SIZE - (limit_ - buf_);
     size_t bytes_read = ::read(fd_, limit_, freeSpace);
-    if (bytes_read == (size_t)-1)
+    if (bytes_read == (size_t) -1)
       throw std::runtime_error("read failed");
     if (!bytes_read) return false;
     limit_ += bytes_read;
@@ -163,20 +163,20 @@ protected:
   FileByteSource &source_;
 
   explicit BaseParser(FileByteSource &source)
-  : source_(source) {}
+      : source_(source) {}
 
   void expect(char e) const {
     int c = source_.next();
     if (c == e) return;
     THROW("Unexpected character: '"
-          << (char)c << "' (0x" << std::hex << c << ")");
+              << (char) c << "' (0x" << std::hex << c << ")");
   }
 
   double readDouble() const {
-      double val;
-      static_assert(sizeof(val) == 8, "sizeof(double) must be 8");
-      source_.read(&val, sizeof(val));
-      return val;
+    double val;
+    static_assert(sizeof(val) == 8, "sizeof(double) must be 8");
+    source_.read(&val, sizeof(val));
+    return val;
   }
 
   uint64_t readVarint() const {
@@ -191,7 +191,7 @@ protected:
     return result;
   }
 
-  template <typename Handler>
+  template<typename Handler>
   void parseString(Handler &handler) const {
     auto len = readVarint();
     handler.onStringStart(len);
@@ -202,31 +202,51 @@ protected:
   }
 };
 
-template <typename Handler>
+template<typename Handler>
 class ValueParser : BaseParser {
   Handler &handler_;
 
 public:
   ValueParser(FileByteSource &source, Handler &handler)
-  : BaseParser(source), handler_(handler) {}
+      : BaseParser(source), handler_(handler) {}
 
   void value() const {
-	int c = source_.next();
-	switch (c) {
-	case 'T': handler_.onBool(true); break;
-	case 'F': handler_.onBool(false); break;
-	case 'N': handler_.onNull(); break;
-	case 'I': handler_.onUint(readVarint()); break;
-      case 'J': handler_.onInt(-readVarint()); break; // TODO this should check that readVarint() is not greater than signed int64 max
-	case 'D': handler_.onDouble(readDouble()); break;
-	case 'X': handler_.onDictRef(readVarint()); break;
-      case 'S': parseString(handler_); break;
-	case '[': parseArray(); break;
-	case '{': parseObject(); break;
-	default:
+    int c = source_.next();
+    switch (c) {
+      case 'T':
+        handler_.onBool(true);
+        break;
+      case 'F':
+        handler_.onBool(false);
+        break;
+      case 'N':
+        handler_.onNull();
+        break;
+      case 'I':
+        handler_.onUint(readVarint());
+        break;
+      case 'J':
+        handler_.onInt(-readVarint());
+        break; // TODO this should check that readVarint() is not greater than signed int64 max
+      case 'D':
+        handler_.onDouble(readDouble());
+        break;
+      case 'X':
+        handler_.onDictRef(readVarint());
+        break;
+      case 'S':
+        parseString(handler_);
+        break;
+      case '[':
+        parseArray();
+        break;
+      case '{':
+        parseObject();
+        break;
+      default:
         THROW("Unexpected character at start of value: '"
-              << (char)c << "' (0x" << std::hex << c << ")");
-	}
+                  << (char) c << "' (0x" << std::hex << c << ")");
+    }
   }
 
 private:
@@ -248,23 +268,23 @@ private:
   }
 };
 
-template <typename Handler>
+template<typename Handler>
 class RecordParser : BaseParser {
   static constexpr int AU_FORMAT_VERSION = 1;
   Handler &handler_;
 
 public:
   RecordParser(FileByteSource &source, Handler &handler)
-  : BaseParser(source), handler_(handler) {}
+      : BaseParser(source), handler_(handler) {}
 
   void parseStream() const {
     while (source_.peek() != EOF) record();
-}
+  }
 
 private:
   void record() const {
     int c = source_.next();
-    handler_.onRecordStart(source_.pos()-1);
+    handler_.onRecordStart(source_.pos() - 1);
     switch (c) {
       case 'H':
         if (source_.next() == 'I') {
@@ -300,17 +320,19 @@ private:
         handler_.onValue(backref, len - 2, source_);
         term();
         if (source_.pos() - startOfValue != len)
-          THROW("could be a parse error, or internal error: value handler didn't skip value!");
+          THROW(
+              "could be a parse error, or internal error: value handler didn't skip value!");
         break;
       }
       default:
         THROW("Unexpected character at start of record: '"
-              << (char)c << "' (0x" << std::hex << c << ")");
+                  << (char) c << "' (0x" << std::hex << c << ")");
     }
   }
 
   void term() const {
-    expect('E'); expect('\n');
+    expect('E');
+    expect('\n');
   }
 };
 
@@ -339,7 +361,7 @@ struct NoopRecordHandler {
 
   virtual void onRecordStart([[maybe_unused]] size_t absPos) {}
   virtual void onValue([[maybe_unused]]size_t relDictPos, size_t len,
-               FileByteSource &source) {
+                       FileByteSource &source) {
     source.skip(len);
   }
   virtual void onDictClear() {}
@@ -357,7 +379,7 @@ public:
   AuDecoder(const std::string &filename)
       : filename_(filename) {}
 
-  template <typename H>
+  template<typename H>
   void decode(H &handler) const {
     FileByteSource source(filename_);
     try {

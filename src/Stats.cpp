@@ -60,7 +60,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
 struct SmallIntRecordHandler : public NoopRecordHandler {
   SmallIntValueHandler vh;
 
-  void onValue(size_t, size_t , FileByteSource &source) override {
+  void onValue(size_t, size_t, FileByteSource &source) override {
     ValueParser<SmallIntValueHandler> parser(source, vh);
     parser.value();
   }
@@ -78,10 +78,12 @@ int stats(int argc, char **argv) {
 
   try {
     TCLAP::CmdLine cmd("Statistics sub-command", ' ', "1", true);
-    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"stats\"", true, "stats", "string");
+    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"stats\"",
+                                                 true, "stats", "string");
     TCLAP::SwitchArg dictDump("d", "dict", "Dictionary dump", cmd, false);
     TCLAP::SwitchArg intCnt("i", "ints", "Count of small integers", cmd, false);
-    TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files", false, "FileName");
+    TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files",
+                                                    false, "FileName");
 
     cmd.add(subCmd);
     cmd.add(fileNames);
@@ -101,7 +103,8 @@ int stats(int argc, char **argv) {
       }
     }
   } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    std::cerr << "error: " << e.error() << " for arg " << e.argId()
+              << std::endl;
   }
 
 

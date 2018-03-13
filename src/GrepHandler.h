@@ -12,7 +12,7 @@
  *
  * @tparam OutputHandler A ValueHandler to delegate matching records to.
  */
-template <typename OutputHandler>
+template<typename OutputHandler>
 class GrepHandler : public NoopValueHandler {
   OutputHandler &handler_;
   Dictionary &dictionary_;
@@ -48,13 +48,12 @@ public:
       : handler_(handler), dictionary_(dictionary),
         pKey_(pKey), pUint64_t_(pUint64_t), pInt64_t_(pInt64_t),
         pFullStr_(pFullStr),
-        matched_(false)
-  {
+        matched_(false) {
     context.push({Context::BARE, 0});
   }
 
   bool isKey() {
-    auto & c = context.top();
+    auto &c = context.top();
     return (c.context == Context::OBJECT) && (c.counter % 2 == 0);
   }
 

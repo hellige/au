@@ -35,8 +35,7 @@ class AuStringIntern {
     const size_t INTERN_CACHE_SIZE;
 
     UsageTracker(size_t internThresh, size_t internCacheSize)
-        : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize)
-    {}
+        : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize) {}
 
     bool shouldIntern(const std::string &str) {
       auto it = dict.find(std::string_view(str.c_str(), str.length()));
@@ -88,12 +87,12 @@ public:
   AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
                  size_t internCacheSize = 1000)
       : nextEntry_(0), TINY_STR(tinyStr),
-        internCache_(internThresh, internCacheSize)
-  { }
+        internCache_(internThresh, internCacheSize) {}
 
   std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
-    if (s.length() <= TINY_STR) return std::optional<size_t>();
-    if (intern.has_value() && !intern.value()) return std::optional<size_t>();
+    if (s.length() <= TINY_STR) return std::optional < size_t > ();
+    if (intern.has_value() && !intern.value())
+      return std::optional < size_t > ();
 
     auto it = dictionary_.find(s);
     if (it != dictionary_.end()) {
@@ -107,7 +106,7 @@ public:
       dictInOrder_.emplace_back(s);
       return nextEntry_++;
     } else {
-      return std::optional<size_t>();
+      return std::optional < size_t > ();
     }
   }
 
@@ -128,7 +127,7 @@ public:
     // Note: We can't modify dictInOrder_ or else the internIndex will no longer
     // match.
     size_t purged = 0;
-    for (auto it = dictionary_.begin(); it != dictionary_.end(); ) {
+    for (auto it = dictionary_.begin(); it != dictionary_.end();) {
       if (it->second.occurences < threshold) {
         it = dictionary_.erase(it);
         purged++;
@@ -143,16 +142,16 @@ public:
   auto getStats() const {
     return std::unordered_map<std::string, int> {
         {"HashBucketCount", dictionary_.bucket_count()},
-        {"HashLoadFactor", dictionary_.load_factor()},
-        {"MaxLoadFactor", dictionary_.max_load_factor()},
-        {"HashSize", dictionary_.size()},
-        {"DictSize", dictInOrder_.size()},
-        {"CacheSize", internCache_.size()}
+        {"HashLoadFactor",  dictionary_.load_factor()},
+        {"MaxLoadFactor",   dictionary_.max_load_factor()},
+        {"HashSize",        dictionary_.size()},
+        {"DictSize",        dictInOrder_.size()},
+        {"CacheSize",       internCache_.size()}
     };
   }
 };
 
-template <typename Buffer>
+template<typename Buffer>
 class AuFormatter {
   Buffer &msgBuf_;
   AuStringIntern &stringIntern;
@@ -184,12 +183,13 @@ class AuFormatter {
     static auto test(...) -> std::false_type;
 
   public:
-    static constexpr bool value = decltype(test<O>(0))::value;
+    static constexpr bool value = decltype(test<O>(0))
+    ::value;
   };
 
 public:
   AuFormatter(Buffer &buf, AuStringIntern &stringIntern)
-    : msgBuf_(buf), stringIntern(stringIntern) { }
+      : msgBuf_(buf), stringIntern(stringIntern) {}
 
   class KeyValSink {
     AuFormatter &formatter_;
@@ -203,7 +203,7 @@ public:
   };
 
   template<typename... Args>
-  AuFormatter &map(Args&&... args) {
+  AuFormatter &map(Args &&... args) {
     msgBuf_.put('{');
     kvs(std::forward<Args>(args)...);
     msgBuf_.put('}');
@@ -211,14 +211,14 @@ public:
   }
 
   template<typename... Args>
-  AuFormatter &array(Args&&... args) {
+  AuFormatter &array(Args &&... args) {
     msgBuf_.put('[');
     vals(std::forward<Args>(args)...);
     msgBuf_.put(']');
     return *this;
   }
 
-  template <typename F>
+  template<typename F>
   auto mapVals(F &&f) {
     return [this, f] {
       KeyValSink sink(*this);
@@ -228,7 +228,7 @@ public:
     };
   }
 
-  template <typename F>
+  template<typename F>
   auto arrayVals(F &&f) {
     return [this, f] {
       msgBuf_.put('[');
@@ -238,13 +238,26 @@ public:
   }
 
   // Interface to support SAX handlers
-  AuFormatter &startMap() { msgBuf_.put('{'); return *this; }
-  AuFormatter &endMap() { msgBuf_.put('}'); return *this; }
-  AuFormatter &startArray() { msgBuf_.put('['); return *this; }
-  AuFormatter &endArray() { msgBuf_.put(']'); return *this; }
+  AuFormatter &startMap() {
+    msgBuf_.put('{');
+    return *this;
+  }
+  AuFormatter &endMap() {
+    msgBuf_.put('}');
+    return *this;
+  }
+  AuFormatter &startArray() {
+    msgBuf_.put('[');
+    return *this;
+  }
+  AuFormatter &endArray() {
+    msgBuf_.put(']');
+    return *this;
+  }
 
   template<class T>
-  AuFormatter &value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
+  AuFormatter &
+  value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
     msgBuf_.put(i < 0 ? 'J' : 'I');
     if (i < 0) { i *= -1; }
     valueInt(i);
@@ -252,7 +265,8 @@ public:
   };
 
   template<class T>
-  AuFormatter &value(T f, typename std::enable_if<std::is_floating_point<T>::value>::type * = 0) {
+  AuFormatter &value(T f,
+                     typename std::enable_if<std::is_floating_point<T>::value>::type * = 0) {
     double d = f;
     static_assert(sizeof(d) == 8);
     msgBuf_.put('D');
@@ -269,7 +283,7 @@ public:
    * @return
    */
   AuFormatter &value(const std::string_view sv,
-                     std::optional<bool> intern = std::optional<bool>()) {
+                     std::optional<bool> intern = std::optional < bool > ()) {
     if (intern.has_value() && !intern.value()) {
       encodeString(sv);
     } else {
@@ -287,10 +301,13 @@ public:
   AuFormatter &value(const std::string &s) {
     return value(std::string_view(s.c_str(), s.length()));
   }
-  AuFormatter &null() { msgBuf_.put('N'); return *this; }
+  AuFormatter &null() {
+    msgBuf_.put('N');
+    return *this;
+  }
   AuFormatter &value(std::nullptr_t) { return null(); }
 
-  template <typename T>
+  template<typename T>
   AuFormatter &value(const T *t) {
     if (t) value(*t);
     else null();
@@ -305,8 +322,7 @@ public:
 
   template<typename T>
   AuFormatter &value(T val,
-      typename std::enable_if<std::is_enum<T>::value, void>::type * = 0)
-  {
+                     typename std::enable_if<std::is_enum<T>::value, void>::type * = 0) {
     return value(name(val));
   }
 
@@ -341,7 +357,7 @@ protected:
 private:
   void kvs() {}
   template<typename V, typename... Args>
-  void kvs(std::string_view key, V &&val, Args&&... args) {
+  void kvs(std::string_view key, V &&val, Args &&... args) {
     encodeStringIntern(key, true);
     value(std::forward<V>(val));
     kvs(std::forward<Args>(args)...);
@@ -349,7 +365,7 @@ private:
 
   void vals() {}
   template<typename V, typename... Args>
-  void vals(V &&val, Args&&... args) {
+  void vals(V &&val, Args &&... args) {
     value(std::forward<V>(val));
     vals(std::forward<Args>(args)...);
   }
@@ -444,8 +460,7 @@ public:
      size_t purgeThreshold = 50, size_t clearThreshold = 1400)
       : output_(output), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
-        clearThreshold_(clearThreshold)
-  {
+        clearThreshold_(clearThreshold) {
     AuFormatter af(output_, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
@@ -453,7 +468,7 @@ public:
     clearDictionary();
   }
 
-  template <typename F>
+  template<typename F>
   void encode(F &&f) {
     static VectorBuffer buf;
     AuFormatter formatter(buf, stringIntern_);
