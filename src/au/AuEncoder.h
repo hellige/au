@@ -357,7 +357,7 @@ private:
 
 
 class Au {
-  static constexpr int FORMAT_VERSION = 1;
+  static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
   AuStringIntern stringIntern_;
   size_t lastDictLoc_;
