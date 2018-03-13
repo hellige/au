@@ -36,7 +36,9 @@ public:
   }
 
   size_t lastDictPos() const { return lastDictPos_; }
-  const std::string &operator[](size_t idx) const { return dictionary_[idx]; }
+  const std::string &operator[](size_t idx) const {
+    return dictionary_.at(idx);
+  }
   bool valid(size_t dictPos) const { return dictPos == lastDictPos_; }
   size_t size() const {
     return dictionary_.size();
