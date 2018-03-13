@@ -80,7 +80,10 @@ public:
   class Byte {
     int value_;
   public:
-    explicit Byte(int c) : value_(c) {}
+    explicit Byte(uint8_t c) : value_(c) {}
+  private:
+    Byte() : value_(-1) {}
+  public:
     bool isEof() const { return value_ == -1; }
     char charValue() const {
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
@@ -90,7 +93,7 @@ public:
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
       return static_cast<std::byte>(value_);
     }
-    static Byte Eof() { return Byte { -1 }; }
+    static Byte Eof() { return Byte(); }
     friend bool operator ==(Byte b, char c) {
       return b.value_ == c;
     }
