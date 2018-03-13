@@ -44,8 +44,9 @@ public:
               const std::vector<int64_t> &pInt64_t,
               const std::vector<std::string> &pFullStr)
       : handler_(handler), dictionary_(dictionary),
-        pKey_(pKey), pUint64_t_(pUint64_t), pInt64_t_(pInt64_t), pFullStr_(pFullStr),
-        matched_(false), isKey_(false), isStrVal_(false)
+        pKey_(pKey), pUint64_t_(pUint64_t), pInt64_t_(pInt64_t),
+        pFullStr_(pFullStr),
+        matched_(false)
   {
     context.push(Context::BARE);
   }
@@ -64,7 +65,8 @@ public:
 
   template<typename C, typename V>
   bool find(const C &container, const V &value) {
-    return std::find(container.cbegin(), container.cend(), value) != container.cend();
+    return std::find(container.cbegin(), container.cend(), value)
+           != container.cend();
   }
 
   void onUint(uint64_t value) override {
@@ -87,13 +89,15 @@ public:
     if (context.top() == Context::OBJECT) isKey_ = true;
   }
   void onDictRef(size_t dictIdx) {
-    if (isKey_) {
+    assert(dictIdx < dictionary_.size());
+    if (isKey()) {
       if (find(pKey_, dictionary_[dictIdx])) matched_ = true;
       isKey_ = false;
     } else {
       if (find(pFullStr_, dictionary_[dictIdx])) matched_ = true;
       if (context.top() == Context::OBJECT) isKey_ = true;
     }
+    incrCounter();
   }
 
   void onObjectStart() override {

@@ -87,9 +87,9 @@ int stats(int argc, char **argv) {
     cmd.add(fileNames);
     cmd.parse(argc, argv);
 
-    if (intCnt) {
+    if (intCnt.getValue()) {
       handler = &smallIntRecordHandler;
-    } else if (dictDump) {
+    } else if (dictDump.getValue()) {
       handler = &dictDumpHandler;
     }
 
