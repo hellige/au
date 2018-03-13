@@ -24,3 +24,8 @@ add_executable(au main.cpp Json2Au.cpp Canned.cpp Stats.cpp Grep.cpp)
 target_link_libraries(au au-cpp)
 install(TARGETS au
         RUNTIME DESTINATION bin)
+
+# Release flags (statically linked)
+# TODO: should we make this an option? Needs to be off to get the sanitizers to work.
+set_target_properties(au PROPERTIES LINK_FLAGS_RELEASE -static)
+set_target_properties(au PROPERTIES LINK_FLAGS_RELWITHDEBINFO -static)
