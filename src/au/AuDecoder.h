@@ -80,7 +80,7 @@ public:
   class Byte {
     int value_;
   public:
-    explicit Byte(uint8_t c) : value_(c) {}
+    explicit Byte(char c) : value_(static_cast<uint8_t >(c)) {}
   private:
     Byte() : value_(-1) {}
   public:
