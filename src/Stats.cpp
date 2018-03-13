@@ -89,7 +89,7 @@ int stats(int argc, char **argv) {
 
     if (intCnt.getValue()) {
       handler = &smallIntRecordHandler;
-    } else if (dictDump.getValue()) {
+    } else if (dictDump.isSet()) {
       handler = &dictDumpHandler;
     }
 
