@@ -129,6 +129,10 @@ int json2au(int argc, char **argv) {
   } else {
     inF = fopen(inFName.c_str(), "rb");
   }
+  if (!inF) {
+    std::cerr << "Unable to open input " << inFName << std::endl;
+    return 1;
+  }
 
   std::streambuf *outBuf;
   std::ofstream outFileStream;
@@ -136,6 +140,10 @@ int json2au(int argc, char **argv) {
     outBuf = std::cout.rdbuf();
   } else {
     outFileStream.open(outFName, std::ios_base::binary);
+    if (!outFileStream) {
+      std::cerr << "Unable to open output " << outFName << std::endl;
+      return 1;
+    }
     outBuf = outFileStream.rdbuf();
   }
   std::ostream out(outBuf);
