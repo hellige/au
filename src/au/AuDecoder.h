@@ -13,6 +13,7 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <cstddef>
 
 // TODO add explicit 4-byte float support
 // TODO add small int and small dict-ref support
@@ -45,10 +46,10 @@ class FileByteSource {
   static const auto BUFFER_SIZE = 256 * 1024;
 
   char buf_[BUFFER_SIZE]; //< Working buffer
-  int fd_;      //< Underlying data stream
   size_t pos_;  //< Current position in the underlying data stream
   char *cur_;   //< Current position in the working buffer
   char *limit_; //< End of the current working buffer
+  int fd_;      //< Underlying data stream
 
 public:
   explicit FileByteSource(const std::string &fname)
@@ -76,15 +77,48 @@ public:
   /// Position in the underlying data stream
   size_t pos() const { return pos_; }
 
-  int next() {
-    while (cur_ == limit_) if (!read()) return EOF;
+  class Byte {
+    int value_;
+  public:
+    explicit Byte(int c) : value_(c) {}
+    bool isEof() const { return value_ == -1; }
+    char charValue() const {
+      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+      return static_cast<char>(value_);
+    }
+    std::byte byteValue() const {
+      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+      return static_cast<std::byte>(value_);
+    }
+    static Byte Eof() { return Byte { -1 }; }
+    friend bool operator ==(Byte b, char c) {
+      return b.value_ == c;
+    }
+    friend bool operator ==(Byte b, Byte c) {
+      return b.value_ == c.value_;
+    }
+    friend bool operator !=(Byte b, char c) {
+      return b.value_ != c;
+    }
+    friend bool operator !=(Byte b, Byte c) {
+      return b.value_ != c.value_;
+    }
+    friend std::ostream &operator<<(std::ostream &o, Byte b) {
+      if (b.isEof()) return o << "EOF";
+      return o << '\'' << static_cast<char>(b.value_)
+               << "' (0x" << std::hex << b.value_ << ")";
+    }
+  };
+
+   Byte next() {
+    while (cur_ == limit_) if (!read()) return Byte::Eof();
     pos_++;
-    return *cur_++;
+    return Byte(*cur_++);
   }
 
-  int peek() {
-    while (cur_ == limit_) if (!read()) return EOF;
-    return *cur_;
+  Byte peek() {
+    while (cur_ == limit_) if (!read()) return Byte::Eof();
+    return Byte(*cur_);
   }
 
   template<typename T>
@@ -123,7 +157,7 @@ public:
       cur_ -= relseek;
       pos_ -= relseek;
     } else {
-      auto pos = lseek(fd_, abspos, SEEK_SET);
+      auto pos = lseek(fd_, static_cast<off_t>(abspos), SEEK_SET);
       if (pos < 0) {
         THROW_RT("failed to seek to desired location: " << strerror(errno));
       }
@@ -141,22 +175,22 @@ private:
     const auto minHistSz = (BUFFER_SIZE / 16);
     if (cur_ > buf_ + minHistSz) {
       auto startOfHistory = cur_ - minHistSz;
-      memmove(buf_, startOfHistory, limit_ - startOfHistory);
+      memmove(buf_, startOfHistory,
+              static_cast<size_t>(limit_ - startOfHistory));
       auto shift = startOfHistory - buf_;
       cur_ -= shift;
       limit_ -= shift;
     }
 
     const auto freeSpace = BUFFER_SIZE - (limit_ - buf_);
-    size_t bytes_read = ::read(fd_, limit_, freeSpace);
-    if (bytes_read == (size_t) -1)
+    ssize_t bytes_read = ::read(fd_, limit_, static_cast<size_t>(freeSpace));
+    if (bytes_read == -1)
       throw std::runtime_error("read failed");
     if (!bytes_read) return false;
     limit_ += bytes_read;
     return true;
   }
 };
-
 
 class BaseParser {
 protected:
@@ -166,10 +200,9 @@ protected:
       : source_(source) {}
 
   void expect(char e) const {
-    int c = source_.next();
+    auto c = source_.next();
     if (c == e) return;
-    THROW("Unexpected character: '"
-              << (char) c << "' (0x" << std::hex << c << ")");
+    THROW("Unexpected character: '" << c);
   }
 
   double readDouble() const {
@@ -182,11 +215,18 @@ protected:
   uint64_t readVarint() const {
     auto shift = 0u;
     uint64_t result = 0;
-    while (true) { // TODO check that you're not reading more than 9 bytes
-      uint64_t i = source_.next();// TODO what if the source is at the end?
-      result |= (i & 0x7f) << shift;
+    while (true) {
+      if (shift >= 64u)
+        THROW("Bad varint encoding");
+      auto next = source_.next();
+      if (next.isEof())
+        THROW("Unexpected end of file");
+      auto i = next.byteValue();
+      const auto valueMask = std::byte(0x7f);
+      const auto moreMask = std::byte(0x80);
+      result |= static_cast<uint64_t>(i & valueMask) << shift;
       shift += 7;
-      if (!(i & 0x80)) break;
+      if ((i & moreMask) != moreMask) break;
     }
     return result;
   }
@@ -211,8 +251,10 @@ public:
       : BaseParser(source), handler_(handler) {}
 
   void value() const {
-    int c = source_.next();
-    switch (c) {
+    auto c = source_.next();
+    if (c.isEof())
+      THROW("Unexpected EOF at start of value");
+    switch (c.charValue()) {
       case 'T':
         handler_.onBool(true);
         break;
@@ -229,7 +271,7 @@ public:
         auto i = readVarint();
         if (i > std::numeric_limits<int64_t>::max() - 1)
           THROW("Signed int overflows int64_t: -" << i);
-        handler_.onInt(-i);
+        handler_.onInt(-static_cast<int64_t>(i));
       }
         break;
       case 'D':
@@ -248,22 +290,22 @@ public:
         parseObject();
         break;
       default:
-        THROW("Unexpected character at start of value: '"
-                  << (char) c << "' (0x" << std::hex << c << ")");
+        THROW("Unexpected character at start of value: " << c);
     }
   }
 
 private:
   void key() const {
-    int c = source_.peek();
-    switch (c) {
+    auto c = source_.peek();
+    if (c.isEof())
+      THROW("Unexpected EOF at start of key");
+    switch (c.charValue()) {
       case 'S':
       case 'X':
         value();
         break;
       default:
-        THROW("Unexpected character at start of key: '"
-                  << (char) c << "' (0x" << std::hex << c << ")");
+        THROW("Unexpected character at start of key: " << c);
     }
   }
   void parseArray() const {
@@ -299,12 +341,13 @@ public:
 
 private:
   void record() const {
-    int c = source_.next();
+    auto c = source_.next();
+    if (c.isEof()) THROW("Unexpected EOF at start of record");
     handler_.onRecordStart(source_.pos() - 1);
-    switch (c) {
+    switch (c.charValue()) {
       case 'H':
         if (source_.next() == 'I') {
-          int64_t version = readVarint();
+          auto version = readVarint();
           if (version != AU_FORMAT_VERSION) {
             THROW("Bad format version: expected " << AU_FORMAT_VERSION
                                                   << ", got " << version);
@@ -341,8 +384,7 @@ private:
         break;
       }
       default:
-        THROW("Unexpected character at start of record: '"
-                  << (char) c << "' (0x" << std::hex << c << ")");
+        THROW("Unexpected character at start of record: " << c);
     }
   }
 
@@ -399,7 +441,7 @@ public:
   void decode(H &handler) const {
     FileByteSource source(filename_);
     try {
-      RecordParser(source, handler).parseStream();
+      RecordParser<H>(source, handler).parseStream();
       handler.onParseEnd();
     } catch (parse_error &e) {
       std::cout << e.what() << std::endl;

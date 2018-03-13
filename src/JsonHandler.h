@@ -171,7 +171,7 @@ public:
   void onDictRef(size_t idx) {
     // TODO error handling, arbitary types? need to distinguish keys?
     const auto &v = dictionary_[idx];
-    writer_.String(v.c_str(), v.size());
+    writer_.String(v.c_str(), static_cast<rapidjson::SizeType>(v.size()));
   }
 
   void onStringStart(size_t len) {
@@ -180,7 +180,7 @@ public:
   }
 
   void onStringEnd() {
-    writer_.String(str_.data(), str_.size());
+    writer_.String(str_.data(), static_cast<rapidjson::SizeType>(str_.size()));
   }
 
   void onStringFragment(std::string_view frag) {

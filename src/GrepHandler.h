@@ -114,7 +114,7 @@ public:
     incrCounter();
   }
 
-  void onDictRef(size_t dictIdx) {
+  void onDictRef(size_t dictIdx) override {
     assert(dictIdx < dictionary_.size());
     if (isKey() && !pKey_.empty()) {
       if (pKey_.size() == 1) {
@@ -141,11 +141,11 @@ public:
     incrCounter();
   }
 
-  void onArrayStart() {
+  void onArrayStart() override {
     context.emplace_back(Context::ARRAY, 0);
   }
 
-  void onArrayEnd() {
+  void onArrayEnd() override {
     context.pop_back();
     incrCounter();
   }

@@ -32,8 +32,7 @@ int grep(int argc, char **argv) {
     cmd.add(fileNames);
     cmd.parse(argc, argv);
 
-
-
+    
     GrepHandler<JsonHandler> grepHandler(
         dictionary, jsonHandler, key.getValue(), uInt.getValue(), sInt.getValue(), str.getValue());
     RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);

@@ -8,10 +8,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXE_LINKER_FLAGS "${EXTRA_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
 
 # All the sanitizer flags in one place
-set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libasan -fsanitize=address")
-set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libubsan")
-set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=signed-integer-overflow")
-set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=bounds-strict -fsanitize=undefined")
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=address")
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=undefined")
+else ()
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libasan -fsanitize=address")
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libubsan")
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=signed-integer-overflow")
+    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=bounds-strict -fsanitize=undefined")
+endif ()
 
 # Common flags shared across all builds
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g")
