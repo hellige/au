@@ -225,11 +225,12 @@ public:
       case 'I':
         handler_.onUint(readVarint());
         break;
-      case 'J':
+      case 'J': {
         auto i = readVarint();
-        if (i > std::numeric_limits<int64_t>::min() * -1)
+        if (i > std::numeric_limits<int64_t>::max() - 1)
           THROW("Signed int overflows int64_t: -" << i);
         handler_.onInt(-i);
+      }
         break;
       case 'D':
         handler_.onDouble(readDouble());
