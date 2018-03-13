@@ -416,11 +416,6 @@ protected:
     count_++;
     return dest_->sputc(ch);
   }
-
-//  virtual std::streamsize xsputn(const char_type *c, std::streamsize count) {
-//    count_ += count;
-//    return dest_->xsputn(c, count);
-//  }
 };
 
 
