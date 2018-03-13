@@ -1,3 +1,17 @@
+# clang -Wextra only for our own code
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weverything -Wno-undef -Wno-c++98-compat -Wno-shadow-field-in-constructor -Wno-missing-prototypes -Wno-padded")
+    # TODO either fix documentation or remove it, then remove this
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-documentation")
+    # TODO decide if this is OK. It probably is
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-exit-time-destructors")
+    # TODO should probably remove this and fix unnecessary things once API has settled.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unneeded-member-function -Wno-unused-member-function -Wno-unused-template")
+    # TODO if we ever go non-header only, we can improve things a tiny bit by b ringing some of the vtable definitions out of line
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-weak-vtables")
+endif ()
+
+
 add_library(au-cpp INTERFACE)
 include_directories(external/tclap/include)
 target_sources(au-cpp INTERFACE

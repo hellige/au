@@ -159,7 +159,7 @@ class AuFormatter {
   void encodeString(const std::string_view sv) {
     msgBuf_.put('S');
     valueInt(sv.length());
-    msgBuf_.write(sv.data(), sv.length());
+    msgBuf_.write(sv.data(), static_cast<std::streamsize>(sv.length()));
   }
 
   void encodeStringIntern(const std::string_view sv,
@@ -257,17 +257,22 @@ public:
 
   template<class T>
   AuFormatter &
-  value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = 0) {
-    msgBuf_.put(i < 0 ? 'J' : 'I');
-    if (i < 0) { i *= -1; }
-    valueInt(i);
+  value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
+    if constexpr (std::is_signed_v<T>) {
+      msgBuf_.put(i < 0 ? 'J' : 'I');
+      if (i < 0) { i *= -1; }
+      valueInt(static_cast<typename std::make_unsigned<T>::type>(i));
+    } else {
+      msgBuf_.put('I');
+      valueInt(i);
+    }
     return *this;
-  };
+  }
 
   template<class T>
   AuFormatter &value(T f,
-                     typename std::enable_if<std::is_floating_point<T>::value>::type * = 0) {
-    double d = f;
+                     typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
+    double d = static_cast<double>(f); // TODO should we support a float format?
     static_assert(sizeof(d) == 8);
     msgBuf_.put('D');
     auto *dPtr = reinterpret_cast<char *>(&d);
@@ -338,10 +343,10 @@ protected:
 
   void valueInt(uint64_t i) {
     while (true) {
-      uint8_t toWrite = i & 0x7f;
+      char toWrite = static_cast<char>(i & 0x7fu);
       i >>= 7;
       if (i) {
-        msgBuf_.put(toWrite | 0x80);
+        msgBuf_.put((toWrite | static_cast<char>(0x80u)));
       } else {
         msgBuf_.put(toWrite);
         break;
@@ -383,11 +388,19 @@ class Au {
   size_t purgeThreshold_;
   size_t clearThreshold_;
 
+  size_t tell() const {
+    auto pos = output_.tellp();
+    if (pos == -1) {
+      // TODO: what?
+    }
+    return static_cast<size_t>(pos);
+  }
+
   void exportDict() {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
       AuFormatter au(output_, stringIntern_);
-      size_t newDictLoc = output_.tellp();
+      auto newDictLoc = tell();
       au.raw('A');
       au.valueInt(newDictLoc - lastDictLoc_);
       lastDictLoc_ = newDictLoc;
@@ -407,7 +420,7 @@ class Au {
   void write(const std::string_view &msg) {
     exportDict();
     AuFormatter au(output_, stringIntern_);
-    size_t thisLoc = output_.tellp();
+    auto thisLoc = tell();
     au.raw('V');
     au.valueInt(thisLoc - lastDictLoc_);
     au.valueInt(msg.length());
@@ -435,7 +448,7 @@ public:
     void put(char c) {
       v.push_back(c);
     }
-    void write(const char *data, size_t size) {
+    void write(const char *data, std::streamsize size) {
       v.insert(v.end(), data, data + size);
     }
     size_t tellp() {
@@ -483,7 +496,7 @@ public:
   void clearDictionary(bool clearUsageTracker = false) {
     stringIntern_.clear(clearUsageTracker);
     lastDictSize_ = 0;
-    lastDictLoc_ = output_.tellp();
+    lastDictLoc_ = tell();
     AuFormatter af(output_, stringIntern_);
     af.raw('C');
     af.term();
@@ -496,7 +509,7 @@ public:
 
   auto getStats() const {
     auto stats = stringIntern_.getStats();
-    stats["Records"] = records_;
+    stats["Records"] = static_cast<int>(records_);
     return stats;
   }
 };

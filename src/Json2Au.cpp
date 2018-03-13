@@ -37,7 +37,7 @@ class JsonSaxHandler
     if (str[0] == '-') {
       uint64_t u = strtoull(digits + 1, &endptr, 10);
       if (endptr - digits != length) return false;
-      int64_t i = u * -1;
+      int64_t i = static_cast<int64_t>(u) * -1;
       formatter.value(i);
     } else {
       uint64_t u = strtoull(digits, &endptr, 10);
@@ -156,7 +156,7 @@ int json2au(int argc, char **argv) {
   ParseResult res;
   size_t entriesProcessed = 0;
   auto lastTime = std::chrono::steady_clock::now();
-  size_t lastDictSize = 0;
+  int lastDictSize = 0;
   while (res) {
     au.encode([&](auto &f) {
       JsonSaxHandler handler(f);

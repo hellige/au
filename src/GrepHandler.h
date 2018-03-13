@@ -97,7 +97,7 @@ public:
     incrCounter();
   }
 
-  void onDictRef(size_t dictIdx) {
+  void onDictRef(size_t dictIdx) override {
     assert(dictIdx < dictionary_.size());
     if (isKey()) {
       if (find(pKey_, dictionary_[dictIdx])) matched_ = true;
@@ -116,11 +116,11 @@ public:
     incrCounter();
   }
 
-  void onArrayStart() {
+  void onArrayStart() override {
     context.push({Context::ARRAY, 0});
   }
 
-  void onArrayEnd() {
+  void onArrayEnd() override {
     context.pop();
     incrCounter();
   }
