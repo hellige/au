@@ -250,6 +250,18 @@ public:
   }
 
 private:
+  void key() const {
+    int c = source_.peek();
+    switch (c) {
+      case 'S':
+      case 'X':
+        value();
+        break;
+      default:
+        THROW("Unexpected character at start of key: '"
+                  << (char) c << "' (0x" << std::hex << c << ")");
+    }
+  }
   void parseArray() const {
     handler_.onArrayStart();
     while (source_.peek() != ']') value();
@@ -260,7 +272,7 @@ private:
   void parseObject() const {
     handler_.onObjectStart();
     while (source_.peek() != '}') {
-      value();
+      key();
       value();
     }
     expect('}');
