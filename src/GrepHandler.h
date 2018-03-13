@@ -25,8 +25,6 @@ class GrepHandler : public NoopValueHandler {
 
   std::vector<char> str_;
   bool matched_;
-  bool isKey_;
-  bool isStrVal_;
 
   // Keeps track of the context we're in so we know if the string we're constructing is a key or a value
   enum class Context : uint8_t {
@@ -34,8 +32,12 @@ class GrepHandler : public NoopValueHandler {
     OBJECT,
     ARRAY
   };
+  struct ContextMarker {
+    Context context;
+    size_t counter;
+  };
 
-  std::stack<Context> context;
+  std::stack<ContextMarker> context;
 
 public:
   GrepHandler(Dictionary &dictionary, OutputHandler &handler,
@@ -48,7 +50,16 @@ public:
         pFullStr_(pFullStr),
         matched_(false)
   {
-    context.push(Context::BARE);
+    context.push({Context::BARE, 0});
+  }
+
+  bool isKey() {
+    auto & c = context.top();
+    return (c.context == Context::OBJECT) && (c.counter % 2 == 0);
+  }
+
+  void incrCounter() {
+    context.top().counter++;
   }
 
   void onValue(FileByteSource &source) {
@@ -69,45 +80,50 @@ public:
            != container.cend();
   }
 
-  void onUint(uint64_t value) override {
-    if (find(pUint64_t_, value)) matched_ = true;
-    if (context.top() == Context::OBJECT) isKey_ = true;
-  }
-
-  void onInt(int64_t value) override {
-    if (find(pInt64_t_, value)) matched_ = true;
-    if (context.top() == Context::OBJECT) isKey_ = true;
-  }
-
   void onNull() override {
-    if (context.top() == Context::OBJECT) isKey_ = true;
+    incrCounter();
   }
   void onBool(bool) override {
-    if (context.top() == Context::OBJECT) isKey_ = true;
+    incrCounter();
+  }
+  void onInt(int64_t value) override {
+    if (find(pInt64_t_, value)) matched_ = true;
+    incrCounter();
+  }
+  void onUint(uint64_t value) override {
+    if (find(pUint64_t_, value)) matched_ = true;
+    incrCounter();
   }
   void onDouble(double) override {
-    if (context.top() == Context::OBJECT) isKey_ = true;
+    incrCounter();
   }
+
   void onDictRef(size_t dictIdx) {
     assert(dictIdx < dictionary_.size());
     if (isKey()) {
       if (find(pKey_, dictionary_[dictIdx])) matched_ = true;
-      isKey_ = false;
     } else {
       if (find(pFullStr_, dictionary_[dictIdx])) matched_ = true;
-      if (context.top() == Context::OBJECT) isKey_ = true;
     }
     incrCounter();
   }
 
   void onObjectStart() override {
-    context.push(Context::OBJECT);
-    isKey_ = true;
+    context.push({Context::OBJECT, 0});
   }
 
   void onObjectEnd() override {
     context.pop();
-    isKey_ = false;
+    incrCounter();
+  }
+
+  void onArrayStart() {
+    context.push({Context::ARRAY, 0});
+  }
+
+  void onArrayEnd() {
+    context.pop();
+    incrCounter();
   }
 
   void onStringStart(size_t len) override {
@@ -117,12 +133,12 @@ public:
 
   void onStringEnd() override {
     auto sv = std::string_view(str_.data(), str_.size());
-    if (isKey_) {
+    if (isKey()) {
       if (find(pKey_, sv)) matched_ = true;
-      isKey_ = false;
     } else {
       if (find(pFullStr_, sv)) matched_ = true;
     }
+    incrCounter();
   }
 
   void onStringFragment(std::string_view frag) override {
