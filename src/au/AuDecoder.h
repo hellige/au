@@ -61,7 +61,9 @@ public:
     }
     if (fd_ == -1)
       THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
+#ifndef __APPLE__
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
+#endif
     read();
   }
 
