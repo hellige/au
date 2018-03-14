@@ -1,9 +1,23 @@
 #include "AuEncoder.h"
+#include "AuDecoder.h"
 
 #include <benchmark/benchmark.h>
 
 #include <sstream>
 #include <string.h>
+
+static void BM_FileByteSource(benchmark::State &state) {
+  size_t buffSz = state.range(0);
+  FileByteSource src("/dev/urandom", buffSz);
+  size_t sum = 0;
+
+  for (auto _ : state) {
+    for (size_t i = 0; i < buffSz * 1024 * 100; ++i) {
+      sum += src.next().charValue();
+    }
+  }
+}
+BENCHMARK(BM_FileByteSource)->RangeMultiplier(2)->Range(16, 1<<8);
 
 static void BM_OStringStreamCreation(benchmark::State &state) {
   for (auto _ : state)

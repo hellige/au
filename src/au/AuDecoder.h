@@ -43,17 +43,19 @@ struct parse_error : std::runtime_error {
 
 
 class FileByteSource {
-  static const auto BUFFER_SIZE = 256 * 1024;
+  const size_t BUFFER_SIZE;
 
-  char buf_[BUFFER_SIZE]; //< Working buffer
+  char *buf_; //< Working buffer
   size_t pos_;  //< Current position in the underlying data stream
   char *cur_;   //< Current position in the working buffer
   char *limit_; //< End of the current working buffer
   int fd_;      //< Underlying data stream
 
 public:
-  explicit FileByteSource(const std::string &fname)
-      : pos_(0), cur_(buf_), limit_(buf_) {
+  explicit FileByteSource(const std::string &fname, size_t bufferSizeInK = 256)
+      : BUFFER_SIZE(bufferSizeInK * 1024), buf_(new char[BUFFER_SIZE]),
+        pos_(0), cur_(buf_), limit_(buf_)
+  {
     if (fname == "-") {
       fd_ = fileno(stdin);
     } else {
@@ -74,6 +76,7 @@ public:
 
   ~FileByteSource() {
     close(fd_); // TODO report error?
+    delete[] buf_;
   }
 
   /// Position in the underlying data stream
@@ -115,7 +118,7 @@ public:
     }
   };
 
-   Byte next() {
+  Byte next() {
     while (cur_ == limit_) if (!read()) return Byte::Eof();
     pos_++;
     return Byte(*cur_++);
