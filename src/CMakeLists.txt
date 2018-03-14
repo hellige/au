@@ -1,3 +1,5 @@
+option(STATIC "Build statically linked binary" OFF)
+
 # clang -Wextra only for our own code
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weverything -Wno-undef -Wno-c++98-compat -Wno-shadow-field-in-constructor -Wno-missing-prototypes -Wno-padded")
@@ -25,7 +27,7 @@ target_link_libraries(au au-cpp)
 install(TARGETS au
         RUNTIME DESTINATION bin)
 
-# Release flags (statically linked)
-# TODO: should we make this an option? Needs to be off to get the sanitizers to work.
-set_target_properties(au PROPERTIES LINK_FLAGS_RELEASE -static)
-set_target_properties(au PROPERTIES LINK_FLAGS_RELWITHDEBINFO -static)
+if (STATIC)
+    set_target_properties(au PROPERTIES LINK_FLAGS_RELEASE -static)
+    set_target_properties(au PROPERTIES LINK_FLAGS_RELWITHDEBINFO -static)
+endif ()
