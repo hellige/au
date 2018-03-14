@@ -2,8 +2,55 @@
 
 #include "AuDecoder.h"
 
-#include <algorithm>
-#include <stack>
+#include <optional>
+#include <variant>
+
+// TODO teach grep to emit au-encoded when desired (-e flag?)
+
+struct Pattern {
+  struct StrPattern {
+    std::string pattern;
+    bool fullMatch;
+  };
+
+  std::optional<std::string> keyPattern;
+  std::optional<int64_t> intPattern;
+  std::optional<uint64_t> uintPattern;
+  std::optional<double> doublePattern;
+  std::optional<StrPattern> strPattern;
+
+  bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
+
+  bool matchesKey(std::string_view key) const {
+    if (!keyPattern) return true;
+    return *keyPattern == key;
+  }
+
+  bool matchesValue(uint64_t val) {
+    if (!uintPattern) return false;
+    return *uintPattern == val;
+  }
+
+  bool matchesValue(int64_t val) {
+    if (!intPattern) return false;
+    return *intPattern == val;
+
+  }
+
+  bool matchesValue(double val) {
+    if (!doublePattern) return false;
+    return *doublePattern == val;
+  }
+
+  bool matchesValue(std::string_view sv) {
+    if (!strPattern) return false;
+    if (strPattern->fullMatch) {
+      return strPattern->pattern == sv;
+    }
+
+    return sv.find(strPattern->pattern) != std::string::npos;
+  }
+};
 
 /**
  * This ValueHandler looks for specific patterns, and if the pattern is found,
@@ -17,11 +64,7 @@ class GrepHandler : public NoopValueHandler {
   OutputHandler &handler_;
   Dictionary &dictionary_;
 
-  // Patterns to search for
-  const std::vector<std::string> &pKey_;
-  const std::vector<uint64_t> &pUint64_t_;
-  const std::vector<int64_t> &pInt64_t_;
-  const std::vector<std::string> &pFullStr_;
+  Pattern pattern_;
 
   std::vector<char> str_;
   bool matched_;
@@ -36,37 +79,36 @@ class GrepHandler : public NoopValueHandler {
   struct ContextMarker {
     Context context;
     size_t counter;
-    ContextMarker(Context context, size_t counter)
-        : context(context), counter(counter)
-    {}
+    bool checkVal;
+    ContextMarker(Context context, size_t counter, bool checkVal)
+        : context(context), counter(counter), checkVal(checkVal) {}
   };
 
-  std::vector<ContextMarker> context;
+  std::vector<ContextMarker> context_;
 
 public:
-  GrepHandler(Dictionary &dictionary, OutputHandler &handler,
-              const std::vector<std::string> &pKey,
-              const std::vector<uint64_t> &pUint64_t,
-              const std::vector<int64_t> &pInt64_t,
-              const std::vector<std::string> &pFullStr)
-      : handler_(handler), dictionary_(dictionary),
-        pKey_(pKey), pUint64_t_(pUint64_t), pInt64_t_(pInt64_t),
-        pFullStr_(pFullStr),
+  GrepHandler(Dictionary &dictionary,
+              OutputHandler &handler,
+              Pattern &&pattern)
+      : handler_(handler),
+        dictionary_(dictionary),
+        pattern_(std::move(pattern)),
         matched_(false) {
+    str_.reserve(1<<16);
   }
 
   bool isKey() {
-    auto &c = context.back();
+    auto &c = context_.back();
     return (c.context == Context::OBJECT) && (c.counter % 2 == 0);
   }
 
   void incrCounter() {
-    context.back().counter++;
+    context_.back().counter++;
   }
 
   void onValue(FileByteSource &source) {
-    context.clear();
-    context.emplace_back(Context::BARE, 0);
+    context_.clear();
+    context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
     matched_ = false;
     auto sov = source.pos();
     ValueParser<GrepHandler> parser(source, *this);
@@ -87,66 +129,49 @@ public:
   void onNull() override {
     incrCounter();
   }
+
   void onBool(bool) override {
     incrCounter();
   }
+
   void onInt(int64_t value) override {
-    if (!pInt64_t_.empty()) {
-      if (pInt64_t_.size() == 1) {
-        if (pInt64_t_.front() == value) matched_ = true;
-      } else {
-        if (find(pInt64_t_, value)) matched_ = true;
-      }
-    }
+    if (context_.back().checkVal && pattern_.matchesValue(value))
+      matched_ = true;
     incrCounter();
   }
+
   void onUint(uint64_t value) override {
-    if (!pUint64_t_.empty()) {
-      if (pUint64_t_.size() == 1) {
-        if (pUint64_t_.front() == value) matched_ = true;
-      } else {
-        if (find(pUint64_t_, value)) matched_ = true;
-      }
-    }
+    if (context_.back().checkVal && pattern_.matchesValue(value))
+      matched_ = true;
     incrCounter();
   }
-  void onDouble(double) override {
+  void onDouble(double value) override {
+    if (context_.back().checkVal && pattern_.matchesValue(value))
+      matched_ = true;
     incrCounter();
   }
 
   void onDictRef(size_t dictIdx) override {
     assert(dictIdx < dictionary_.size());
-    if (isKey() && !pKey_.empty()) {
-      if (pKey_.size() == 1) {
-        if (pKey_.front() == dictionary_[dictIdx]) matched_ = true;
-      } else {
-        if (find(pKey_, dictionary_[dictIdx])) matched_ = true;
-      }
-    } else if (!pFullStr_.empty()) {
-      if (pFullStr_.size() == 1) {
-        if (pFullStr_.front() == dictionary_[dictIdx]) matched_ = true;
-      } else {
-        if (find(pFullStr_, dictionary_[dictIdx])) matched_ = true;
-      }
-    }
+    checkString(dictionary_[dictIdx]); // TODO optimize by indexing dict first
     incrCounter();
   }
 
   void onObjectStart() override {
-    context.emplace_back(Context::OBJECT, 0);
+    context_.emplace_back(Context::OBJECT, 0, false);
   }
 
   void onObjectEnd() override {
-    context.pop_back();
+    context_.pop_back();
     incrCounter();
   }
 
   void onArrayStart() override {
-    context.emplace_back(Context::ARRAY, 0);
+    context_.emplace_back(Context::ARRAY, 0, context_.back().checkVal);
   }
 
   void onArrayEnd() override {
-    context.pop_back();
+    context_.pop_back();
     incrCounter();
   }
 
@@ -156,25 +181,23 @@ public:
   }
 
   void onStringEnd() override {
-    auto sv = std::string_view(str_.data(), str_.size());
-
-    if (isKey() && !pKey_.empty()) {
-      if (pKey_.size() == 1) {
-        if (pKey_.front() == sv) matched_ = true;
-      } else {
-        if (find(pKey_, sv)) matched_ = true;
-      }
-    } else if (!pFullStr_.empty()){
-      if (pFullStr_.size() == 1) {
-        if (pFullStr_.front() == sv) matched_ = true;
-      } else {
-        if (find(pFullStr_, sv)) matched_ = true;
-      }
-    }
+    checkString(std::string_view(str_.data(), str_.size()));
     incrCounter();
   }
 
   void onStringFragment(std::string_view frag) override {
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
+  }
+
+private:
+  void checkString(std::string_view sv) {
+    if (isKey()) {
+      if (pattern_.matchesKey(sv))
+        context_.back().checkVal = true;
+      return;
+    } else {
+      if (context_.back().checkVal && pattern_.matchesValue(sv))
+        matched_ = true;
+    }
   }
 };

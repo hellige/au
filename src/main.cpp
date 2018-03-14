@@ -85,6 +85,10 @@ int main(int argc, char **argv) {
     return usage(std::cerr);
   }
 
-  return it->second(argc, argv);
+  try {
+    return it->second(argc, argv);
+  } catch (const std::runtime_error &e) {
+    std::cerr << "Runtime error: " << e.what() << std::endl;
+  }
 }
 
