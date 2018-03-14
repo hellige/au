@@ -84,8 +84,8 @@ class AuStringIntern {
 
 public:
 
-  AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
-                 size_t internCacheSize = 1000)
+  explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
+                          size_t internCacheSize = 1000)
       : nextEntry_(0), TINY_STR(tinyStr),
         internCache_(internThresh, internCacheSize) {}
 
@@ -387,17 +387,17 @@ class OutputTracker : public std::streambuf {
   using traits_type = typename std::streambuf::traits_type;
 
 public:
-  OutputTracker(std::streambuf *dest)
+  explicit OutputTracker(std::streambuf *dest)
       : dest_(dest), owner_(nullptr), count_(0)
   {}
 
-  OutputTracker(std::ostream &dest)
+  explicit OutputTracker(std::ostream &dest)
       : dest_(dest.rdbuf()), owner_(&dest), count_(0)
   {
     owner_->rdbuf(this);
   }
 
-  virtual ~OutputTracker() {
+  ~OutputTracker() override {
     if (owner_ != nullptr) {
       owner_->rdbuf(dest_);
     }
