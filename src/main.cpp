@@ -1,3 +1,4 @@
+#include "main.h"
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
 #include "JsonHandler.h"
@@ -13,16 +14,7 @@
 using namespace std;
 using namespace rapidjson;
 
-int json2au(int argc, char **argv);
-int canned(int argc, char **argv);
-int stats(int argc, char **argv);
-int grep(int argc, char **argv);
-
 namespace {
-
-constexpr const char *AU_VERSION = "0.1";
-
-constexpr int AU_FORMAT_VERSION = 1; // TODO extract
 
 int version(int, char **) {
   std::cout << "au version " << AU_VERSION
@@ -67,11 +59,6 @@ int cat(int argc, char **argv) {
   return 0;
 }
 
-int todo(int, char **) {
-  std::cout << "not yet implemented." << std::endl; // TODO
-  return 1;
-}
-
 }
 
 int main(int argc, char **argv) {
@@ -85,7 +72,7 @@ int main(int argc, char **argv) {
   commands["--help"] = help;
   commands["canned"] = canned;
   commands["cat"] = cat;
-  commands["tail"] = todo;
+  commands["tail"] = tail;
   commands["grep"] = grep;
   commands["enc"] = json2au;
   commands["json2au"] = json2au;

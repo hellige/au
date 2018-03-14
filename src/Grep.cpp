@@ -1,3 +1,4 @@
+#include "main.h"
 #include "AuDecoder.h"
 
 #include "tclap/CmdLine.h"
@@ -10,29 +11,21 @@ int grep(int argc, char **argv) {
   JsonHandler jsonHandler(dictionary);
 
   try {
-    TCLAP::CmdLine cmd("Grep sub-command", ' ', "1", true);
+    TCLAP::CmdLine cmd("Grep sub-command", ' ', AU_VERSION, true);
     TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"grep\"",
-                                                 true, "grep", "string");
+                                                 true, "grep", "command", cmd);
     TCLAP::MultiArg<std::string> key("k", "key", "Key to search for",
-                                     false, "string");
+                                     false, "string", cmd);
     TCLAP::MultiArg<uint64_t> uInt("u", "uint", "Unsigned integer",
-                                   false, "uint64_t");
+                                   false, "uint64_t", cmd);
     TCLAP::MultiArg<int64_t> sInt("s", "sint", "Signed integer",
-                                  false, "int64_t");
+                                  false, "int64_t", cmd);
     TCLAP::MultiArg<std::string> str("f", "full", "Full string",
-                                     false, "string");
+                                     false, "string", cmd);
     TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files",
-                                                    false, "FileName");
-
-    cmd.add(subCmd);
-    cmd.add(key);
-    cmd.add(uInt);
-    cmd.add(sInt);
-    cmd.add(str);
-    cmd.add(fileNames);
+                                                    false, "FileName", cmd);
     cmd.parse(argc, argv);
 
-    
     GrepHandler<JsonHandler> grepHandler(
         dictionary, jsonHandler, key.getValue(), uInt.getValue(), sInt.getValue(), str.getValue());
     RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
@@ -48,6 +41,7 @@ int grep(int argc, char **argv) {
     }
   } catch (TCLAP::ArgException &e) {
     std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    return 1;
   }
 
   return 0;
