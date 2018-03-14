@@ -29,6 +29,11 @@ public:
     dictionary_.emplace_back(value);
     lastDictPos_ = sor;
   }
+//
+//  void add(size_t sor, std::string &&value) {
+//    dictionary_.emplace_back(value);
+//    lastDictPos_ = sor;
+//  }
 
   void clear(size_t sor) {
     dictionary_.clear();

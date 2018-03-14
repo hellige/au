@@ -216,7 +216,7 @@ TEST_F(AuFormatterTest, NestedArray) {
 
 
 TEST(FileByteSource, SeekStdio) {
-  FileByteSource fbs("/dev/zero");
+  FileByteSource fbs("/dev/zero", false);
   EXPECT_THROW(fbs.seek(5), std::runtime_error);
 }
 

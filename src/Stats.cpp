@@ -70,7 +70,7 @@ struct SmallIntRecordHandler : public NoopRecordHandler {
 
 }
 
-int stats(int argc, char **argv) {
+int stats(int argc, const char * const *argv) {
   SmallIntRecordHandler smallIntRecordHandler;
   DictDumpHandler dictDumpHandler;
   NoopRecordHandler *handler = &dictDumpHandler;
@@ -89,17 +89,17 @@ int stats(int argc, char **argv) {
     cmd.add(fileNames);
     cmd.parse(argc, argv);
 
-    if (intCnt.getValue()) {
+    if (intCnt) {
       handler = &smallIntRecordHandler;
-    } else if (dictDump.isSet()) {
+    } else if (dictDump) {
       handler = &dictDumpHandler;
     }
 
     if (fileNames.getValue().empty()) {
-      AuDecoder("-").decode(*handler);
+      AuDecoder("-").decode(*handler, false);
     } else {
       for (auto &f : fileNames.getValue()) {
-        AuDecoder(f).decode(*handler);
+        AuDecoder(f).decode(*handler, false);
       }
     }
   } catch (TCLAP::ArgException &e) {

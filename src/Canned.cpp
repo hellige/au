@@ -17,7 +17,8 @@ using namespace std;
  * @param argv
  * @return
  */
-int canned([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
+int canned([[maybe_unused]] int argc,
+           [[maybe_unused]] const char * const *argv) {
   std::ostringstream os;
   Au au(os);
 

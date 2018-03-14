@@ -108,18 +108,28 @@ public:
 
 } // namespace
 
-int json2au(int argc, char **argv) {
+int json2au(int argc, const char * const *argv) {
   argc -= 2; argv += 2;
 
   if (argc < 2 || argc > 3) {
     return -1;
   }
-  std::string inFName(argv[0]);
-  std::string outFName(argv[1]);
 
+  std::string inFName("-"), outFName("-");
   size_t maxEntries = std::numeric_limits<size_t>::max();
-  if (argc >= 3) {
-    maxEntries = strtoull(argv[2], nullptr, 0);
+
+  switch (argc) {
+    case 3:
+      maxEntries = strtoull(argv[2], nullptr, 0);
+      [[fallthrough]];
+    case 2:
+      outFName = argv[1];
+      [[fallthrough]];
+    case 1:
+      inFName = argv[0];
+      [[fallthrough]];
+    default:
+      break;
   }
 
   FILE *inF;
@@ -185,6 +195,7 @@ int json2au(int argc, char **argv) {
   }
 
   fclose(inF);
+  outFileStream.close();
 
   if (res.Code() == kParseErrorNone || res.Code() == kParseErrorDocumentEmpty) {
     return 0;

@@ -20,6 +20,12 @@
 // TODO add short string-length support (roll into 'S')
 // TODO add position tracking and length validation
 
+#define STR(EXPRS) (([&]() -> std::string { \
+    std::ostringstream oss_; \
+    oss_ << EXPRS; \
+    return oss_.str(); \
+    })())
+
 #define THROW(stuff) \
   do { \
     std::ostringstream _message; \
@@ -27,12 +33,7 @@
     throw parse_error(_message.str()); \
   } while (0)
 
-#define THROW_RT(stuff) \
-  do { \
-    std::ostringstream _message; \
-    _message << stuff; \
-    throw std::runtime_error(_message.str()); \
-  } while (0)
+#define THROW_RT(stuff) throw std::runtime_error(STR(stuff))
 
 namespace {
 
@@ -43,18 +44,22 @@ struct parse_error : std::runtime_error {
 
 
 class FileByteSource {
+protected:
   const size_t BUFFER_SIZE;
 
-  char *buf_; //< Working buffer
+  char *buf_;   //< Working buffer
   size_t pos_;  //< Current position in the underlying data stream
   char *cur_;   //< Current position in the working buffer
   char *limit_; //< End of the current working buffer
   int fd_;      //< Underlying data stream
 
+  bool waitForData_;
+
 public:
-  explicit FileByteSource(const std::string &fname, size_t bufferSizeInK = 256)
+  explicit FileByteSource(const std::string &fname, bool waitForData,
+                          size_t bufferSizeInK = 256)
       : BUFFER_SIZE(bufferSizeInK * 1024), buf_(new char[BUFFER_SIZE]),
-        pos_(0), cur_(buf_), limit_(buf_)
+        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData)
   {
     if (fname == "-") {
       fd_ = fileno(stdin);
@@ -176,11 +181,20 @@ public:
     }
   }
 
-private:
+protected:
+  /// Free space in the buffer
+  size_t buffFree() const {
+    return BUFFER_SIZE - (limit_ - buf_);
+  }
+
+  /// @return true if some data was read, false of 0 bytes were read.
   bool read() {
+    return read(BUFFER_SIZE / 16);
+  }
+  bool read(size_t minHistSz) {
     // Keep a minimum amount of consumed data in the buffer so we can seek back
     // even in non-seekable data streams.
-    const auto minHistSz = (BUFFER_SIZE / 16);
+    //const auto minHistSz = (BUFFER_SIZE / 16);
     if (cur_ > buf_ + minHistSz) {
       auto startOfHistory = cur_ - minHistSz;
       memmove(buf_, startOfHistory,
@@ -190,12 +204,17 @@ private:
       limit_ -= shift;
     }
 
-    const auto freeSpace = BUFFER_SIZE - (limit_ - buf_);
-    ssize_t bytes_read = ::read(fd_, limit_, static_cast<size_t>(freeSpace));
-    if (bytes_read == -1)
-      throw std::runtime_error("read failed");
-    if (!bytes_read) return false;
-    limit_ += bytes_read;
+    ssize_t bytesRead = 0;
+    do {
+      bytesRead = ::read(fd_, limit_, buffFree());
+      if (bytesRead < 0) // TODO: && errno != EAGAIN ?
+        THROW_RT("Error reading file: " << strerror(errno));
+      if (bytesRead == 0 && waitForData_)
+        sleep(1);
+    } while (!bytesRead && waitForData_);
+
+    if (!bytesRead) return false;
+    limit_ += bytesRead;
     return true;
   }
 };
@@ -416,10 +435,10 @@ struct NoopValueHandler {
   virtual void onInt(int64_t) {}
   virtual void onUint(uint64_t) {}
   virtual void onDouble(double) {}
-  virtual void onDictRef(size_t) {}
-  virtual void onStringStart(size_t) {}
+  virtual void onDictRef([[maybe_unused]] size_t dictIdx) {}
+  virtual void onStringStart([[maybe_unused]] size_t length) {}
   virtual void onStringEnd() {}
-  virtual void onStringFragment(std::string_view) {}
+  virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
 };
 
 struct NoopRecordHandler {
@@ -446,8 +465,8 @@ public:
       : filename_(filename) {}
 
   template<typename H>
-  void decode(H &handler) const {
-    FileByteSource source(filename_);
+  void decode(H &handler, bool waitForData) const {
+    FileByteSource source(filename_, waitForData);
     try {
       RecordParser<H>(source, handler).parseStream();
       handler.onParseEnd();

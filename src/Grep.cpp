@@ -6,7 +6,7 @@
 #include "JsonHandler.h"
 #include "GrepHandler.h"
 
-int grep(int argc, char **argv) {
+int grep(int argc, const char * const *argv) {
   Dictionary dictionary;
   JsonHandler jsonHandler(dictionary);
 
@@ -32,11 +32,11 @@ int grep(int argc, char **argv) {
 
     if (fileNames.getValue().empty()) {
       std::cerr << "Grepping stdin\n";
-      AuDecoder("-").decode(recordHandler);
+      AuDecoder("-").decode(recordHandler, false);
     } else {
       for (auto &f : fileNames.getValue()) {
         std::cerr << "Grepping " << f << "\n";
-        AuDecoder(f).decode(recordHandler);
+        AuDecoder(f).decode(recordHandler, false);
       }
     }
   } catch (TCLAP::ArgException &e) {

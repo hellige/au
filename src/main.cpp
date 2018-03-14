@@ -49,11 +49,11 @@ int cat(int argc, char **argv) {
   RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
 
   if (argc == 0) {
-    AuDecoder("-").decode(recordHandler);
+    AuDecoder("-").decode(recordHandler, false);
   } else {
     for (int i = 0; i < argc; i++) {
       std::string filename(argv[i]);
-      AuDecoder(filename).decode(recordHandler);
+      AuDecoder(filename).decode(recordHandler, false);
     }
   }
   return 0;
@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
   commands["--help"] = help;
   commands["canned"] = canned;
   commands["cat"] = cat;
+  commands["au2json"] = cat;
   commands["tail"] = tail;
   commands["grep"] = grep;
   commands["enc"] = json2au;
