@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace {
+
 struct DictDumpHandler : public NoopRecordHandler {
   std::vector<char> str_;
 
@@ -68,7 +69,52 @@ struct SmallIntRecordHandler : public NoopRecordHandler {
   void onParseEnd() override { vh.report(); }
 };
 
+void usage() {
+  std::cout
+      << "usage: au stats [options] [--] <path>...\n"
+      << "\n"
+      << "  -h --help        show usage and exit\n"
+      << "  -d --dict        dump dictionary\n"
+      << "  -i --ints        show count of small integers\n";
 }
+
+struct UsageVisitor : public TCLAP::Visitor {
+  void visit() override {
+    usage();
+    exit(0);
+  };
+};
+
+class StatsOutput : public TCLAP::StdOutput {
+public:
+  void failure(TCLAP::CmdLineInterface &, TCLAP::ArgException &e) override {
+    std::cerr << e.error() << std::endl;
+    ::usage();
+    exit(1);
+  }
+
+  void usage(TCLAP::CmdLineInterface &) override {
+    ::usage();
+  }
+};
+
+}
+
+// TODO here are some stats i'd like:
+//   - total bytes
+//   - total records (by type)
+//   - absolute count and count-in-bytes by type
+//   - histogram of varint size for:
+//     - values
+//     - backrefs
+//     - record length
+//     - string length
+//     - dict refs
+//   - histogram of string lengths (by power of two?)
+//   - count-in-bytes of dictionary refs
+//   - dictionary stats:
+//     - size of dict
+//     - frequency of reference
 
 int stats(int argc, const char * const *argv) {
   SmallIntRecordHandler smallIntRecordHandler;
@@ -77,16 +123,19 @@ int stats(int argc, const char * const *argv) {
   std::vector<std::string> auFiles;
 
   try {
-    TCLAP::CmdLine cmd("Statistics sub-command", ' ', "1", true);
-    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"stats\"",
-                                                 true, "stats", "string");
+    UsageVisitor usageVisitor;
+    TCLAP::CmdLine cmd("", ' ', "", false);
+    TCLAP::UnlabeledValueArg<std::string> subCmd(
+        "stats", "stats", true, "stats", "command", cmd);
+    TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+
     TCLAP::SwitchArg dictDump("d", "dict", "Dictionary dump", cmd, false);
     TCLAP::SwitchArg intCnt("i", "ints", "Count of small integers", cmd, false);
-    TCLAP::UnlabeledMultiArg<std::string> fileNames("fileNames", "Au files",
-                                                    false, "FileName");
+    TCLAP::UnlabeledMultiArg<std::string> fileNames(
+        "fileNames", "", false, "filename", cmd);
 
-    cmd.add(subCmd);
-    cmd.add(fileNames);
+    StatsOutput output;
+    cmd.setOutput(&output);
     cmd.parse(argc, argv);
 
     if (intCnt) {
@@ -105,8 +154,8 @@ int stats(int argc, const char * const *argv) {
   } catch (TCLAP::ArgException &e) {
     std::cerr << "error: " << e.error() << " for arg " << e.argId()
               << std::endl;
+    return 1;
   }
-
 
   return 0;
 }

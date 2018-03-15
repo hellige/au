@@ -335,6 +335,7 @@ private:
         THROW("Unexpected character at start of key: " << c);
     }
   }
+
   void parseArray() const {
     handler_.onArrayStart();
     while (source_.peek() != ']') value();
