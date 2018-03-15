@@ -86,6 +86,8 @@ public:
 }
 
 // TODO teach grep to recognize null/true/false when appropriate
+// TODO teach grep how to do -C/-A/-B. keep a running position of sor for nth record back and n "force dump" records forward, rewind and dump on match, etc
+//      dumping up to current would naturally move running position forward to rewind would naturally still work.
 
 int grep(int argc, char **argv) {
   Dictionary dictionary;

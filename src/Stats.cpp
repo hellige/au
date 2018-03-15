@@ -102,7 +102,7 @@ public:
 
 // TODO here are some stats i'd like:
 //   - total bytes
-//   - total records
+//   - total records (by type)
 //   - absolute count and count-in-bytes by type
 //   - histogram of varint size for:
 //     - values
