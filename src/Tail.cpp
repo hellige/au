@@ -140,13 +140,51 @@ public:
   }
 };
 
+/** This handler simply checks that the value we're unpacking doesn't go on past
+ * the expected end of the value record. If we start decoding an endless string
+ * of T's, we don't want to wait until the whole "record" has been unpacked
+ * before coming up for air and validating the length. */
 class ValidatingHandler : public NoopValueHandler {
   Dictionary &dictionary_;
+  FileByteSource &source_;
+  size_t absEndOfValue_;
+
 public:
-  ValidatingHandler(Dictionary &dictionary) : dictionary_(dictionary) {}
-  void onDictRef(size_t dictIdx) {
+  ValidatingHandler(Dictionary &dictionary, FileByteSource &source,
+                    size_t absEndOfValue)
+      : dictionary_(dictionary), source_(source), absEndOfValue_(absEndOfValue)
+  {}
+
+  void onObjectStart() override { checkBounds(); }
+  void onObjectEnd() override { checkBounds(); }
+  void onArrayStart() override { checkBounds(); }
+  void onArrayEnd() override { checkBounds(); }
+  void onNull() override { checkBounds(); }
+  void onBool(bool) override { checkBounds(); }
+  void onInt(int64_t) override { checkBounds(); }
+  void onUint(uint64_t) override { checkBounds(); }
+  void onDouble(double) override { checkBounds(); }
+
+  void onDictRef(size_t dictIdx) override {
     if (dictIdx >= dictionary_.size()) {
       THROW_RT("Invalid dictionary index");
+    }
+    checkBounds();
+  }
+
+  void onStringStart(size_t len) override {
+    if (source_.pos() + len > absEndOfValue_) {
+      THROW_RT("String is too long.");
+    }
+    checkBounds();
+  }
+
+  void onStringFragment(std::string_view) override { checkBounds(); }
+
+private:
+  void checkBounds() {
+    if (source_.pos() > absEndOfValue_) {
+      THROW_RT("Invalid value record structure/length.");
     }
   }
 };
@@ -161,10 +199,11 @@ public:
   TailHandler(Dictionary &dictionary, OutputHandler &handler,
               std::string fileName, bool follow, size_t startOffset)
       : BaseParser(source_), outputHandler_(handler), dictionary_(dictionary),
-        source_(fileName, follow, startOffset) {
+        source_(fileName, follow, startOffset)
+  {
     // TODO: What assumptions do we make about AU_FORMAT_VERSION we're tailing?
-
     sync();
+
     // At this point we should have a full/valid dictionary and be positioned
     // at the start of a value record.
     RecordHandler<OutputHandler> recordHandler(dictionary_, outputHandler_);
@@ -192,12 +231,17 @@ public:
         // We seem to have a complete dictionary. Let's try validating this val.
         source_.skip(sor - source_.pos());
         expect('V');
-        backDictRef = readVarint();
+        if (backDictRef != readVarint()) {
+          THROW_RT("Read different value 2nd time!");
+        }
         auto valueLen = readVarint();
         auto startOfValue = source_.pos();
+
         Dictionary validatingDict;
         builder.populate(validatingDict);
-        ValidatingHandler validatingHandler(validatingDict);
+
+        ValidatingHandler validatingHandler(validatingDict, source_,
+                                            startOfValue + valueLen);
         ValueParser<ValidatingHandler> valueValidator(source_,
                                                       validatingHandler);
         valueValidator.value();
@@ -212,7 +256,8 @@ public:
         builder.populate(dictionary_);
         return true; // Sync was successful
       } catch (std::exception &e) {
-        std::cerr << "Ignoring exception while tailing: " << e.what() << "\n";
+        std::cerr << "Ignoring exception while synchronizing start of tailing: "
+                  << e.what() << "\n";
         source_.seekTo(sor + 1);
       }
     };
@@ -235,9 +280,10 @@ int tail(int argc, const char *const *argv) {
                                                  true, "tail", "command", cmd);
     TCLAP::SwitchArg follow("f", "follow", "Output appended data as file grows",
                             cmd, false);
+    // Offset in bytes so we can fine-tune the starting point for test purposes.
     TCLAP::ValueArg<size_t> startOffset("b", "bytes",
                                         "output last b bytes (default 1024)",
-                                        false, 1024, "integer", cmd);
+                                        false, 5 * 1024, "integer", cmd);
     TCLAP::UnlabeledValueArg<std::string> fileName("fileNames", "Au files",
                                                    true, "", "FileName", cmd);
     cmd.parse(argc, argv);
