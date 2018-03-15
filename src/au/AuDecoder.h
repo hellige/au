@@ -1,11 +1,11 @@
 #pragma once
 
+#include "au/ParseError.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,29 +19,6 @@
 // TODO add small int and small dict-ref support
 // TODO add short string-length support (roll into 'S')
 // TODO add position tracking and length validation
-
-#define STR(EXPRS) (([&]() -> std::string { \
-    std::ostringstream oss_; \
-    oss_ << EXPRS; \
-    return oss_.str(); \
-    })())
-
-#define THROW(stuff) \
-  do { \
-    std::ostringstream _message; \
-    _message << stuff; \
-    throw parse_error(_message.str()); \
-  } while (0)
-
-#define THROW_RT(stuff) throw std::runtime_error(STR(stuff))
-
-namespace {
-
-struct parse_error : std::runtime_error {
-  explicit parse_error(const std::string &what)
-      : std::runtime_error(what) {}
-};
-
 
 class FileByteSource {
 protected:
@@ -218,6 +195,8 @@ protected:
   }
 };
 
+namespace {
+
 class BaseParser {
 protected:
   FileByteSource &source_;
@@ -258,9 +237,9 @@ protected:
   }
 
   template<typename Handler>
-  void parseString(Handler &handler) const {
+  void parseString(size_t pos, Handler &handler) const {
     auto len = readVarint();
-    handler.onStringStart(len);
+    handler.onStringStart(pos, len);
     source_.read(len, [&](std::string_view fragment) {
       handler.onStringFragment(fragment);
     });
@@ -277,37 +256,38 @@ public:
       : BaseParser(source), handler_(handler) {}
 
   void value() const {
+    size_t sov = source_.pos();
     auto c = source_.next();
     if (c.isEof())
       THROW("Unexpected EOF at start of value");
     switch (c.charValue()) {
       case 'T':
-        handler_.onBool(true);
+        handler_.onBool(sov, true);
         break;
       case 'F':
-        handler_.onBool(false);
+        handler_.onBool(sov, false);
         break;
       case 'N':
-        handler_.onNull();
+        handler_.onNull(sov);
         break;
       case 'I':
-        handler_.onUint(readVarint());
+        handler_.onUint(sov, readVarint());
         break;
       case 'J': {
         auto i = readVarint();
         if (i > std::numeric_limits<int64_t>::max() - 1)
           THROW("Signed int overflows int64_t: -" << i);
-        handler_.onInt(-static_cast<int64_t>(i));
+        handler_.onInt(sov, -static_cast<int64_t>(i));
       }
         break;
       case 'D':
-        handler_.onDouble(readDouble());
+        handler_.onDouble(sov, readDouble());
         break;
       case 'X':
-        handler_.onDictRef(readVarint());
+        handler_.onDictRef(sov, readVarint());
         break;
       case 'S':
-        parseString(handler_);
+        parseString(sov, handler_);
         break;
       case '[':
         parseArray();
@@ -379,6 +359,7 @@ private:
             THROW("Bad format version: expected " << AU_FORMAT_VERSION
                                                   << ", got " << version);
           }
+          handler_.onHeader(version);
         } else {
           THROW("Expected version number"); // TODO
         }
@@ -392,9 +373,10 @@ private:
         auto backref = readVarint();
         handler_.onDictAddStart(backref);
         while (source_.peek() != 'E') {
+          size_t sov = source_.pos();
           if (source_.next() != 'S')
             THROW("Expected a string"); // TODO
-          parseString(handler_);
+          parseString(sov, handler_);
         }
         term();
         break;
@@ -430,13 +412,15 @@ struct NoopValueHandler {
   virtual void onObjectEnd() {}
   virtual void onArrayStart() {}
   virtual void onArrayEnd() {}
-  virtual void onNull() {}
-  virtual void onBool(bool) {}
-  virtual void onInt(int64_t) {}
-  virtual void onUint(uint64_t) {}
-  virtual void onDouble(double) {}
-  virtual void onDictRef([[maybe_unused]] size_t dictIdx) {}
-  virtual void onStringStart([[maybe_unused]] size_t length) {}
+  virtual void onNull([[maybe_unused]] size_t pos) {}
+  virtual void onBool([[maybe_unused]] size_t pos, bool) {}
+  virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
+  virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
+  virtual void onDouble([[maybe_unused]] size_t pos, double) {}
+  virtual void onDictRef([[maybe_unused]] size_t pos,
+                         [[maybe_unused]] size_t dictIdx) {}
+  virtual void onStringStart([[maybe_unused]] size_t sov,
+                             [[maybe_unused]] size_t length) {}
   virtual void onStringEnd() {}
   virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
 };
@@ -449,6 +433,7 @@ struct NoopRecordHandler {
                        FileByteSource &source) {
     source.skip(len);
   }
+  virtual void onHeader([[maybe_unused]] uint64_t version) {}
   virtual void onDictClear() {}
   virtual void onDictAddStart([[maybe_unused]] size_t relDictPos) {}
   virtual void onStringStart([[maybe_unused]] size_t strLen) {}

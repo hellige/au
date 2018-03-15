@@ -1,5 +1,9 @@
 #pragma once
 
+#include "AuDecoder.h"
+#include "Dictionary.h"
+#include "RecordHandler.h"
+
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -9,99 +13,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include "AuDecoder.h"
 
 // TODO disable rapidjson debug? is it just NDEBUG?
 
 // TODO this whole file should be split up and rearranged.
-
-class Dictionary {
-  // TODO support arbitrary values in dictionary?
-  std::vector<std::string> dictionary_; // TODO maybe a vector of string_view into a big buffer would be better
-  size_t lastDictPos_{};
-
-public:
-  Dictionary() {
-    dictionary_.reserve(1u << 16u);
-  }
-
-  void add(size_t sor, std::string_view value) {
-    dictionary_.emplace_back(value);
-    lastDictPos_ = sor;
-  }
-//
-//  void add(size_t sor, std::string &&value) {
-//    dictionary_.emplace_back(value);
-//    lastDictPos_ = sor;
-//  }
-
-  void clear(size_t sor) {
-    dictionary_.clear();
-    lastDictPos_ = sor;
-  }
-
-  size_t lastDictPos() const { return lastDictPos_; }
-  const std::string &operator[](size_t idx) const {
-    return dictionary_.at(idx);
-  }
-  bool valid(size_t dictPos) const { return dictPos == lastDictPos_; }
-  size_t size() const {
-    return dictionary_.size();
-  }
-};
-
-template<typename ValueHandler>
-class RecordHandler {
-  Dictionary &dictionary_;
-  ValueHandler &valueHandler_;
-  std::vector<char> str_;
-  size_t sor_;
-
-public:
-  RecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
-      : dictionary_(dictionary), valueHandler_(valueHandler), sor_(0) {
-    str_.reserve(1 << 16);
-  }
-
-  void onRecordStart(size_t pos) {
-    sor_ = pos;
-  }
-
-  void onDictClear() {
-    dictionary_.clear(sor_);
-  }
-
-  void onDictAddStart(size_t relDictPos) {
-    if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onDictAddStart wrong backref: "
-                << sor_ << " " << relDictPos << " "
-                << dictionary_.lastDictPos()); // TODO improve
-  }
-
-  void onValue(size_t relDictPos, size_t, FileByteSource &source) {
-    if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onValue wrong backref: sor = " << sor_ << " relDictPos = "
-                                            << relDictPos
-                                            << " lastDictPos = "
-                                            << dictionary_.lastDictPos()); // TODO improve
-    valueHandler_.onValue(source);
-  }
-
-  void onStringStart(size_t len) {
-    str_.clear();
-    str_.reserve(len);
-  }
-
-  void onStringEnd() {
-    dictionary_.add(sor_, std::string_view(str_.data(), str_.size()));
-  }
-
-  void onStringFragment(std::string_view frag) {
-    str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
-  }
-
-  void onParseEnd() {}
-};
 
 class JsonHandler {
   rapidjson::StringBuffer buffer_;
@@ -161,11 +76,11 @@ public:
 
   // TODO must distinguish keys? doesn't look like it
 
-  void onNull() { writer_.Null(); }
-  void onBool(bool v) { writer_.Bool(v); }
-  void onInt(int64_t v) { writer_.Int64(v); }
-  void onUint(uint64_t v) { writer_.Uint64(v); }
-  void onDouble(double v) {
+  void onNull(size_t) { writer_.Null(); }
+  void onBool(size_t, bool v) { writer_.Bool(v); }
+  void onInt(size_t, int64_t v) { writer_.Int64(v); }
+  void onUint(size_t, uint64_t v) { writer_.Uint64(v); }
+  void onDouble(size_t, double v) {
     using namespace std::literals;
     if (std::isfinite(v)) writer_.Double(v);
     else if (std::isnan(v)) writer_.Raw("nan"sv);
@@ -173,13 +88,13 @@ public:
     else writer_.Raw("inf"sv);
   }
 
-  void onDictRef(size_t idx) {
+  void onDictRef(size_t, size_t idx) {
     // TODO error handling, arbitary types? need to distinguish keys?
     const auto &v = dictionary_[idx];
     writer_.String(v.c_str(), static_cast<rapidjson::SizeType>(v.size()));
   }
 
-  void onStringStart(size_t len) {
+  void onStringStart(size_t, size_t len) {
     str_.clear();
     str_.reserve(len);
   }

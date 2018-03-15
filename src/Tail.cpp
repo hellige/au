@@ -28,9 +28,9 @@ public:
         skip(buffAvail());
         if (!read(needle.length() - 1)) {
           return false;
-        }
       }
     }
+  }
   }
 
   void seekTo(size_t absPos) {
@@ -81,7 +81,7 @@ class DictionaryBuilder : public BaseParser {
     size_t maxLen_;
     StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
 
-    void onStringStart(size_t len) {
+    void onStringStart(size_t, size_t len) {
       if (len > maxLen_)
         throw std::length_error("String too long");
       str_.reserve(len);
@@ -94,7 +94,7 @@ class DictionaryBuilder : public BaseParser {
 
 public:
   DictionaryBuilder(TailByteSource &source, size_t endOfDictAbsPos)
-      : BaseParser(source), source_(source), dictAbsPos_(source.pos()),
+    : BaseParser(source), source_(source), dictAbsPos_(source.pos()),
         endOfDictAbsPos_(endOfDictAbsPos), lastDictPos_(source.pos())
   {}
 
@@ -117,9 +117,10 @@ public:
         case 'A': {
           auto prevDictRel = readVarint();
           while (source_.peek() == 'S') {
+            size_t sov= source_.pos();
             expect('S');
             StringBuilder sb(endOfDictAbsPos_ - source_.pos());
-            parseString(sb);
+            parseString(sov, sb);
             dictionary_.emplace(insertionPoint, sb.str_);
           };
           if (prevDictRel > dictAbsPos_)
@@ -161,20 +162,20 @@ public:
   void onObjectEnd() override { checkBounds(); }
   void onArrayStart() override { checkBounds(); }
   void onArrayEnd() override { checkBounds(); }
-  void onNull() override { checkBounds(); }
-  void onBool(bool) override { checkBounds(); }
-  void onInt(int64_t) override { checkBounds(); }
-  void onUint(uint64_t) override { checkBounds(); }
-  void onDouble(double) override { checkBounds(); }
+  void onNull(size_t) override { checkBounds(); }
+  void onBool(size_t, bool) override { checkBounds(); }
+  void onInt(size_t, int64_t) override { checkBounds(); }
+  void onUint(size_t, uint64_t) override { checkBounds(); }
+  void onDouble(size_t, double) override { checkBounds(); }
 
-  void onDictRef(size_t dictIdx) override {
+  void onDictRef(size_t, size_t dictIdx) override {
     if (dictIdx >= dictionary_.size()) {
       THROW_RT("Invalid dictionary index");
     }
     checkBounds();
   }
 
-  void onStringStart(size_t len) override {
+  void onStringStart(size_t, size_t len) override {
     if (source_.pos() + len > absEndOfValue_) {
       THROW_RT("String is too long.");
     }
@@ -293,7 +294,7 @@ int tail(int argc, const char *const *argv) {
                                         "output last b bytes (default 1024)",
                                         false, 5 * 1024, "integer", cmd);
     TCLAP::UnlabeledValueArg<std::string> fileName("fileNames", "Au files",
-                                                   true, "", "FileName", cmd);
+                                                    true, "", "FileName", cmd);
     cmd.parse(argc, argv);
 
     if (fileName.getValue().empty() || fileName.getValue() == "-") {

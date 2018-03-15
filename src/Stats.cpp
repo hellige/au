@@ -1,11 +1,60 @@
 #include "AuDecoder.h"
 
+#include "RecordHandler.h"
+
+#include <tclap/CmdLine.h>
+
+#include <cmath>
 #include <iostream>
-#include <string.h>
-#include "tclap/CmdLine.h"
+#include <string>
 #include <vector>
 
 namespace {
+
+std::string commafy(int64_t val) {
+  if (val > 0) return commafy(val);
+  auto result = commafy(-val);
+  result.insert(0, 1, '-');
+  return result;
+}
+
+std::string commafy(uint64_t val) {
+  if (!val) return "0";
+  char buf[32];
+  int i = 0, j = 0;
+  while (val) {
+    if (i++ % 3 == 0 && j) buf[j++] = ',';
+    buf[j++] = '0' + static_cast<char>(val % 10);
+    val /= 10;
+  }
+  buf[j] = 0;
+  std::string result(buf);
+  std::reverse(result.begin(), result.end());
+  return result;
+}
+
+std::string prettyBytes(size_t bytes) {
+  const char* suffixes[] = {" bytes", "K", "M", "G", "T", "P", "E"};
+  char buf[32];
+  int s = 0; // which suffix to use
+  double count = bytes;
+  while (count >= 1024 && s < 7) {
+    s++;
+    count /= 1024;
+  }
+  if (count - floor(count) == 0.0)
+    snprintf(buf, sizeof(buf), "%d%s", (int)count, suffixes[s]);
+  else
+    snprintf(buf, sizeof(buf), "%.1f%s", count, suffixes[s]);
+  buf[31] = 0;
+  return std::string(buf);
+}
+
+void dictStats(Dictionary &dictionary, const char *event) {
+  std::cout
+      << "Dictionary stats " << event << ":\n"
+      << "  Total entries: " << commafy(dictionary.size()) << '\n';
+}
 
 struct DictDumpHandler : public NoopRecordHandler {
   std::vector<char> str_;
@@ -37,36 +86,101 @@ struct DictDumpHandler : public NoopRecordHandler {
 };
 
 struct SmallIntValueHandler : public NoopValueHandler {
-  size_t count;
-  size_t countLt64;
-  size_t countLt128;
-  SmallIntValueHandler() : count(0), countLt64(0), countLt128(0) {}
-  void onInt(int64_t i) override {
-    count++;
-    if (i < 64 && i > -64) countLt64++;
-    if (i < 128 && i > -128) countLt128++;
+  std::array<size_t, 12> intSizes {};
+  size_t doubles = 0;
+  FileByteSource *source_;
+
+  void onValue(FileByteSource &source) {
+    source_ = &source;
+    ValueParser<SmallIntValueHandler> parser(source, *this);
+    parser.value();
+    source_ = nullptr;
   }
-  void onUint(uint64_t u) override {
-    count++;
-    if (u < 64) countLt64++;
-    if (u < 128) countLt128++;
+
+  void onInt(size_t pos, int64_t) override {
+    intSizes[source_->pos() - pos - 1]++; // TODO bounds check
   }
-  void report() {
-    std::cout << "Total ints : " << count << "\n";
-    std::cout << "Total < 128: " << countLt128 << "\n";
-    std::cout << "Total < 64 : " << countLt64 << "\n";
+
+  void onUint(size_t pos, uint64_t) override {
+    intSizes[source_->pos() - pos - 1]++; // TODO bounds check
+  }
+
+  void onDouble(size_t, double) override {
+    doubles++;
+  }
+
+  void dumpStats() {
+    size_t totalInts = 0;
+    for (auto i = 0u; i < intSizes.size(); i++)
+      totalInts += intSizes[i];
+
+    std::cout
+        << "  Values:\n"
+        << "     Doubles: " << commafy(doubles) << '\n'
+        << "     Integers: " << commafy(totalInts) << '\n';
+    std::cout << "       By length:\n";
+    for (auto i = 0u; i < intSizes.size(); i++) {
+      printf("        %3d: %s (%zu%%)\n", i+1, commafy(intSizes[i]).c_str(),
+             100*intSizes[i]/totalInts);
+    }
   }
 };
 
-struct SmallIntRecordHandler : public NoopRecordHandler {
+struct SmallIntRecordHandler {
+  Dictionary dictionary;
   SmallIntValueHandler vh;
+  RecordHandler<SmallIntValueHandler> next;
+  size_t numRecords = 0;
+  size_t numValues = 0;
+  size_t dictClears = 0;
+  size_t dictAdds = 0;
+  size_t headers = 0;
 
-  void onValue(size_t, size_t, FileByteSource &source) override {
-    ValueParser<SmallIntValueHandler> parser(source, vh);
-    parser.value();
+  SmallIntRecordHandler()
+  : next(dictionary, vh) {}
+
+  void onRecordStart(size_t pos) {
+    numRecords++;
+    next.onRecordStart(pos);
   }
 
-  void onParseEnd() override { vh.report(); }
+  void onHeader(uint64_t version) {
+    headers++;
+    next.onHeader(version);
+  }
+
+  void onDictClear() {
+    dictClears++;
+    if (dictionary.size()) dictStats(dictionary, "upon clear");
+    next.onDictClear();
+  }
+
+  void onDictAddStart(size_t relDictPos) {
+    dictAdds++;
+    next.onDictAddStart(relDictPos);
+  }
+
+  void onValue(size_t relDictPos, size_t len, FileByteSource &source) {
+    numValues++;
+    next.onValue(relDictPos, len, source);
+  }
+
+  void onStringStart(size_t pos, size_t len) {
+    next.onStringStart(pos, len);
+  }
+
+  void onStringEnd() {
+    next.onStringEnd();
+  }
+
+  void onStringFragment(std::string_view fragment) {
+    next.onStringFragment(fragment);
+  }
+
+  void onParseEnd() {
+    dictStats(dictionary, "at end of file");
+    next.onParseEnd();
+  }
 };
 
 void usage() {
@@ -98,19 +212,49 @@ public:
   }
 };
 
+class StatsDecoder {
+  std::string filename_;
+
+public:
+  StatsDecoder(const std::string &filename)
+      : filename_(filename) {}
+
+  void decode(SmallIntRecordHandler &handler) const {
+    FileByteSource source(filename_, false);
+    try {
+      RecordParser(source, handler).parseStream();
+      handler.onParseEnd();
+    } catch (parse_error &e) {
+      std::cout << e.what() << std::endl;
+    }
+
+    std::cout
+        << "Stats for " << filename_ << ":\n"
+        << "  Total read: " << prettyBytes(source.pos()) << '\n'
+        << "  Records: " << commafy(handler.numRecords) << '\n'
+        << "     Version headers: " << commafy(handler.headers) << '\n'
+        << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
+        << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n'
+        << "     Values: " << commafy(handler.numValues) << '\n';
+    handler.vh.dumpStats();
+  }
+};
+
 }
 
 // TODO here are some stats i'd like:
-//   - total bytes
-//   - total records (by type)
+//   - version(s)
+// X - total bytes
+// X - total records (by type)
 //   - absolute count and count-in-bytes by type
 //   - histogram of varint size for:
-//     - values
+// X   - values
 //     - backrefs
 //     - record length
 //     - string length
 //     - dict refs
 //   - histogram of string lengths (by power of two?)
+//   - histogram of record lengths?
 //   - count-in-bytes of dictionary refs
 //   - dictionary stats:
 //     - size of dict
@@ -118,8 +262,8 @@ public:
 
 int stats(int argc, const char * const *argv) {
   SmallIntRecordHandler smallIntRecordHandler;
-  DictDumpHandler dictDumpHandler;
-  NoopRecordHandler *handler = &dictDumpHandler;
+//  DictDumpHandler dictDumpHandler;
+//  NoopRecordHandler *handler = &dictDumpHandler;
   std::vector<std::string> auFiles;
 
   try {
@@ -138,17 +282,17 @@ int stats(int argc, const char * const *argv) {
     cmd.setOutput(&output);
     cmd.parse(argc, argv);
 
-    if (intCnt) {
-      handler = &smallIntRecordHandler;
-    } else if (dictDump) {
-      handler = &dictDumpHandler;
-    }
+//    if (intCnt) {
+//      handler = &smallIntRecordHandler;
+//    } else if (dictDump) {
+//      handler = &dictDumpHandler;
+//    }
 
     if (fileNames.getValue().empty()) {
-      AuDecoder("-").decode(*handler, false);
+      StatsDecoder("-").decode(smallIntRecordHandler);
     } else {
       for (auto &f : fileNames.getValue()) {
-        AuDecoder(f).decode(*handler, false);
+        StatsDecoder(f).decode(smallIntRecordHandler);
       }
     }
   } catch (TCLAP::ArgException &e) {
