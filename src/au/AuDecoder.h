@@ -71,7 +71,6 @@ public:
 #ifndef __APPLE__
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
 #endif
-    read();
   }
 
   FileByteSource(const FileByteSource &) = delete;
@@ -472,7 +471,7 @@ public:
       RecordParser<H>(source, handler).parseStream();
       handler.onParseEnd();
     } catch (parse_error &e) {
-      std::cout << e.what() << std::endl;
+      std::cerr << e.what() << std::endl;
     }
   }
 };

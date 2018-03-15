@@ -9,13 +9,11 @@
 
 class TailByteSource : public FileByteSource {
 public:
-  explicit TailByteSource(const std::string &fname, bool follow, size_t bufferSizeInK = 16)
+  explicit TailByteSource(const std::string &fname, bool follow,
+                          size_t startOffset, size_t bufferSizeInK = 16)
       : FileByteSource(fname, follow, bufferSizeInK)
   {
-    if (fname == "-") {
-      throw std::runtime_error("Tail on STDIN not supported");
-    }
-    tail(1 * 1024);
+    tail(startOffset);
   }
 
   void seekTo(std::string_view needle) {
@@ -27,11 +25,17 @@ public:
         cur_ += offset;
         return;
       } else {
-        size_t offset = buffAvail();
-        pos_ += offset;
-        cur_ += offset;
-        read(needle.length());
+        skip(buffAvail());
+        read(needle.length() - 1);
       }
+    }
+  }
+
+  void seekTo(size_t absPos) {
+    if (absPos < pos()) {
+      seek(absPos);
+    } else if (absPos > pos()) {
+      skip(absPos - pos());
     }
   }
 
@@ -39,7 +43,7 @@ public:
   void tail(size_t length) {
     struct stat stat;
     if (auto res = fstat(fd_, &stat); res < 0) {
-      THROW_RT("failed to stat file");
+      THROW_RT("failed to stat file: " << strerror(errno));
     }
 
     length = std::min<size_t>(length, stat.st_size);
@@ -47,12 +51,12 @@ public:
 
     auto pos = lseek(fd_, static_cast<off_t>(startPos), SEEK_SET);
     if (pos < 0) {
-      THROW_RT("failed to see to tail: " << strerror(errno));
+      THROW_RT("failed to seek to tail: " << strerror(errno));
     }
     cur_ = limit_ = buf_;
     pos_ = static_cast<size_t>(pos);
     if (!read(0))
-      THROW_RT("failed to read from new location");
+      THROW_RT("failed to read from start of tail location");
   }
 
 protected:
@@ -66,7 +70,8 @@ class DictionaryBuilder : public BaseParser {
   std::list<std::string> dictionary_;
   TailByteSource &source_;
   size_t dictAbsPos_;
-  size_t endOfDictionary_;
+  /// A valid dictionary must end before this point
+  size_t endOfDictAbsPos_;
   size_t lastDictPos_;
 
   struct StringBuilder {
@@ -86,14 +91,10 @@ class DictionaryBuilder : public BaseParser {
   };
 
 public:
-  DictionaryBuilder(TailByteSource &source, size_t endOfDictionary)
-    : BaseParser(source), source_(source), dictAbsPos_(source.pos()),
-      endOfDictionary_(endOfDictionary), lastDictPos_(source.pos())
+  DictionaryBuilder(TailByteSource &source, size_t endOfDictAbsPos)
+      : BaseParser(source), source_(source), dictAbsPos_(source.pos()),
+        endOfDictAbsPos_(endOfDictAbsPos), lastDictPos_(source.pos())
   {}
-
-  const std::list<std::string> &dictionary() const {
-    return dictionary_;
-  }
 
   void populate(Dictionary &dict) {
     dict.clear(lastDictPos_);
@@ -102,7 +103,7 @@ public:
     }
   }
 
-  /// Returns true while dictionary is not complete (if we should continue building)
+  /// Builds a complete dictionary or throws if it can't
   void build() {
     bool complete = false;
     while (!complete) {
@@ -113,11 +114,9 @@ public:
       switch (marker.charValue()) {
         case 'A': {
           auto prevDictRel = readVarint();
-          // TODO: Would help to know full dict size as of this point so we know
-          // when we get to 'C' if we found all the entries.
           while (source_.peek() == 'S') {
             expect('S');
-            StringBuilder sb(endOfDictionary_ - source_.pos());
+            StringBuilder sb(endOfDictAbsPos_ - source_.pos());
             parseString(sb);
             dictionary_.emplace(insertionPoint, sb.str_);
           };
@@ -130,14 +129,12 @@ public:
         case 'C':
           expect('E');
           expect('\n');
-          // We have no way of knowing at this point if we found all entries. We
-          // can just try parsing and if we don't find an intern string ref we'll
-          // know only then that we've been printing garbage.
           complete = true;
           break;
         default:
-          THROW_RT("Failed to build full dictionary. Found " << marker.charValue()
-              << " at " << dictAbsPos_);
+          THROW_RT("Failed to build full dictionary. Found 0x" << std::hex
+                   << (int)marker.charValue() << " at 0x" << dictAbsPos_
+                   << std::dec << ". Expected 'A' (0x41) or 'C' (0x43).");
       }
     }
   }
@@ -162,28 +159,32 @@ class TailHandler : public BaseParser {
 
 public:
   TailHandler(Dictionary &dictionary, OutputHandler &handler,
-              std::string fileName, bool follow)
+              std::string fileName, bool follow, size_t startOffset)
       : BaseParser(source_), outputHandler_(handler), dictionary_(dictionary),
-        source_(fileName, follow)
-  {
+        source_(fileName, follow, startOffset) {
     // TODO: What assumptions do we make about AU_FORMAT_VERSION we're tailing?
+
     sync();
     // At this point we should have a full/valid dictionary and be positioned
     // at the start of a value record.
     RecordHandler<OutputHandler> recordHandler(dictionary_, outputHandler_);
     RecordParser<decltype(recordHandler)>(source_, recordHandler).parseStream();
-    // TODO: Make EoF not be an exceptional condition when parsing stream
-    //
   }
 
   bool sync() {
     while (true) {
+      size_t sor = source_.pos();
       try {
         source_.seekTo("E\nV");
+        sor = source_.pos() + 2;
         term();
-        auto sor = source_.pos();
         expect('V');
         auto backDictRef = readVarint();
+        if (backDictRef > sor) {
+          THROW_RT("Back dictionary reference is before the start of the file. "
+                   "Current absolute position: " << sor << " backDictRef: "
+                   << backDictRef);
+        }
         source_.seek(sor - backDictRef);
         DictionaryBuilder builder(source_, sor);
         builder.build();
@@ -197,11 +198,13 @@ public:
         Dictionary validatingDict;
         builder.populate(validatingDict);
         ValidatingHandler validatingHandler(validatingDict);
-        ValueParser<ValidatingHandler> valueValidator(source_, validatingHandler);
+        ValueParser<ValidatingHandler> valueValidator(source_,
+                                                      validatingHandler);
         valueValidator.value();
         term();
         if (valueLen != source_.pos() - startOfValue) {
-          continue; // Find another start of value candidate marker
+          THROW_RT("Length doesn't match. Expected: " << valueLen << " actual "
+                   << source_.pos() - startOfValue);
         }
 
         // We seem to have a good value record. Reset stream to start of record.
@@ -209,8 +212,8 @@ public:
         builder.populate(dictionary_);
         return true; // Sync was successful
       } catch (std::exception &e) {
-        // TODO: Some errors (EoF on building dictionary) should be terminal...
-        (void)e;
+        std::cerr << "Ignoring exception while tailing: " << e.what() << "\n";
+        source_.seekTo(sor + 1);
       }
     };
   }
@@ -222,7 +225,7 @@ protected:
   }
 };
 
-int tail(int argc, const char * const *argv) {
+int tail(int argc, const char *const *argv) {
   Dictionary dictionary;
   JsonHandler jsonHandler(dictionary);
 
@@ -232,24 +235,23 @@ int tail(int argc, const char * const *argv) {
                                                  true, "tail", "command", cmd);
     TCLAP::SwitchArg follow("f", "follow", "Output appended data as file grows",
                             cmd, false);
-    TCLAP::ValueArg lines("n", "lines", "output last n lines (default 10)",
-                          false, 10, "integer", cmd);
+    TCLAP::ValueArg<size_t> startOffset("b", "bytes",
+                                        "output last b bytes (default 1024)",
+                                        false, 1024, "integer", cmd);
     TCLAP::UnlabeledValueArg<std::string> fileName("fileNames", "Au files",
-                                                    true, "", "FileName", cmd);
+                                                   true, "", "FileName", cmd);
     cmd.parse(argc, argv);
 
-    //TailHandler<JsonHandler> tailHandler(dictionary, jsonHandler);
-    //RecordHandler<decltype(tailHandler)> recordHandler(dictionary, tailHandler);
-
-    if (fileName.getValue().empty()) {
-      std::cerr << "File name missing. Tailing stdin not supported\n";
+    if (fileName.getValue().empty() || fileName.getValue() == "-") {
+      std::cerr << "Tailing stdin not supported\n";
     } else {
       TailHandler<JsonHandler> tailHandler(dictionary, jsonHandler,
-                                           fileName, follow);
+                                           fileName, follow, startOffset);
     }
 
   } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    std::cerr << "error: " << e.error() << " for arg " << e.argId()
+              << std::endl;
     return 1;
   }
 
