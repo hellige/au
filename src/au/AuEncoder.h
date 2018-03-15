@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <list>
 #include <map>
@@ -277,6 +279,18 @@ public:
     msgBuf_.put('D');
     auto *dPtr = reinterpret_cast<char *>(&d);
     msgBuf_.write(dPtr, sizeof(d));
+    return *this;
+  }
+
+  template <class Rep, class Period>
+  AuFormatter &value(const std::chrono::duration<Rep, Period> &time) {
+    using namespace std::chrono;
+    auto nanoDuration = duration_cast<nanoseconds>(time);
+    uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
+
+    msgBuf_.put('t');
+    auto *dPtr = reinterpret_cast<char *>(&nanos);
+    msgBuf_.write(dPtr, sizeof(nanos));
     return *this;
   }
 

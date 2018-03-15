@@ -9,6 +9,7 @@
 #include <rapidjson/writer.h>
 
 #include <cmath>
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -86,6 +87,27 @@ public:
     else if (std::isnan(v)) writer_.Raw("nan"sv);
     else if (v < 0) writer_.Raw("-inf"sv);
     else writer_.Raw("inf"sv);
+  }
+
+  void onTime(size_t, std::chrono::nanoseconds nanos) {
+    using namespace std::chrono;
+    using Clock = std::chrono::high_resolution_clock;
+
+    auto s = duration_cast<seconds>(nanos); // Because to_time_t might round
+    auto tp = time_point<Clock, seconds>(s);
+    std::time_t tt = system_clock::to_time_t(tp);
+    std::tm *tm = gmtime(&tt);
+
+    //                   12345678901234567890123456
+    char strTime[sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu")];
+    strftime(strTime, 21, "%FT%T.", tm);
+
+    // Isolate the sub-second (fractional portion)
+    auto micros = duration_cast<microseconds>(nanos - s);
+    snprintf(strTime + 20, 7, "%06" PRIu64, micros.count());
+
+    writer_.String(strTime,
+                   static_cast<rapidjson::SizeType>(sizeof(strTime) - 1));
   }
 
   void onDictRef(size_t, size_t idx) {

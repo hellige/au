@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstddef>
+#include <chrono>
 
 // TODO add explicit 4-byte float support
 // TODO add small int and small dict-ref support
@@ -217,6 +218,13 @@ protected:
     return val;
   }
 
+  std::chrono::nanoseconds readTime() const {
+    uint64_t nanos;
+    source_.read(&nanos, sizeof(nanos));
+    std::chrono::nanoseconds n(nanos);
+    return n;
+  }
+
   uint64_t readVarint() const {
     auto shift = 0u;
     uint64_t result = 0;
@@ -282,6 +290,9 @@ public:
         break;
       case 'D':
         handler_.onDouble(sov, readDouble());
+        break;
+      case 't':
+        handler_.onTime(sov, readTime());
         break;
       case 'X':
         handler_.onDictRef(sov, readVarint());
@@ -417,6 +428,8 @@ struct NoopValueHandler {
   virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
   virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
   virtual void onDouble([[maybe_unused]] size_t pos, double) {}
+  virtual void onTime([[maybe_unused]] size_t pos,
+                      [[maybe_unused]] std::chrono::nanoseconds nanos) {}
   virtual void onDictRef([[maybe_unused]] size_t pos,
                          [[maybe_unused]] size_t dictIdx) {}
   virtual void onStringStart([[maybe_unused]] size_t sov,

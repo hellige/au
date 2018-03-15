@@ -7,6 +7,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <regex>
 #include <stdio.h>
 #include <string>
 #include <string.h>
@@ -21,6 +22,7 @@ class JsonSaxHandler
   AuFormatter<Buffer> &formatter;
   std::optional<bool> intern;
   bool toInt;
+  std::regex timeRe;
 
   bool tryInt(const char *str, SizeType length) {
     // 3 extra bytes for: '-', \0 and 1 extra digit (we have no max_digits10)
@@ -47,9 +49,39 @@ class JsonSaxHandler
     return true;
   }
 
+  bool tryTime(const char *str, SizeType length) {
+    using namespace std::chrono;
+
+    std::cmatch m;
+    if (std::regex_match(str, str + length, m, timeRe)) {
+      std::tm tm;
+      memset(&tm, 0, sizeof(tm));
+
+      // Note: tm_year is relative to 1900!
+      tm.tm_year  = static_cast<int>(strtol(m.str(1).c_str(), nullptr, 10)) - 1900;
+      tm.tm_mon   = static_cast<int>(strtol(m.str(2).c_str(), nullptr, 10)) - 1;
+      tm.tm_mday  = static_cast<int>(strtol(m.str(3).c_str(), nullptr, 10));
+      tm.tm_hour  = static_cast<int>(strtol(m.str(4).c_str(), nullptr, 10));
+      tm.tm_min   = static_cast<int>(strtol(m.str(5).c_str(), nullptr, 10));
+      tm.tm_sec   = static_cast<int>(strtol(m.str(6).c_str(), nullptr, 10));
+      auto mics = strtol(m.str(7).c_str(), nullptr, 10);
+
+      std::time_t tt = timegm(&tm);
+      if (tt == -1) return false;
+
+      formatter.value(seconds(tt) + microseconds(mics));
+
+      return true;
+    } else {
+      return false;
+    }
+  }
+
 public:
   explicit JsonSaxHandler(AuFormatter<Buffer> &formatter)
-      : formatter(formatter), toInt(false) {}
+      : formatter(formatter), toInt(false),
+        timeRe(R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re")
+  {}
 
   bool Null() { formatter.null(); return true; }
   bool Bool(bool b) { formatter.value(b); return true; }
@@ -63,6 +95,8 @@ public:
     if (toInt) {
       toInt = false;
       if (tryInt(str, length)) return true;
+    } else if (length == sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu") - 1) {
+      if (tryTime(str, length)) return true;
     }
     formatter.value(std::string_view(str, length), intern);
     intern.reset();

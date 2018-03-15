@@ -109,6 +109,19 @@ TEST_F(AuFormatterTest, Int64) {
   EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
 }
 
+TEST_F(AuFormatterTest, Time) {
+  using namespace std::chrono;
+  std::string expected;
+
+  formatter.value(nanoseconds(1));
+  expected += std::string("t\x01\x00\x00\x00\x00\x00\x00\x00", 9);
+
+  formatter.value(seconds(35));
+  expected += std::string("t\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
+
+  EXPECT_EQ(expected, buf.str());
+}
+
 TEST_F(AuFormatterTest, Double) {
   double d = 5.9;
   formatter.value(d);
