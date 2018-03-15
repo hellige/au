@@ -30,7 +30,6 @@ int usage(std::ostream &os) {
 int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
-    << "   canned   Dump a canned snippet\n"
     << "   cat      Decode listed files to stdout (au2json)\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
@@ -70,7 +69,6 @@ int main(int argc, char **argv) {
   std::unordered_map<std::string, std::function<int(int, char **)>> commands;
   commands["--version"] = version;
   commands["--help"] = help;
-  commands["canned"] = canned;
   commands["cat"] = cat;
   commands["au2json"] = cat;
   commands["tail"] = tail;
@@ -86,6 +84,10 @@ int main(int argc, char **argv) {
     return usage(std::cerr);
   }
 
-  return it->second(argc, argv);
+  try {
+    return it->second(argc, argv);
+  } catch (const std::runtime_error &e) {
+    std::cerr << "Runtime error: " << e.what() << std::endl;
+  }
 }
 
