@@ -16,17 +16,19 @@ public:
     tail(startOffset);
   }
 
-  void seekTo(std::string_view needle) {
+  bool seekTo(std::string_view needle) {
     while (true) {
       auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
       if (found) {
         size_t offset = static_cast<char *>(found) - cur_;
         pos_ += offset;
         cur_ += offset;
-        return;
+        return true;
       } else {
         skip(buffAvail());
-        read(needle.length() - 1);
+        if (!read(needle.length() - 1)) {
+          return false;
+        }
       }
     }
   }
@@ -202,7 +204,11 @@ public:
         source_(fileName, follow, startOffset)
   {
     // TODO: What assumptions do we make about AU_FORMAT_VERSION we're tailing?
-    sync();
+    if (!sync()) {
+      std::cerr << "Unable to find the start of a valid value record. "
+                "Consider starting earlier in the file. See the -b option.\n";
+      return;
+    }
 
     // At this point we should have a full/valid dictionary and be positioned
     // at the start of a value record.
@@ -214,7 +220,9 @@ public:
     while (true) {
       size_t sor = source_.pos();
       try {
-        source_.seekTo("E\nV");
+        if (!source_.seekTo("E\nV")) {
+          return false;
+        }
         sor = source_.pos() + 2;
         term();
         expect('V');
