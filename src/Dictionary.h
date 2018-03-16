@@ -22,6 +22,8 @@ public:
     lastDictPos_ = sor;
   }
 
+  const std::vector<std::string> &entries() const { return dictionary_; }
+
   size_t lastDictPos() const { return lastDictPos_; }
   const std::string &operator[](size_t idx) const {
     return dictionary_.at(idx);
