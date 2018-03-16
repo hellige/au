@@ -232,10 +232,6 @@ struct SmallIntValueHandler : public NoopValueHandler {
         << "       Total bytes: " << prettyBytes(nullBytes)
         << " (" << (100 * nullBytes / totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
-    std::cout << "     TimeStamps: " << commafy((uint64_t)timeStamps) << '\n';
-    std::cout << "       Total bytes: " << prettyBytes(timeStamps * 9)
-              << " (" << (100 * timeStamps * 9 / totalBytes)
-              << "% of stream)\n";
     dictRefs.dumpStats(totalBytes);
     dictStringHist.dumpStats({});
     stringHist.dumpStats(totalBytes);
