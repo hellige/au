@@ -79,9 +79,9 @@ TEST(AuStringIntern, ReIndex) {
 }
 
 struct AuFormatterTest : public ::testing::Test {
-  Au::VectorBuffer buf;
+  AuEncoder::VectorBuffer buf;
   AuStringIntern stringIntern;
-  AuFormatter<Au::VectorBuffer> formatter;
+  AuFormatter<AuEncoder::VectorBuffer> formatter;
 
   AuFormatterTest() : formatter(buf, stringIntern) {}
 };
@@ -265,6 +265,6 @@ TEST(FileByteSource, SeekStdio) {
 
 TEST(Au, creation) {
   std::ostringstream os;
-  Au au(os);
+  AuEncoder au(os);
 }
 

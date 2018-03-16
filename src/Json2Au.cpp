@@ -200,7 +200,7 @@ int json2au(int argc, const char * const *argv) {
     outBuf = outFileStream.rdbuf();
   }
   std::ostream out(outBuf);
-  Au au(out, 250'000, 100);
+  AuEncoder au(out, 250'000, 100);
 
   char readBuffer[65536];
   FileReadStream in(inF, readBuffer, sizeof(readBuffer));

@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-class Au;
+class AuEncoder;
 
 class AuStringIntern {
 
@@ -377,7 +377,7 @@ public:
   value(F &&func) { func(); }
 
 protected:
-  friend Au;
+  friend AuEncoder;
   void raw(char c) {
     msgBuf_.put(c);
   }
@@ -460,7 +460,7 @@ protected:
 };
 
 
-class Au {
+class AuEncoder {
   static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
   OutputTracker outputTracker_;
@@ -564,7 +564,7 @@ public:
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  Au(std::ostream &output, size_t purgeInterval = 250'000,
+  AuEncoder(std::ostream &output, size_t purgeInterval = 250'000,
      size_t purgeThreshold = 50, size_t reindexInterval = 500'000,
      size_t clearThreshold = 1400)
       : output_(output), outputTracker_(output),
