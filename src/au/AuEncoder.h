@@ -196,6 +196,8 @@ class AuFormatter {
     auto idx = stringIntern.idx(sv, intern);
     if (!idx) {
       encodeString(sv);
+    } else if (*idx < 0x80) {
+      msgBuf_.put(0x80 | *idx);
     } else {
       msgBuf_.put('X');
       valueInt(*idx);

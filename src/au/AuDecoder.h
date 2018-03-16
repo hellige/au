@@ -268,6 +268,10 @@ public:
     auto c = source_.next();
     if (c.isEof())
       THROW("Unexpected EOF at start of value");
+    if (c.charValue() & 0x80) {
+      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      return;
+    }
     switch (c.charValue()) {
       case 'T':
         handler_.onBool(sov, true);
@@ -316,6 +320,10 @@ private:
     auto c = source_.peek();
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
+    if (c.charValue() & 0x80) {
+      value();
+      return;
+    }
     switch (c.charValue()) {
       case 'S':
       case 'X':
