@@ -12,6 +12,8 @@
 
 namespace {
 
+constexpr size_t DEFAULT_DICT_ENTRIES = 25;
+
 std::string commafy(int64_t val) {
   if (val > 0) return commafy(val);
   auto result = commafy(-val);
@@ -35,11 +37,11 @@ std::string commafy(uint64_t val) {
 }
 
 std::string prettyBytes(size_t bytes) {
-  const char* suffixes[] = {" bytes", "K", "M", "G", "T", "P", "E"};
+  std::array<const char *, 5> suffixes {"B", "K", "M", "G", "T"};
   char buf[32];
-  int s = 0; // which suffix to use
+  auto s = 0u; // which suffix to use
   double count = bytes;
-  while (count >= 1024 && s < 7) {
+  while (count >= 1024 && s < suffixes.size()) {
     s++;
     count /= 1024;
   }
@@ -129,13 +131,21 @@ void dictStats(Dictionary &dictionary,
   for (auto &&entry : dictionary.entries()) hist.add(entry.size());
   hist.dumpStats({});
 
-  if (!fullDump) return;
-  
-  std::cout << "     Reference count:\n";
-  for (auto i = 0u; i < dictionary.size(); i++) {
-    std::cout << "       " << dictionary[i] << ": " << commafy(dictFrequency[i])
-              << '\n';
-  }
+  auto numEntries = dictionary.size();
+  if (!fullDump) numEntries = std::min(numEntries, DEFAULT_DICT_ENTRIES);
+
+  std::vector<std::pair<size_t, std::string>> byFreq;
+  for (auto i = 0u; i < dictionary.size(); i++)
+    byFreq.emplace_back(dictFrequency[i], dictionary[i]);
+  std::sort(byFreq.begin(), byFreq.end(),
+            std::greater<std::pair<size_t, std::string>>());
+  std::cout << "     Referral count";
+  if (numEntries != dictionary.size())
+    std::cout << " (top " << numEntries << " entries)";
+  std::cout << ":\n";
+  for (auto i = 0u; i < numEntries; i++)
+    std::cout << "       " << commafy(byFreq[i].first) << ": "
+              << byFreq[i].second << '\n';
 }
 
 struct SmallIntValueHandler : public NoopValueHandler {
@@ -236,6 +246,7 @@ struct StatsRecordHandler {
   RecordHandler<SmallIntValueHandler> next;
   bool fullDictDump;
   SizeHistogram valueHist {"Value records"};
+  uint64_t formatVersion = 0;
   size_t numRecords = 0;
   size_t dictClears = 0;
   size_t dictAdds = 0;
@@ -253,6 +264,7 @@ struct StatsRecordHandler {
 
   void onHeader(uint64_t version) {
     headers++;
+    formatVersion = version;
     next.onHeader(version);
   }
 
@@ -338,7 +350,8 @@ public:
     }
 
     std::cout
-        << "Stats for " << filename_ << ":\n"
+        << "Stats for " << filename_ << " (format version "
+        << handler.formatVersion << "):\n"
         << "  Total read: " << prettyBytes(source.pos()) << '\n'
         << "  Records: " << commafy(handler.numRecords) << '\n'
         << "     Version headers: " << commafy(handler.headers) << '\n'
@@ -350,24 +363,6 @@ public:
 };
 
 }
-
-// TODO here are some stats i'd like:
-//   - version(s)
-// X - total bytes
-// X - total records (by type)
-// X - absolute count and count-in-bytes by type
-//   - histogram of varint size for:
-// X   - values
-//     - backrefs
-//     - record length
-// X   - string length
-// X   - dict refs
-// X - histogram of string lengths (by power of two?)
-// X - histogram of record lengths?
-// X - count-in-bytes of dictionary ref expansions (and histogram?)
-//   - dictionary stats:
-//     - size of dict
-//     - frequency of reference
 
 int stats(int argc, const char * const *argv) {
   std::vector<std::string> auFiles;
