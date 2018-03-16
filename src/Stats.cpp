@@ -154,6 +154,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
   const Dictionary &dictionary;
   size_t doubles = 0;
   size_t doubleBytes = 0;
+  size_t timeStamps = 0;
   SizeHistogram stringHist {"String values"};
   size_t strings = 0;
   size_t stringBytes = 0;
@@ -185,6 +186,11 @@ struct SmallIntValueHandler : public NoopValueHandler {
     doubleBytes += source_->pos() - pos;
   }
 
+  void onTime([[maybe_unused]] size_t pos,
+              [[maybe_unused]] std::chrono::nanoseconds nanos) {
+    timeStamps++;
+  }
+
   void onDictRef(size_t pos, size_t idx) override {
     dictRefs.add(source_->pos() - pos);
     dictExpansionBytes += dictionary[idx].size();
@@ -204,6 +210,10 @@ struct SmallIntValueHandler : public NoopValueHandler {
     std::cout << "       Total bytes: " << prettyBytes(doubleBytes)
               << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
+    std::cout << "     TimeStamps: " << commafy((uint64_t)timeStamps) << '\n';
+    std::cout << "       Total bytes: " << prettyBytes(timeStamps * 9)
+              << " (" << (100 * timeStamps * 9 / totalBytes)
+              << "% of stream)\n";
     dictRefs.dumpStats(totalBytes);
     std::cout << "       Total bytes to be expanded from dictionary: "
               << prettyBytes(dictExpansionBytes) << '\n';
