@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -50,42 +51,6 @@ std::string prettyBytes(size_t bytes) {
   return std::string(buf);
 }
 
-void dictStats(Dictionary &dictionary, const char *event) {
-  std::cout
-      << "Dictionary stats " << event << ":\n"
-      << "  Total entries: " << commafy((uint64_t)dictionary.size()) << '\n';
-}
-
-struct DictDumpHandler : public NoopRecordHandler {
-  std::vector<char> str_;
-
-  DictDumpHandler() {
-    str_.reserve(1 << 16);
-  }
-
-  void onDictClear() override {
-    std::cout << "Dictionary cleared:\n";
-  }
-
-  void onDictAddStart(size_t) override {
-    std::cout << "\tDictionary appended:\n";
-  }
-
-  void onStringStart(size_t len) override {
-    str_.clear();
-    str_.reserve(len);
-  }
-
-  void onStringEnd() override {
-    std::cout << "\t\t" << std::string_view(str_.data(), str_.size()) << "\n";
-  }
-
-  void onStringFragment(std::string_view frag) override {
-    str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
-  }
-};
-
-#include <cmath>
 struct SizeHistogram {
   std::string name;
   size_t totalValBytes = 0;
@@ -100,7 +65,7 @@ struct SizeHistogram {
     buckets[bucket]++;
   }
 
-  void dumpStats(size_t totalBytes) {
+  void dumpStats(std::optional<size_t> totalBytes) {
     size_t totalStrings = 0;
     for (auto count : buckets) totalStrings += count;
     std::cout << "     " << name << ": " << commafy(totalStrings) << '\n'
@@ -112,11 +77,13 @@ struct SizeHistogram {
              100*buckets[i]/totalStrings,
              prettyBytes(bytes).c_str());
     }
+    if (totalBytes) {
     std::cout << "       Total bytes: " << prettyBytes(totalValBytes)
-              << " (" << (100 * totalValBytes / totalBytes) << "% of stream)\n";
+                << " (" << (100 * totalValBytes / *totalBytes)
+                << "% of stream)\n";
+    }
   }
 };
-
 
 struct VarintHistogram {
   std::string name;
@@ -140,36 +107,72 @@ struct VarintHistogram {
               << "       By length:\n";
     size_t totalIntBytes = 0;
     for (auto i = 0u; i <= lastPopulated; i++) {
-      auto bytes = buckets[i] * (i+1);
+      auto bytes = buckets[i] * (i + 1);
       totalIntBytes += bytes;
-      printf("        %3d: %s (%zu%%) %s\n", i+1, commafy(buckets[i]).c_str(),
-             100*buckets[i]/totalInts, prettyBytes(bytes).c_str());
+      printf("        %3d: %s (%zu%%) %s\n", i + 1, commafy(buckets[i]).c_str(),
+             100 * buckets[i] / totalInts, prettyBytes(bytes).c_str());
     }
     std::cout << "       Total bytes: " << prettyBytes(totalIntBytes)
-              << " (" << (100 * totalIntBytes / totalBytes) << "% of stream)\n";
+              << " (" << (100 * totalIntBytes / totalBytes)
+              << "% of stream)\n";
   }
 };
 
+void dictStats(Dictionary &dictionary,
+               const std::vector<size_t> &dictFrequency,
+               const char *event,
+               bool fullDump) {
+  std::cout
+      << "Dictionary stats " << event << ":\n"
+      << "  Total entries: " << commafy(dictionary.size()) << '\n';
+  SizeHistogram hist {"Dictionary entries"};
+  for (auto &&entry : dictionary.entries()) hist.add(entry.size());
+  hist.dumpStats({});
+
+  if (!fullDump) return;
+  
+  std::cout << "     Reference count:\n";
+  for (auto i = 0u; i < dictionary.size(); i++) {
+    std::cout << "       " << dictionary[i] << ": " << commafy(dictFrequency[i])
+              << '\n';
+  }
+}
+
 struct SmallIntValueHandler : public NoopValueHandler {
   const Dictionary &dictionary;
+  std::vector<size_t> &dictFrequency;
   size_t doubles = 0;
   size_t doubleBytes = 0;
+  size_t bools = 0;
+  size_t boolBytes = 0;
+  size_t nulls = 0;
+  size_t nullBytes = 0;
   SizeHistogram stringHist {"String values"};
-  size_t strings = 0;
-  size_t stringBytes = 0;
-  size_t dictExpansionBytes = 0;
+  SizeHistogram dictStringHist {"Strings from dictionary"};
   VarintHistogram intValues {"Integer values"};
   VarintHistogram dictRefs {"Dictionary references"};
   VarintHistogram stringLengths {"String length encodings"};
   FileByteSource *source_;
 
-  SmallIntValueHandler(const Dictionary &dictionary) : dictionary(dictionary) {}
+  SmallIntValueHandler(const Dictionary &dictionary,
+                       std::vector<size_t> &dictFrequency)
+      : dictionary(dictionary), dictFrequency(dictFrequency) {}
 
   void onValue(FileByteSource &source) {
     source_ = &source;
     ValueParser<SmallIntValueHandler> parser(source, *this);
     parser.value();
     source_ = nullptr;
+  }
+
+  void onBool(size_t pos, bool) override {
+    bools++;
+    boolBytes += source_->pos() - pos;
+  }
+
+  void onNull(size_t pos) override {
+    nulls++;
+    nullBytes += source_->pos() - pos;
   }
 
   void onInt(size_t pos, int64_t) override {
@@ -186,48 +189,52 @@ struct SmallIntValueHandler : public NoopValueHandler {
   }
 
   void onDictRef(size_t pos, size_t idx) override {
+    dictStringHist.add(dictionary[idx].size());
     dictRefs.add(source_->pos() - pos);
-    dictExpansionBytes += dictionary[idx].size();
+    dictFrequency[idx]++;
   }
 
   void onStringStart(size_t pos, size_t len) override {
     stringHist.add(len);
-    strings++;
     stringLengths.add(source_->pos() - pos);
-    stringBytes += len;
   }
 
   void dumpStats(size_t totalBytes) {
     std::cout
         << "  Values:\n"
-        << "     Doubles: " << commafy((uint64_t)doubles) << '\n';
-    std::cout << "       Total bytes: " << prettyBytes(doubleBytes)
-              << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n";
+        << "     Doubles: " << commafy(doubles) << '\n'
+        << "       Total bytes: " << prettyBytes(doubleBytes)
+        << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n"
+        << "     Bools: " << commafy(bools) << '\n'
+        << "       Total bytes: " << prettyBytes(boolBytes)
+        << " (" << (100 * boolBytes / totalBytes) << "% of stream)\n"
+        << "     Nulls: " << commafy(nulls) << '\n'
+        << "       Total bytes: " << prettyBytes(nullBytes)
+        << " (" << (100 * nullBytes / totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
     dictRefs.dumpStats(totalBytes);
-    std::cout << "       Total bytes to be expanded from dictionary: "
-              << prettyBytes(dictExpansionBytes) << '\n';
-    std::cout
-        << "     Strings: " << commafy((uint64_t)strings) << '\n';
-    std::cout << "       Total bytes: " << prettyBytes(stringBytes)
-              << " (" << (100 * stringBytes / totalBytes) << "% of stream)\n";
+    dictStringHist.dumpStats({});
     stringHist.dumpStats(totalBytes);
     stringLengths.dumpStats(totalBytes);
   }
 };
 
-struct SmallIntRecordHandler {
+struct StatsRecordHandler {
   Dictionary dictionary;
+  std::vector<size_t> dictFrequency;
   SmallIntValueHandler vh;
   RecordHandler<SmallIntValueHandler> next;
+  bool fullDictDump;
+  SizeHistogram valueHist {"Value records"};
   size_t numRecords = 0;
-  size_t numValues = 0;
   size_t dictClears = 0;
   size_t dictAdds = 0;
   size_t headers = 0;
 
-  SmallIntRecordHandler()
-  : vh(dictionary), next(dictionary, vh) {}
+  StatsRecordHandler(bool fullDictDump)
+  : vh(dictionary, dictFrequency),
+    next(dictionary, vh),
+    fullDictDump(fullDictDump) {}
 
   void onRecordStart(size_t pos) {
     numRecords++;
@@ -241,7 +248,9 @@ struct SmallIntRecordHandler {
 
   void onDictClear() {
     dictClears++;
-    if (dictionary.size()) dictStats(dictionary, "upon clear");
+    if (dictionary.size())
+      dictStats(dictionary, dictFrequency, "upon clear", fullDictDump);
+    dictFrequency.clear();
     next.onDictClear();
   }
 
@@ -251,7 +260,7 @@ struct SmallIntRecordHandler {
   }
 
   void onValue(size_t relDictPos, size_t len, FileByteSource &source) {
-    numValues++;
+    valueHist.add(len);
     next.onValue(relDictPos, len, source);
   }
 
@@ -260,6 +269,7 @@ struct SmallIntRecordHandler {
   }
 
   void onStringEnd() {
+    dictFrequency.emplace_back(0);
     next.onStringEnd();
   }
 
@@ -268,7 +278,7 @@ struct SmallIntRecordHandler {
   }
 
   void onParseEnd() {
-    dictStats(dictionary, "at end of file");
+    dictStats(dictionary, dictFrequency, "at end of file", fullDictDump);
     next.onParseEnd();
   }
 };
@@ -278,8 +288,7 @@ void usage() {
       << "usage: au stats [options] [--] <path>...\n"
       << "\n"
       << "  -h --help        show usage and exit\n"
-      << "  -d --dict        dump dictionary\n"
-      << "  -i --ints        show count of small integers\n";
+      << "  -d --dict        dump full dictionary\n";
 }
 
 struct UsageVisitor : public TCLAP::Visitor {
@@ -309,7 +318,7 @@ public:
   StatsDecoder(const std::string &filename)
       : filename_(filename) {}
 
-  void decode(SmallIntRecordHandler &handler) const {
+  void decode(StatsRecordHandler &handler) const {
     FileByteSource source(filename_, false);
     try {
       RecordParser(source, handler).parseStream();
@@ -321,14 +330,11 @@ public:
     std::cout
         << "Stats for " << filename_ << ":\n"
         << "  Total read: " << prettyBytes(source.pos()) << '\n'
-        << "  Records: " << commafy((uint64_t)handler.numRecords) << '\n'
-        << "     Version headers: " << commafy((uint64_t)handler.headers)
-        << '\n'
-        << "     Dictionary resets: " << commafy((uint64_t)handler.dictClears)
-        << '\n'
-        << "     Dictionary adds: " << commafy((uint64_t)handler.dictAdds)
-        << '\n'
-        << "     Values: " << commafy((uint64_t)handler.numValues) << '\n';
+        << "  Records: " << commafy(handler.numRecords) << '\n'
+        << "     Version headers: " << commafy(handler.headers) << '\n'
+        << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
+        << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n';
+    handler.valueHist.dumpStats(source.pos());
     handler.vh.dumpStats(source.pos());
   }
 };
@@ -339,7 +345,7 @@ public:
 //   - version(s)
 // X - total bytes
 // X - total records (by type)
-//   - absolute count and count-in-bytes by type
+// X - absolute count and count-in-bytes by type
 //   - histogram of varint size for:
 // X   - values
 //     - backrefs
@@ -347,16 +353,13 @@ public:
 // X   - string length
 // X   - dict refs
 // X - histogram of string lengths (by power of two?)
-//   - histogram of record lengths?
-//   - count-in-bytes of dictionary ref expansions (and histogram?)
+// X - histogram of record lengths?
+// X - count-in-bytes of dictionary ref expansions (and histogram?)
 //   - dictionary stats:
 //     - size of dict
 //     - frequency of reference
 
 int stats(int argc, const char * const *argv) {
-  SmallIntRecordHandler smallIntRecordHandler;
-//  DictDumpHandler dictDumpHandler;
-//  NoopRecordHandler *handler = &dictDumpHandler;
   std::vector<std::string> auFiles;
 
   try {
@@ -367,7 +370,6 @@ int stats(int argc, const char * const *argv) {
     TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
 
     TCLAP::SwitchArg dictDump("d", "dict", "Dictionary dump", cmd, false);
-    TCLAP::SwitchArg intCnt("i", "ints", "Count of small integers", cmd, false);
     TCLAP::UnlabeledMultiArg<std::string> fileNames(
         "fileNames", "", false, "filename", cmd);
 
@@ -375,17 +377,13 @@ int stats(int argc, const char * const *argv) {
     cmd.setOutput(&output);
     cmd.parse(argc, argv);
 
-//    if (intCnt) {
-//      handler = &smallIntRecordHandler;
-//    } else if (dictDump) {
-//      handler = &dictDumpHandler;
-//    }
-
     if (fileNames.getValue().empty()) {
-      StatsDecoder("-").decode(smallIntRecordHandler);
+      StatsRecordHandler handler(dictDump.isSet());
+      StatsDecoder("-").decode(handler);
     } else {
       for (auto &f : fileNames.getValue()) {
-        StatsDecoder(f).decode(smallIntRecordHandler);
+        StatsRecordHandler handler(dictDump.isSet());
+        StatsDecoder(f).decode(handler);
       }
     }
   } catch (TCLAP::ArgException &e) {
