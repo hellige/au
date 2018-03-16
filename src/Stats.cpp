@@ -53,7 +53,7 @@ std::string prettyBytes(size_t bytes) {
 void dictStats(Dictionary &dictionary, const char *event) {
   std::cout
       << "Dictionary stats " << event << ":\n"
-      << "  Total entries: " << commafy(dictionary.size()) << '\n';
+      << "  Total entries: " << commafy((uint64_t)dictionary.size()) << '\n';
 }
 
 struct DictDumpHandler : public NoopRecordHandler {
@@ -200,7 +200,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
   void dumpStats(size_t totalBytes) {
     std::cout
         << "  Values:\n"
-        << "     Doubles: " << commafy(doubles) << '\n';
+        << "     Doubles: " << commafy((uint64_t)doubles) << '\n';
     std::cout << "       Total bytes: " << prettyBytes(doubleBytes)
               << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
@@ -208,7 +208,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
     std::cout << "       Total bytes to be expanded from dictionary: "
               << prettyBytes(dictExpansionBytes) << '\n';
     std::cout
-        << "     Strings: " << commafy(strings) << '\n';
+        << "     Strings: " << commafy((uint64_t)strings) << '\n';
     std::cout << "       Total bytes: " << prettyBytes(stringBytes)
               << " (" << (100 * stringBytes / totalBytes) << "% of stream)\n";
     stringHist.dumpStats(totalBytes);
@@ -321,11 +321,14 @@ public:
     std::cout
         << "Stats for " << filename_ << ":\n"
         << "  Total read: " << prettyBytes(source.pos()) << '\n'
-        << "  Records: " << commafy(handler.numRecords) << '\n'
-        << "     Version headers: " << commafy(handler.headers) << '\n'
-        << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
-        << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n'
-        << "     Values: " << commafy(handler.numValues) << '\n';
+        << "  Records: " << commafy((uint64_t)handler.numRecords) << '\n'
+        << "     Version headers: " << commafy((uint64_t)handler.headers)
+        << '\n'
+        << "     Dictionary resets: " << commafy((uint64_t)handler.dictClears)
+        << '\n'
+        << "     Dictionary adds: " << commafy((uint64_t)handler.dictAdds)
+        << '\n'
+        << "     Values: " << commafy((uint64_t)handler.numValues) << '\n';
     handler.vh.dumpStats(source.pos());
   }
 };
