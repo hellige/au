@@ -85,9 +85,37 @@ struct DictDumpHandler : public NoopRecordHandler {
   }
 };
 
-struct SmallIntValueHandler : public NoopValueHandler {
+struct VarintHistogram {
+  std::string name;
   std::array<size_t, 12> intSizes {};
+
+  VarintHistogram(const char *name) : name(name) {}
+
+  void add(size_t size) {
+    intSizes[size - 1]++; // TODO bounds check
+  }
+
+  void dumpStats(size_t totalBytes) {
+    size_t totalInts = 0;
+    for (unsigned long count : intSizes) totalInts += count;
+    std::cout << "     " << name << ": " << commafy(totalInts) << '\n'
+              << "       By length:\n";
+    size_t totalIntBytes = 0;
+    for (auto i = 0u; i < intSizes.size(); i++) {
+      auto bytes = intSizes[i] * (i+1);
+      totalIntBytes += bytes;
+      printf("        %3d: %s (%zu%%) %s\n", i+1, commafy(intSizes[i]).c_str(),
+             100*intSizes[i]/totalInts, prettyBytes(bytes).c_str());
+    }
+    std::cout << "       Total bytes: " << prettyBytes(totalIntBytes)
+              << " (" << (100 * totalIntBytes / totalBytes) << "% of stream)\n";
+  }
+};
+
+struct SmallIntValueHandler : public NoopValueHandler {
   size_t doubles = 0;
+  VarintHistogram intValues {"Integer values"};
+  VarintHistogram dictRefs {"Dictionary references"};
   FileByteSource *source_;
 
   void onValue(FileByteSource &source) {
@@ -98,31 +126,27 @@ struct SmallIntValueHandler : public NoopValueHandler {
   }
 
   void onInt(size_t pos, int64_t) override {
-    intSizes[source_->pos() - pos - 1]++; // TODO bounds check
+    intValues.add(source_->pos() - pos);
   }
 
   void onUint(size_t pos, uint64_t) override {
-    intSizes[source_->pos() - pos - 1]++; // TODO bounds check
+    intValues.add(source_->pos() - pos);
   }
 
   void onDouble(size_t, double) override {
     doubles++;
   }
 
-  void dumpStats() {
-    size_t totalInts = 0;
-    for (auto i = 0u; i < intSizes.size(); i++)
-      totalInts += intSizes[i];
+  void onDictRef(size_t pos, size_t) override {
+    dictRefs.add(source_->pos() - pos);
+  }
 
+  void dumpStats(size_t totalBytes) {
     std::cout
         << "  Values:\n"
-        << "     Doubles: " << commafy(doubles) << '\n'
-        << "     Integers: " << commafy(totalInts) << '\n';
-    std::cout << "       By length:\n";
-    for (auto i = 0u; i < intSizes.size(); i++) {
-      printf("        %3d: %s (%zu%%)\n", i+1, commafy(intSizes[i]).c_str(),
-             100*intSizes[i]/totalInts);
-    }
+        << "     Doubles: " << commafy(doubles) << '\n';
+    intValues.dumpStats(totalBytes);
+    dictRefs.dumpStats(totalBytes);
   }
 };
 
@@ -236,7 +260,7 @@ public:
         << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
         << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n'
         << "     Values: " << commafy(handler.numValues) << '\n';
-    handler.vh.dumpStats();
+    handler.vh.dumpStats(source.pos());
   }
 };
 
