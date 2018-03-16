@@ -48,6 +48,36 @@ TEST(AuStringIntern, InternFrequentStrings) {
   }
 }
 
+TEST(AuStringIntern, ReIndex) {
+  AuStringIntern si(1, 2, 10);
+  auto &dict = si.dict();
+
+  using namespace std::string_literals;
+  si.idx("twice"s, true); // idx 0
+  si.idx("once"s, true);  // idx 1
+  si.idx("thrice"s, true);// idx 2
+  si.idx("twice"s, true);
+  si.idx("thrice"s, true);
+  si.idx("thrice"s, true);
+
+  EXPECT_EQ(3, dict.size());
+  EXPECT_EQ("twice"s, dict[0]);
+  EXPECT_EQ("once"s, dict[1]);
+  EXPECT_EQ("thrice"s, dict[2]);
+
+  EXPECT_EQ(1, si.reIndex(2));
+
+  EXPECT_EQ(2, dict.size());
+  EXPECT_EQ("thrice"s, dict[0]);
+  EXPECT_EQ("twice"s, dict[1]);
+
+  EXPECT_EQ(0, *si.idx("thrice"s, true));
+  EXPECT_EQ(1, *si.idx("twice"s, true));
+
+  si.idx("quadrice"s, true);
+  EXPECT_EQ(2, *si.idx("quadrice"s, true));
+}
+
 struct AuFormatterTest : public ::testing::Test {
   Au::VectorBuffer buf;
   AuStringIntern stringIntern;
