@@ -229,7 +229,7 @@ int json2au(int argc, const char * const *argv) {
       auto tNow = std::chrono::steady_clock::now();
       auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
                      (tNow - lastTime);
-      std::cerr << "Processed: " << stats["Records"] << " entries in "
+      std::cerr << "Processed: " << stats["Records"] / 1'000 << "k entries in "
                 << elapsed.count() << "ms. DictSize: " << stats["DictSize"]
                 << " DictDelta: " << stats["DictSize"] - lastDictSize
                 << " HashSize: " << stats["HashSize"]
@@ -242,7 +242,9 @@ int json2au(int argc, const char * const *argv) {
     if (entriesProcessed > maxEntries) break;
   }
   std::cerr << "Time conversion attempts: " << timeConversionAttempts
-            << " failures: " << timeConversionFailures << '\n';
+            << " failures: " << timeConversionFailures << " ("
+            << (100 * timeConversionFailures / timeConversionAttempts)
+            << "%)\n";
 
   fclose(inF);
   outFileStream.close();

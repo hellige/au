@@ -514,12 +514,12 @@ class Au {
 
     pos_ += tracker.count();
 
-    if (purgeInterval_ && (records_ % purgeInterval_ == 0)) {
-      purgeDictionary(purgeThreshold_);
-    }
-
     if (reindexInterval_ && (records_ % reindexInterval_ == 0)) {
       reIndexDictionary(purgeThreshold_);
+    }
+
+    if (purgeInterval_ && (records_ % purgeInterval_ == 0) && lastDictSize_) {
+      purgeDictionary(purgeThreshold_);
     }
 
     if (lastDictSize_ > clearThreshold_) {
@@ -612,7 +612,6 @@ public:
   /// Purges the dictionary and re-idexes the remaining entries so the more
   /// frequent ones are at the beginning (and have smaller indices).
   void reIndexDictionary(size_t threshold) {
-    (void)threshold; // TODO
     stringIntern_.reIndex(threshold);
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
