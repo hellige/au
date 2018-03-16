@@ -85,27 +85,65 @@ struct DictDumpHandler : public NoopRecordHandler {
   }
 };
 
+#include <cmath>
+struct SizeHistogram {
+  std::string name;
+  size_t totalValBytes = 0;
+  std::vector<size_t> buckets; // by power of two
+
+  SizeHistogram(const char *name) : name(name) {}
+
+  void add(size_t size) {
+    totalValBytes += size;
+    auto bucket = size ? 8*sizeof(size_t) - __builtin_clzll(size) : 0;
+    if (bucket+1 > buckets.size()) buckets.resize(bucket+1);
+    buckets[bucket]++;
+  }
+
+  void dumpStats(size_t totalBytes) {
+    size_t totalStrings = 0;
+    for (auto count : buckets) totalStrings += count;
+    std::cout << "     " << name << ": " << commafy(totalStrings) << '\n'
+              << "       By length, less than:\n";
+    for (auto i = 0u; i < buckets.size(); i++) {
+      auto bytes = buckets[i] * (i+1);
+      printf("        %10s: %s (%zu%%) %s\n", prettyBytes(1 << i).c_str(),
+             commafy(buckets[i]).c_str(),
+             100*buckets[i]/totalStrings,
+             prettyBytes(bytes).c_str());
+    }
+    std::cout << "       Total bytes: " << prettyBytes(totalValBytes)
+              << " (" << (100 * totalValBytes / totalBytes) << "% of stream)\n";
+  }
+};
+
+
 struct VarintHistogram {
   std::string name;
-  std::array<size_t, 12> intSizes {};
+  std::vector<size_t> buckets; // by size
 
   VarintHistogram(const char *name) : name(name) {}
 
   void add(size_t size) {
-    intSizes[size - 1]++; // TODO bounds check
+    if (size > buckets.size()) buckets.resize(size);
+    buckets[size - 1]++;
   }
 
   void dumpStats(size_t totalBytes) {
     size_t totalInts = 0;
-    for (unsigned long count : intSizes) totalInts += count;
+    auto lastPopulated = 0u;
+    for (auto i = 0u; i < buckets.size(); i++) {
+      totalInts += buckets[i];
+      if (buckets[i]) lastPopulated = i;
+    }
     std::cout << "     " << name << ": " << commafy(totalInts) << '\n'
               << "       By length:\n";
     size_t totalIntBytes = 0;
-    for (auto i = 0u; i < intSizes.size(); i++) {
-      auto bytes = intSizes[i] * (i+1);
+    for (auto i = 0u; i <= lastPopulated; i++) {
+      auto bytes = buckets[i] * (i+1);
       totalIntBytes += bytes;
-      printf("        %3d: %s (%zu%%) %s\n", i+1, commafy(intSizes[i]).c_str(),
-             100*intSizes[i]/totalInts, prettyBytes(bytes).c_str());
+      printf("        %3d: %s (%zu%%) %s\n", i+1, commafy(buckets[i]).c_str(),
+             100*buckets[i]/totalInts, prettyBytes(bytes).c_str());
     }
     std::cout << "       Total bytes: " << prettyBytes(totalIntBytes)
               << " (" << (100 * totalIntBytes / totalBytes) << "% of stream)\n";
@@ -113,10 +151,19 @@ struct VarintHistogram {
 };
 
 struct SmallIntValueHandler : public NoopValueHandler {
+  const Dictionary &dictionary;
   size_t doubles = 0;
+  size_t doubleBytes = 0;
+  SizeHistogram stringHist {"String values"};
+  size_t strings = 0;
+  size_t stringBytes = 0;
+  size_t dictExpansionBytes = 0;
   VarintHistogram intValues {"Integer values"};
   VarintHistogram dictRefs {"Dictionary references"};
+  VarintHistogram stringLengths {"String length encodings"};
   FileByteSource *source_;
+
+  SmallIntValueHandler(const Dictionary &dictionary) : dictionary(dictionary) {}
 
   void onValue(FileByteSource &source) {
     source_ = &source;
@@ -133,20 +180,39 @@ struct SmallIntValueHandler : public NoopValueHandler {
     intValues.add(source_->pos() - pos);
   }
 
-  void onDouble(size_t, double) override {
+  void onDouble(size_t pos, double) override {
     doubles++;
+    doubleBytes += source_->pos() - pos;
   }
 
-  void onDictRef(size_t pos, size_t) override {
+  void onDictRef(size_t pos, size_t idx) override {
     dictRefs.add(source_->pos() - pos);
+    dictExpansionBytes += dictionary[idx].size();
+  }
+
+  void onStringStart(size_t pos, size_t len) override {
+    stringHist.add(len);
+    strings++;
+    stringLengths.add(source_->pos() - pos);
+    stringBytes += len;
   }
 
   void dumpStats(size_t totalBytes) {
     std::cout
         << "  Values:\n"
         << "     Doubles: " << commafy(doubles) << '\n';
+    std::cout << "       Total bytes: " << prettyBytes(doubleBytes)
+              << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
     dictRefs.dumpStats(totalBytes);
+    std::cout << "       Total bytes to be expanded from dictionary: "
+              << prettyBytes(dictExpansionBytes) << '\n';
+    std::cout
+        << "     Strings: " << commafy(strings) << '\n';
+    std::cout << "       Total bytes: " << prettyBytes(stringBytes)
+              << " (" << (100 * stringBytes / totalBytes) << "% of stream)\n";
+    stringHist.dumpStats(totalBytes);
+    stringLengths.dumpStats(totalBytes);
   }
 };
 
@@ -161,7 +227,7 @@ struct SmallIntRecordHandler {
   size_t headers = 0;
 
   SmallIntRecordHandler()
-  : next(dictionary, vh) {}
+  : vh(dictionary), next(dictionary, vh) {}
 
   void onRecordStart(size_t pos) {
     numRecords++;
@@ -275,11 +341,11 @@ public:
 // X   - values
 //     - backrefs
 //     - record length
-//     - string length
-//     - dict refs
-//   - histogram of string lengths (by power of two?)
+// X   - string length
+// X   - dict refs
+// X - histogram of string lengths (by power of two?)
 //   - histogram of record lengths?
-//   - count-in-bytes of dictionary refs
+//   - count-in-bytes of dictionary ref expansions (and histogram?)
 //   - dictionary stats:
 //     - size of dict
 //     - frequency of reference
