@@ -143,6 +143,8 @@ struct SmallIntValueHandler : public NoopValueHandler {
   std::vector<size_t> &dictFrequency;
   size_t doubles = 0;
   size_t doubleBytes = 0;
+  size_t timestamps = 0;
+  size_t timestampBytes = 0;
   size_t bools = 0;
   size_t boolBytes = 0;
   size_t nulls = 0;
@@ -188,6 +190,11 @@ struct SmallIntValueHandler : public NoopValueHandler {
     doubleBytes += source_->pos() - pos;
   }
 
+  void onTime(size_t pos, std::chrono::nanoseconds) {
+    timestamps++;
+    timestampBytes += source_->pos() - pos;
+  }
+
   void onDictRef(size_t pos, size_t idx) override {
     dictStringHist.add(dictionary[idx].size());
     dictRefs.add(source_->pos() - pos);
@@ -205,6 +212,9 @@ struct SmallIntValueHandler : public NoopValueHandler {
         << "     Doubles: " << commafy(doubles) << '\n'
         << "       Total bytes: " << prettyBytes(doubleBytes)
         << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n"
+        << "     Timestamps: " << commafy(timestamps) << '\n'
+        << "       Total bytes: " << prettyBytes(timestampBytes)
+        << " (" << (100 * timestampBytes / totalBytes) << "% of stream)\n"
         << "     Bools: " << commafy(bools) << '\n'
         << "       Total bytes: " << prettyBytes(boolBytes)
         << " (" << (100 * boolBytes / totalBytes) << "% of stream)\n"
