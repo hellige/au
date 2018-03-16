@@ -23,6 +23,7 @@ class JsonSaxHandler
   std::optional<bool> intern;
   bool toInt;
   std::regex timeRe;
+  size_t &timeConversionAttempts, &timeConversionFailures;
 
   bool tryInt(const char *str, SizeType length) {
     // 3 extra bytes for: '-', \0 and 1 extra digit (we have no max_digits10)
@@ -52,6 +53,8 @@ class JsonSaxHandler
   bool tryTime(const char *str, SizeType length) {
     using namespace std::chrono;
 
+    timeConversionAttempts++;
+
     std::cmatch m;
     if (std::regex_match(str, str + length, m, timeRe)) {
       std::tm tm;
@@ -73,14 +76,19 @@ class JsonSaxHandler
 
       return true;
     } else {
+      timeConversionFailures++;
       return false;
     }
   }
 
 public:
-  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter)
+  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter,
+                          size_t &timeConversionAttempts,
+                          size_t &timeConversionFailures)
       : formatter(formatter), toInt(false),
-        timeRe(R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re")
+        timeRe(R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re"),
+        timeConversionAttempts(timeConversionAttempts),
+        timeConversionFailures(timeConversionFailures)
   {}
 
   bool Null() { formatter.null(); return true; }
@@ -199,11 +207,12 @@ int json2au(int argc, const char * const *argv) {
   Reader reader;
   ParseResult res;
   size_t entriesProcessed = 0;
+  size_t timeConversionAttempts = 0, timeConversionFailures = 0;
   auto lastTime = std::chrono::steady_clock::now();
   int lastDictSize = 0;
   while (res) {
     au.encode([&](auto &f) {
-      JsonSaxHandler handler(f);
+      JsonSaxHandler handler(f, timeConversionAttempts, timeConversionFailures);
       static constexpr auto parseOpt = kParseStopWhenDoneFlag +
                                        kParseFullPrecisionFlag +
                                        kParseNanAndInfFlag;
@@ -227,6 +236,8 @@ int json2au(int argc, const char * const *argv) {
 
     if (entriesProcessed > maxEntries) break;
   }
+  std::cerr << "Time conversion attempts: " << timeConversionAttempts
+            << " failures: " << timeConversionFailures << '\n';
 
   fclose(inF);
   outFileStream.close();

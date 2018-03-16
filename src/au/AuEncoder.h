@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <iostream>
@@ -137,6 +138,28 @@ public:
         ++it;
       }
     }
+    return purged;
+  }
+
+  size_t reIndex(size_t threshold) {
+    size_t purged = purge(threshold);
+
+    dictInOrder_.clear();
+    dictInOrder_.reserve(dictionary_.size());
+    for (auto &pr : dictionary_) {
+      dictInOrder_.emplace_back(pr.first);
+    }
+
+    std::sort(dictInOrder_.begin(), dictInOrder_.end(),
+              [this](const auto &a, const auto &b) {
+                return dictionary_[a].occurences < dictionary_[b].occurences;
+              });
+    size_t idx = 0;
+    for (auto &v : dictInOrder_) {
+      dictionary_[v].internIndex = idx++;
+    }
+
+    nextEntry_ = dictInOrder_.size();
     return purged;
   }
 
@@ -570,6 +593,20 @@ public:
   /// Removes strings that are used less than "threshold" times from the hash
   void purgeDictionary(size_t threshold) {
     stringIntern_.purge(threshold);
+  }
+
+  /// Purges the dictionary and re-idexes the remaining entries so the more
+  /// frequent ones are at the beginning (and have smaller indices).
+  void reIndexDictionary(size_t threshold) {
+    (void)threshold; // TODO
+    stringIntern_.reIndex(threshold);
+    lastDictSize_ = 0;
+    lastDictLoc_ = tell();
+    OutputTracker tracker(output_);
+    AuFormatter af(output_, stringIntern_);
+    af.raw('C');
+    af.term();
+    pos_ += tracker.count();
   }
 
   auto getStats() const {
