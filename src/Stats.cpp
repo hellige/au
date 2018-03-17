@@ -14,13 +14,6 @@ namespace {
 
 constexpr size_t DEFAULT_DICT_ENTRIES = 25;
 
-std::string commafy(int64_t val) {
-  if (val > 0) return commafy(val);
-  auto result = commafy(-val);
-  result.insert(0, 1, '-');
-  return result;
-}
-
 std::string commafy(uint64_t val) {
   if (!val) return "0";
   char buf[32];
