@@ -241,10 +241,12 @@ int json2au(int argc, const char * const *argv) {
 
     if (entriesProcessed > maxEntries) break;
   }
-  std::cerr << "Time conversion attempts: " << timeConversionAttempts
-            << " failures: " << timeConversionFailures << " ("
-            << (100 * timeConversionFailures / timeConversionAttempts)
-            << "%)\n";
+  if (timeConversionAttempts) {
+    std::cerr << "Time conversion attempts: " << timeConversionAttempts
+              << " failures: " << timeConversionFailures << " ("
+              << (100 * timeConversionFailures / timeConversionAttempts)
+              << "%)\n";
+  }
 
   fclose(inF);
   outFileStream.close();
