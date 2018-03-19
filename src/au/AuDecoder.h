@@ -442,8 +442,8 @@ private:
         while (source_.peek() != marker::RecordEnd) {
           size_t sov = source_.pos();
           c = source_.next();
-          if (((uint8_t)c.charValue() & ~0x1f) == 0x20) {
-            parseString(sov, (uint8_t)c.charValue() & 0x1f, handler_);
+          if (((uint8_t)c.charValue() & ~0x1fu) == 0x20) {
+            parseString(sov, (uint8_t)c.charValue() & 0x1fu, handler_);
           } else if (c == marker::String) {
             parseString(sov, handler_);
           } else {
