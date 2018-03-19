@@ -3,11 +3,8 @@
   au slice [-e] -k estdEventTime 2018-05-16T14:40:00 2018-05-16T15:40:00
     -e  --encode (output as encoded value rather than json)
 
-  - encode string lengths as small ints
-  - encode small int values as small ints
   - combine small-int and varint encoding? burns another bit in the marker (or at least one value)
-  - encode 7 or 8-byte ints as fixed-width 8-byte ints
-  - emit empty dict-add record periodically to keep backrefs from getting too big? (nice to have some stats on those)
-
+  - add checks to emit empty dict-add record if backref approaches max?
 
   - the json parser in the encoder chokes on nan rather than NaN, but there isn't any kind of error. why?
+  - teach grep about timestamps!
