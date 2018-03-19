@@ -180,9 +180,19 @@ public:
   }
 };
 
-template<typename Buffer>
+class AuBuffer {
+public:
+  virtual ~AuBuffer() = default;
+
+  virtual void put(char c) = 0;
+  virtual void write(const char *data, size_t size) = 0;
+  virtual size_t tellp() = 0;
+  virtual std::string_view str() = 0;
+  virtual void clear() {};
+};
+
 class AuFormatter {
-  Buffer &msgBuf_;
+  AuBuffer &msgBuf_;
   AuStringIntern &stringIntern;
 
   void encodeString(const std::string_view sv) {
@@ -219,7 +229,7 @@ class AuFormatter {
   };
 
 public:
-  AuFormatter(Buffer &buf, AuStringIntern &stringIntern)
+  AuFormatter(AuBuffer &buf, AuStringIntern &stringIntern)
       : msgBuf_(buf), stringIntern(stringIntern) {}
 
   class KeyValSink {
@@ -461,11 +471,25 @@ protected:
   }
 };
 
+class AuStreamBuffer : public AuBuffer {
+  std::ostream &output_;
+  OutputTracker tracker_;
+public:
+  AuStreamBuffer(std::ostream &output) : output_(output), tracker_(output) {}
+  void put(char c) override { output_.put(c); }
+  void write(const char *data, size_t size) override {
+    output_.write(data, size);
+  }
+  size_t tellp() override { return output_.tellp(); }
+  std::string_view str() override { throw std::runtime_error("Not supported"); }
+  void clear() override { throw std::runtime_error("Not supported"); }
+
+  OutputTracker &tracker() { return tracker_; }
+};
 
 class AuEncoder {
   static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
-  OutputTracker outputTracker_;
   AuStringIntern stringIntern_;
   size_t pos_;
   size_t lastDictLoc_;
@@ -483,8 +507,8 @@ class AuEncoder {
   void exportDict() {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
-      OutputTracker tracker(output_);
-      AuFormatter af(output_, stringIntern_);
+      AuStreamBuffer formatterOutput(output_);
+      AuFormatter af(formatterOutput, stringIntern_);
       auto newDictLoc = tell();
       af.raw('A');
       af.valueInt(newDictLoc - lastDictLoc_);
@@ -494,7 +518,7 @@ class AuEncoder {
         af.value(std::string_view(s.c_str(), s.length()), false);
       }
       af.term();
-      pos_ += tracker.count();
+      pos_ += formatterOutput.tracker().count();
       lastDictSize_ = dict.size();
     }
   }
@@ -506,7 +530,8 @@ class AuEncoder {
   void write(const std::string_view &msg) {
     exportDict();
     OutputTracker tracker(output_);
-    AuFormatter af(output_, stringIntern_);
+    AuStreamBuffer formatterOutput(output_);
+    AuFormatter af(formatterOutput, stringIntern_);
     auto thisLoc = tell();
     af.raw('V');
     af.valueInt(thisLoc - lastDictLoc_);
@@ -532,25 +557,25 @@ class AuEncoder {
 public:
 
   // Mimics std::ostringstream interface (except for str() and clear())
-  class VectorBuffer {
+  class VectorBuffer : public AuBuffer {
     std::vector<char> v;
   public:
     VectorBuffer(size_t size = 1024) {
       v.reserve(size);
     }
-    void put(char c) {
+    void put(char c) override {
       v.push_back(c);
     }
-    void write(const char *data, std::streamsize size) {
+    void write(const char *data, size_t size) override {
       v.insert(v.end(), data, data + size);
     }
-    size_t tellp() {
+    size_t tellp() override {
       return v.size();
     }
-    std::string_view str() {
+    std::string_view str() override {
       return std::string_view(v.data(), v.size());
     }
-    void clear() {
+    void clear() override {
       v.clear();
     }
   };
@@ -569,17 +594,17 @@ public:
   AuEncoder(std::ostream &output, size_t purgeInterval = 250'000,
      size_t purgeThreshold = 50, size_t reindexInterval = 500'000,
      size_t clearThreshold = 1400)
-      : output_(output), outputTracker_(output),
+      : output_(output),
         pos_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
-    OutputTracker outputTracker(output_);
-    AuFormatter af(output_, stringIntern_);
+    AuStreamBuffer formatterOutput(output_);
+    AuFormatter af(formatterOutput, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
     af.term();
-    pos_ += outputTracker.count();
+    pos_ += formatterOutput.tracker().count();
     clearDictionary();
   }
 
@@ -599,11 +624,11 @@ public:
     stringIntern_.clear(clearUsageTracker);
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
-    OutputTracker tracker(output_);
-    AuFormatter af(output_, stringIntern_);
+    AuStreamBuffer formatterOutput(output_);
+    AuFormatter af(formatterOutput, stringIntern_);
     af.raw('C');
     af.term();
-    pos_ += tracker.count();
+    pos_ += formatterOutput.tracker().count();
   }
 
   /// Removes strings that are used less than "threshold" times from the hash
@@ -617,11 +642,11 @@ public:
     stringIntern_.reIndex(threshold);
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
-    OutputTracker tracker(output_);
-    AuFormatter af(output_, stringIntern_);
+    AuStreamBuffer formatterOutput(output_);
+    AuFormatter af(formatterOutput, stringIntern_);
     af.raw('C');
     af.term();
-    pos_ += tracker.count();
+    pos_ += formatterOutput.tracker().count();
   }
 
   auto getStats() const {

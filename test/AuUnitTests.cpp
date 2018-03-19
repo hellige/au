@@ -81,7 +81,7 @@ TEST(AuStringIntern, ReIndex) {
 struct AuFormatterTest : public ::testing::Test {
   AuEncoder::VectorBuffer buf;
   AuStringIntern stringIntern;
-  AuFormatter<AuEncoder::VectorBuffer> formatter;
+  AuFormatter formatter;
 
   AuFormatterTest() : formatter(buf, stringIntern) {}
 };

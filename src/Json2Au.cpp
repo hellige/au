@@ -16,10 +16,9 @@ using namespace rapidjson;
 
 namespace {
 
-template<typename Buffer>
 class JsonSaxHandler
-    : public BaseReaderHandler<UTF8<>, JsonSaxHandler<Buffer>> {
-  AuFormatter<Buffer> &formatter;
+    : public BaseReaderHandler<UTF8<>, JsonSaxHandler> {
+  AuFormatter &formatter;
   std::optional<bool> intern;
   bool toInt;
   const std::regex &timeRegExp;
@@ -83,7 +82,7 @@ class JsonSaxHandler
   }
 
 public:
-  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter,
+  explicit JsonSaxHandler(AuFormatter &formatter,
                           const std::regex &timeRegExp,
                           size_t &timeConversionAttempts,
                           size_t &timeConversionFailures)
