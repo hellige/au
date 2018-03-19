@@ -1,7 +1,7 @@
 #include "main.h"
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
-#include "JsonHandler.h"
+#include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 
 #include <cmath>
@@ -44,8 +44,8 @@ int help(int, char **) {
 int cat(int argc, char **argv) {
   argc -= 2; argv += 2;
   Dictionary dictionary;
-  JsonHandler valueHandler(dictionary);
-  RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
+  JsonOutputHandler valueHandler(dictionary);
+  AuRecordHandler<JsonOutputHandler> recordHandler(dictionary, valueHandler);
 
   if (argc == 0) {
     AuDecoder("-").decode(recordHandler, false);

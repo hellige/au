@@ -4,7 +4,7 @@
 #include "tclap/CmdLine.h"
 #include <sys/stat.h>
 
-#include "JsonHandler.h"
+#include "JsonOutputHandler.h"
 
 
 class TailByteSource : public FileByteSource {
@@ -214,7 +214,7 @@ public:
 
     // At this point we should have a full/valid dictionary and be positioned
     // at the start of a value record.
-    RecordHandler<OutputHandler> recordHandler(dictionary_, outputHandler_);
+    AuRecordHandler<OutputHandler> recordHandler(dictionary_, outputHandler_);
     RecordParser<decltype(recordHandler)>(source_, recordHandler).parseStream();
   }
 
@@ -282,7 +282,7 @@ protected:
 
 int tail(int argc, const char *const *argv) {
   Dictionary dictionary;
-  JsonHandler jsonHandler(dictionary);
+  JsonOutputHandler jsonHandler(dictionary);
 
   try {
     TCLAP::CmdLine cmd("Tail sub-command", ' ', AU_VERSION, true);
@@ -301,7 +301,7 @@ int tail(int argc, const char *const *argv) {
     if (fileName.getValue().empty() || fileName.getValue() == "-") {
       std::cerr << "Tailing stdin not supported\n";
     } else {
-      TailHandler<JsonHandler> tailHandler(dictionary, jsonHandler,
+      TailHandler<JsonOutputHandler> tailHandler(dictionary, jsonHandler,
                                            fileName, follow, startOffset);
     }
 

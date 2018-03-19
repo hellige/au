@@ -1,6 +1,6 @@
 #include "AuDecoder.h"
 
-#include "RecordHandler.h"
+#include "AuRecordHandler.h"
 
 #include <tclap/CmdLine.h>
 
@@ -236,7 +236,7 @@ struct StatsRecordHandler {
   Dictionary dictionary;
   std::vector<size_t> dictFrequency;
   SmallIntValueHandler vh;
-  RecordHandler<SmallIntValueHandler> next;
+  AuRecordHandler<SmallIntValueHandler> next;
   bool fullDictDump;
   SizeHistogram valueHist {"Value records"};
   uint64_t formatVersion = 0;

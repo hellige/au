@@ -2,7 +2,7 @@
 
 #include "AuDecoder.h"
 #include "Dictionary.h"
-#include "RecordHandler.h"
+#include "AuRecordHandler.h"
 
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
@@ -19,7 +19,7 @@
 
 // TODO this whole file should be split up and rearranged.
 
-class JsonHandler {
+class JsonOutputHandler {
   rapidjson::StringBuffer buffer_;
   std::vector<char> str_;
   struct RawDecode {
@@ -48,7 +48,7 @@ class JsonHandler {
   Dictionary &dictionary_;
 
 public:
-  explicit JsonHandler(Dictionary &dictionary)
+  explicit JsonOutputHandler(Dictionary &dictionary)
       : buffer_(nullptr, 1u << 16),
         writer_(buffer_),
         dictionary_(dictionary) {
@@ -56,7 +56,7 @@ public:
   }
 
   void onValue(FileByteSource &source) {
-    ValueParser<JsonHandler> parser(source, *this);
+    ValueParser<JsonOutputHandler> parser(source, *this);
     parser.value();
     // TODO this function is silly
     if (buffer_.GetSize()) {

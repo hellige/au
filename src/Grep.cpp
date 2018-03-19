@@ -1,6 +1,6 @@
 #include "main.h"
 #include "AuDecoder.h"
-#include "JsonHandler.h"
+#include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 
 #include "tclap/CmdLine.h"
@@ -92,7 +92,7 @@ public:
 
 int grep(int argc, const char * const *argv) {
   Dictionary dictionary;
-  JsonHandler jsonHandler(dictionary);
+  JsonOutputHandler jsonHandler(dictionary);
 
   try {
     UsageVisitor usageVisitor;
@@ -156,9 +156,9 @@ int grep(int argc, const char * const *argv) {
       }
     }
 
-    GrepHandler<JsonHandler> grepHandler(
+    GrepHandler<JsonOutputHandler> grepHandler(
         dictionary, jsonHandler, std::move(pattern));
-    RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
+    AuRecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
 
     if (fileNames.getValue().empty()) {
       AuDecoder("-").decode(recordHandler, false);
