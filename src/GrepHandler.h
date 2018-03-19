@@ -97,7 +97,7 @@ public:
     str_.reserve(1<<16);
   }
 
-  bool isKey() {
+  bool isKey() const {
     auto &c = context_.back();
     return (c.context == Context::OBJECT) && (c.counter % 2 == 0);
   }

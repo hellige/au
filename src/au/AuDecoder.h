@@ -361,21 +361,25 @@ public:
 private:
   void key() const {
       // TODO clean up... this is ugly and redundant. also see the dict-add case
-    auto c = source_.peek();
+    size_t sov = source_.pos();
+    auto c = source_.next();
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
     if (c.charValue() & 0x80) {
-      value();
+      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
     }
+    int val = (uint8_t)c.charValue() & ~0xe0;
     if ((c.charValue() & ~0x1f) == 0x20) {
-      value();
+      parseString(sov, val, handler_);
       return;
     }
     switch (c.charValue()) {
-      case marker::String:
       case marker::DictRef:
-        value();
+        handler_.onDictRef(sov, readVarint());
+        break;
+      case marker::String:
+        parseString(sov, handler_);
         break;
       default:
         THROW("Unexpected character at start of key: " << c);
