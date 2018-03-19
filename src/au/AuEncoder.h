@@ -12,6 +12,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <stdio.h>
 
 class AuEncoder;
 
@@ -180,6 +181,7 @@ public:
   }
 };
 
+// Mimics std::ostringstream interface (except for str() and clear())
 class AuBuffer {
 public:
   virtual ~AuBuffer() = default;
@@ -191,6 +193,7 @@ public:
   virtual void clear() {};
 };
 
+// TODO: Rename to AuWriter
 class AuFormatter {
   AuBuffer &msgBuf_;
   AuStringIntern &stringIntern;
@@ -213,6 +216,19 @@ class AuFormatter {
       valueInt(*idx);
     }
   }
+
+  template<typename O>
+  class HasWriteAu {
+    template<typename OO>
+    static auto test(int)
+    -> decltype(&OO::writeAu, std::true_type());
+
+    template<typename>
+    static auto test(...) -> std::false_type;
+
+  public:
+    static constexpr bool value = decltype(test<O>(0))::value;
+  };
 
   template<typename O>
   class HasOperatorApply {
@@ -384,6 +400,10 @@ public:
     return value(name(val));
   }
 
+  template<typename T>
+  typename std::enable_if<HasWriteAu<T>::value, void>::type
+  value(const T &val) { val.writeAu(*this); }
+
   template<typename F>
   typename std::enable_if<HasOperatorApply<F>::value, void>::type
   value(F &&func) { func(); }
@@ -529,7 +549,6 @@ class AuEncoder {
 
   void write(const std::string_view &msg) {
     exportDict();
-    OutputTracker tracker(output_);
     AuStreamBuffer formatterOutput(output_);
     AuFormatter af(formatterOutput, stringIntern_);
     auto thisLoc = tell();
@@ -539,7 +558,7 @@ class AuEncoder {
     output_ << msg;
     records_++;
 
-    pos_ += tracker.count();
+    pos_ += formatterOutput.tracker().count();
 
     if (reindexInterval_ && (records_ % reindexInterval_ == 0)) {
       reIndexDictionary(purgeThreshold_);
@@ -556,7 +575,6 @@ class AuEncoder {
 
 public:
 
-  // Mimics std::ostringstream interface (except for str() and clear())
   class VectorBuffer : public AuBuffer {
     std::vector<char> v;
   public:
@@ -609,8 +627,8 @@ public:
   }
 
   template<typename F>
-  void encode(F &&f) {
-    static VectorBuffer buf;
+  ssize_t encode(F &&f) {
+    static VectorBuffer buf; // TODO: Make it a class variable
     AuFormatter formatter(buf, stringIntern_);
     f(formatter);
     if (buf.tellp() != 0) {
@@ -618,6 +636,7 @@ public:
       write(buf.str());
     }
     buf.clear();
+    return 0; // TODO: Return bytes written or negative error code
   }
 
   void clearDictionary(bool clearUsageTracker = false) {
