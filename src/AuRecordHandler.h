@@ -8,14 +8,14 @@
 class FileByteSource;
 
 template<typename ValueHandler>
-class RecordHandler {
+class AuRecordHandler {
   Dictionary &dictionary_;
   ValueHandler &valueHandler_;
   std::vector<char> str_;
   size_t sor_;
 
 public:
-  RecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
+  AuRecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
       : dictionary_(dictionary), valueHandler_(valueHandler), sor_(0) {
     str_.reserve(1 << 16);
   }
