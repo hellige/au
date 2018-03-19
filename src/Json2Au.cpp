@@ -18,11 +18,11 @@ namespace {
 
 class JsonSaxHandler
     : public BaseReaderHandler<UTF8<>, JsonSaxHandler> {
-  AuFormatter &formatter;
-  std::optional<bool> intern;
-  bool toInt;
-  const std::regex &timeRegExp;
-  size_t &timeConversionAttempts, &timeConversionFailures;
+  AuWriter &writer_;
+  std::optional<bool> intern_;
+  bool toInt_;
+  const std::regex &timeRegExp_;
+  size_t &timeConversionAttempts_, &timeConversionFailures_;
 
   bool tryInt(const char *str, SizeType length) {
     // 3 extra bytes for: '-', \0 and 1 extra digit (we have no max_digits10)
@@ -40,11 +40,11 @@ class JsonSaxHandler
       uint64_t u = strtoull(digits + 1, &endptr, 10);
       if (endptr - digits != length) return false;
       int64_t i = static_cast<int64_t>(u) * -1;
-      formatter.value(i);
+      writer_.value(i);
     } else {
       uint64_t u = strtoull(digits, &endptr, 10);
       if (endptr - digits != length) return false;
-      formatter.value(u);
+      writer_.value(u);
     }
     return true;
   }
@@ -52,10 +52,10 @@ class JsonSaxHandler
   bool tryTime(const char *str, SizeType length) {
     using namespace std::chrono;
 
-    timeConversionAttempts++;
+    timeConversionAttempts_++;
 
     std::cmatch m;
-    if (std::regex_match(str, str + length, m, timeRegExp)) {
+    if (std::regex_match(str, str + length, m, timeRegExp_)) {
       std::tm tm;
       memset(&tm, 0, sizeof(tm));
 
@@ -72,78 +72,78 @@ class JsonSaxHandler
       std::time_t tt = timegm(&tm);
       if (tt == -1) return false;
 
-      formatter.value(seconds(tt) + microseconds(mics));
+      writer_.value(seconds(tt) + microseconds(mics));
 
       return true;
     } else {
-      timeConversionFailures++;
+      timeConversionFailures_++;
       return false;
     }
   }
 
 public:
-  explicit JsonSaxHandler(AuFormatter &formatter,
+  explicit JsonSaxHandler(AuWriter &writer,
                           const std::regex &timeRegExp,
                           size_t &timeConversionAttempts,
                           size_t &timeConversionFailures)
-      : formatter(formatter), toInt(false), timeRegExp(timeRegExp),
-        timeConversionAttempts(timeConversionAttempts),
-        timeConversionFailures(timeConversionFailures)
+      : writer_(writer), toInt_(false), timeRegExp_(timeRegExp),
+        timeConversionAttempts_(timeConversionAttempts),
+        timeConversionFailures_(timeConversionFailures)
   {}
 
-  bool Null() { formatter.null(); return true; }
-  bool Bool(bool b) { formatter.value(b); return true; }
-  bool Int(int i) { formatter.value(i); return true; }
-  bool Uint(unsigned u) { formatter.value(u); return true; }
-  bool Int64(int64_t i) { formatter.value(i); return true; }
-  bool Uint64(uint64_t u) { formatter.value(u); return true; }
-  bool Double(double d) { formatter.value(d); return true; }
+  bool Null() { writer_.null(); return true; }
+  bool Bool(bool b) { writer_.value(b); return true; }
+  bool Int(int i) { writer_.value(i); return true; }
+  bool Uint(unsigned u) { writer_.value(u); return true; }
+  bool Int64(int64_t i) { writer_.value(i); return true; }
+  bool Uint64(uint64_t u) { writer_.value(u); return true; }
+  bool Double(double d) { writer_.value(d); return true; }
 
   bool String(const char *str, SizeType length, [[maybe_unused]] bool copy) {
-    if (toInt) {
-      toInt = false;
+    if (toInt_) {
+      toInt_ = false;
       if (tryInt(str, length)) return true;
     } else if (length == sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu") - 1) {
       if (tryTime(str, length)) return true;
     }
-    formatter.value(std::string_view(str, length), intern);
-    intern.reset();
+    writer_.value(std::string_view(str, length), intern_);
+    intern_.reset();
     return true;
   }
 
   bool StartObject() {
-    formatter.startMap();
+    writer_.startMap();
     return true;
   }
 
   bool Key(const char *str, SizeType length, [[maybe_unused]] bool copy) {
-    formatter.value(std::string_view(str, length), true);
+    writer_.value(std::string_view(str, length), true);
     if (0 == strncmp(str, "estdEventTime", length) ||
         0 == strncmp(str, "logTime", length) ||
         0 == strncmp(str, "execId", length) ||
         0 == strncmp(str, "px", length)) {
-      intern = false;
+      intern_ = false;
     } else if (0 == strncmp(str, "key", length) ||
                0 == strncmp(str, "signed", length) ||
                0 == strncmp(str, "origFfeKey", length)) {
-      //toInt = true; // This would make the diff fail
-      intern = false;
+      //toInt_ = true; // This would make the diff fail
+      intern_ = false;
     }
     return true;
   }
 
   bool EndObject([[maybe_unused]] SizeType memberCount) {
-    formatter.endMap();
+    writer_.endMap();
     return true;
   }
 
   bool StartArray() {
-    formatter.startArray();
+    writer_.startArray();
     return true;
   }
 
   bool EndArray([[maybe_unused]] SizeType elementCount) {
-    formatter.endArray();
+    writer_.endArray();
     return true;
   }
 };

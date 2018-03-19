@@ -22,17 +22,17 @@ class AuStringIntern {
 
   class UsageTracker {
     using InOrder = std::list<std::string>;
-    InOrder inOrder;
+    InOrder inOrder_;
 
     using DictVal = std::pair<size_t, InOrder::iterator>;
     using Dict = std::unordered_map<std::string_view, DictVal>;
-    Dict dict;
+    Dict dict_;
 
     void pop(Dict::iterator it) {
-      if (it != dict.end()) {
+      if (it != dict_.end()) {
         auto listIt = it->second.second;
-        dict.erase(it);
-        inOrder.erase(listIt);
+        dict_.erase(it);
+        inOrder_.erase(listIt);
       }
     }
 
@@ -44,8 +44,8 @@ class AuStringIntern {
         : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize) {}
 
     bool shouldIntern(const std::string &str) {
-      auto it = dict.find(std::string_view(str.c_str(), str.length()));
-      if (it != dict.end()) {
+      auto it = dict_.find(std::string_view(str.c_str(), str.length()));
+      if (it != dict_.end()) {
         if (it->second.first >= INTERN_THRESH) {
           pop(it);
           return true;
@@ -54,25 +54,25 @@ class AuStringIntern {
           return false;
         }
       } else {
-        if (inOrder.size() >= INTERN_CACHE_SIZE) {
-          const auto &s = inOrder.front();
-          pop(dict.find(std::string_view(s.c_str(), s.length())));
+        if (inOrder_.size() >= INTERN_CACHE_SIZE) {
+          const auto &s = inOrder_.front();
+          pop(dict_.find(std::string_view(s.c_str(), s.length())));
         }
-        inOrder.emplace_back(str);
-        const auto &s = inOrder.back();
+        inOrder_.emplace_back(str);
+        const auto &s = inOrder_.back();
         std::string_view sv(s.c_str(), s.length());
-        dict[sv] = {size_t(1), --(inOrder.end())};
+        dict_[sv] = {size_t(1), --(inOrder_.end())};
         return false;
       }
     }
 
     void clear() {
-      dict.clear();
-      inOrder.clear();
+      dict_.clear();
+      inOrder_.clear();
     }
 
     size_t size() const {
-      return dict.size();
+      return dict_.size();
     }
   };
 
@@ -195,10 +195,9 @@ public:
   virtual void clear() {};
 };
 
-// TODO: Rename to AuWriter
-class AuFormatter {
+class AuWriter {
   AuBuffer &msgBuf_;
-  AuStringIntern &stringIntern;
+  AuStringIntern &stringIntern_;
 
   void encodeString(const std::string_view sv) {
     if (sv.length() < 32) {
@@ -212,7 +211,7 @@ class AuFormatter {
 
   void encodeStringIntern(const std::string_view sv,
                           std::optional<bool> intern) {
-    auto idx = stringIntern.idx(sv, intern);
+    auto idx = stringIntern_.idx(sv, intern);
     if (!idx) {
       encodeString(sv);
     } else if (*idx < 0x80) {
@@ -250,22 +249,22 @@ class AuFormatter {
   };
 
 public:
-  AuFormatter(AuBuffer &buf, AuStringIntern &stringIntern)
-      : msgBuf_(buf), stringIntern(stringIntern) {}
+  AuWriter(AuBuffer &buf, AuStringIntern &stringIntern)
+      : msgBuf_(buf), stringIntern_(stringIntern) {}
 
   class KeyValSink {
-    AuFormatter &formatter_;
-    KeyValSink(AuFormatter &formatter) : formatter_(formatter) {}
-    friend AuFormatter;
+    AuWriter &writer_;
+    KeyValSink(AuWriter &writer) : writer_(writer) {}
+    friend AuWriter;
   public:
     template<typename V>
     void operator()(std::string_view key, V &&val) {
-      formatter_.kvs(key, std::forward<V>(val));
+      writer_.kvs(key, std::forward<V>(val));
     }
   };
 
   template<typename... Args>
-  AuFormatter &map(Args &&... args) {
+  AuWriter &map(Args &&... args) {
     msgBuf_.put(marker::ObjectStart);
     kvs(std::forward<Args>(args)...);
     msgBuf_.put(marker::ObjectEnd);
@@ -273,7 +272,7 @@ public:
   }
 
   template<typename... Args>
-  AuFormatter &array(Args &&... args) {
+  AuWriter &array(Args &&... args) {
     msgBuf_.put(marker::ArrayStart);
     vals(std::forward<Args>(args)...);
     msgBuf_.put(marker::ArrayEnd);
@@ -300,25 +299,25 @@ public:
   }
 
   // Interface to support SAX handlers
-  AuFormatter &startMap() {
+  AuWriter &startMap() {
     msgBuf_.put(marker::ObjectStart);
     return *this;
   }
-  AuFormatter &endMap() {
+  AuWriter &endMap() {
     msgBuf_.put(marker::ObjectEnd);
     return *this;
   }
-  AuFormatter &startArray() {
+  AuWriter &startArray() {
     msgBuf_.put(marker::ArrayStart);
     return *this;
   }
-  AuFormatter &endArray() {
+  AuWriter &endArray() {
     msgBuf_.put(marker::ArrayEnd);
     return *this;
   }
 
   template<class T>
-  AuFormatter &
+  AuWriter &
   value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
     if constexpr (std::is_signed_v<T>) {
       if (i >= 0 && i < 32) {
@@ -358,7 +357,7 @@ public:
   }
 
   template<class T>
-  AuFormatter &value(T f,
+  AuWriter &value(T f,
                      typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
     double d = static_cast<double>(f); // TODO should we support a float format?
     static_assert(sizeof(d) == 8);
@@ -369,7 +368,7 @@ public:
   }
 
   template <class Rep, class Period>
-  AuFormatter &value(const std::chrono::duration<Rep, Period> &time) {
+  AuWriter &value(const std::chrono::duration<Rep, Period> &time) {
     using namespace std::chrono;
     auto nanoDuration = duration_cast<nanoseconds>(time);
     uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
@@ -387,7 +386,7 @@ public:
    * limits). If false, it will force in-lining.
    * @return
    */
-  AuFormatter &value(const std::string_view sv,
+  AuWriter &value(const std::string_view sv,
                      std::optional<bool> intern = std::optional < bool > ()) {
     if (intern.has_value() && !intern.value()) {
       encodeString(sv);
@@ -397,36 +396,36 @@ public:
     return *this;
   }
 
-  AuFormatter &value(bool b) {
+  AuWriter &value(bool b) {
     msgBuf_.put(b ? marker::True : marker::False);
     return *this;
   }
 
-  AuFormatter &value(const char *s) { return value(std::string_view(s)); }
-  AuFormatter &value(const std::string &s) {
+  AuWriter &value(const char *s) { return value(std::string_view(s)); }
+  AuWriter &value(const std::string &s) {
     return value(std::string_view(s.c_str(), s.length()));
   }
-  AuFormatter &null() {
+  AuWriter &null() {
     msgBuf_.put(marker::Null);
     return *this;
   }
-  AuFormatter &value(std::nullptr_t) { return null(); }
+  AuWriter &value(std::nullptr_t) { return null(); }
 
   template<typename T>
-  AuFormatter &value(const T *t) {
+  AuWriter &value(const T *t) {
     if (t) value(*t);
     else null();
     return *this;
   }
 
   template<typename T>
-  AuFormatter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
+  AuWriter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
 
   template<typename T>
-  AuFormatter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
+  AuWriter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
 
   template<typename T>
-  AuFormatter &value(T val,
+  AuWriter &value(T val,
                      typename std::enable_if<std::is_enum<T>::value, void>::type * = 0) {
     return value(name(val));
   }
@@ -543,10 +542,35 @@ public:
   OutputTracker &tracker() { return tracker_; }
 };
 
+class AuVectorBuffer : public AuBuffer {
+  std::vector<char> v;
+public:
+  AuVectorBuffer(size_t size = 1024) {
+    v.reserve(size);
+  }
+  void put(char c) override {
+    v.push_back(c);
+  }
+  void write(const char *data, size_t size) override {
+    v.insert(v.end(), data, data + size);
+  }
+  size_t tellp() override {
+    return v.size();
+  }
+  std::string_view str() override {
+    return std::string_view(v.data(), v.size());
+  }
+  void clear() override {
+    v.clear();
+  }
+};
+
+
 class AuEncoder {
   static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
   AuStringIntern stringIntern_;
+  AuVectorBuffer buf_;
   size_t pos_;
   size_t lastDictLoc_;
   size_t lastDictSize_;
@@ -564,7 +588,7 @@ class AuEncoder {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
       AuStreamBuffer formatterOutput(output_);
-      AuFormatter af(formatterOutput, stringIntern_);
+      AuWriter af(formatterOutput, stringIntern_);
       auto newDictLoc = tell();
       af.raw('A');
       af.backref(newDictLoc - lastDictLoc_);
@@ -586,7 +610,7 @@ class AuEncoder {
   void write(const std::string_view &msg) {
     exportDict();
     AuStreamBuffer formatterOutput(output_);
-    AuFormatter af(formatterOutput, stringIntern_);
+    AuWriter af(formatterOutput, stringIntern_);
     auto thisLoc = tell();
     af.raw('V');
     af.backref(thisLoc - lastDictLoc_);
@@ -611,29 +635,6 @@ class AuEncoder {
 
 public:
 
-  class VectorBuffer : public AuBuffer {
-    std::vector<char> v;
-  public:
-    VectorBuffer(size_t size = 1024) {
-      v.reserve(size);
-    }
-    void put(char c) override {
-      v.push_back(c);
-    }
-    void write(const char *data, size_t size) override {
-      v.insert(v.end(), data, data + size);
-    }
-    size_t tellp() override {
-      return v.size();
-    }
-    std::string_view str() override {
-      return std::string_view(v.data(), v.size());
-    }
-    void clear() override {
-      v.clear();
-    }
-  };
-
   /**
    * @param output
    * @param purgeInterval The dictionary will be purged after this many records.
@@ -654,7 +655,7 @@ public:
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
     AuStreamBuffer formatterOutput(output_);
-    AuFormatter af(formatterOutput, stringIntern_);
+    AuWriter af(formatterOutput, stringIntern_);
     af.raw('H');
     af.value(FORMAT_VERSION);
     af.term();
@@ -664,14 +665,13 @@ public:
 
   template<typename F>
   ssize_t encode(F &&f) {
-    static VectorBuffer buf; // TODO: Make it a class variable
-    AuFormatter formatter(buf, stringIntern_);
+    AuWriter formatter(buf_, stringIntern_);
     f(formatter);
-    if (buf.tellp() != 0) {
+    if (buf_.tellp() != 0) {
       formatter.term();
-      write(buf.str());
+      write(buf_.str());
     }
-    buf.clear();
+    buf_.clear();
     return 0; // TODO: Return bytes written or negative error code
   }
 
@@ -680,7 +680,7 @@ public:
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
     AuStreamBuffer formatterOutput(output_);
-    AuFormatter af(formatterOutput, stringIntern_);
+    AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
     af.term();
     pos_ += formatterOutput.tracker().count();
@@ -698,7 +698,7 @@ public:
     lastDictSize_ = 0;
     lastDictLoc_ = tell();
     AuStreamBuffer formatterOutput(output_);
-    AuFormatter af(formatterOutput, stringIntern_);
+    AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
     af.term();
     pos_ += formatterOutput.tracker().count();

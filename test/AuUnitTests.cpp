@@ -82,31 +82,31 @@ TEST(AuStringIntern, ReIndex) {
 }
 
 struct AuFormatterTest : public ::testing::Test {
-  AuEncoder::VectorBuffer buf;
+  AuVectorBuffer buf;
   AuStringIntern stringIntern;
-  AuFormatter formatter;
+  AuWriter writer;
 
-  AuFormatterTest() : formatter(buf, stringIntern) {}
+  AuFormatterTest() : writer(buf, stringIntern) {}
 };
 
 TEST_F(AuFormatterTest, Null) {
-  formatter.null();
-  formatter.value(nullptr);
+  writer.null();
+  writer.value(nullptr);
   EXPECT_EQ("\x00\x00"sv, buf.str());
 }
 
 TEST_F(AuFormatterTest, Bool) {
-  formatter.value(true);
-  formatter.value(false);
+  writer.value(true);
+  writer.value(false);
   EXPECT_EQ("\x01\x02"sv, buf.str());
 }
 
 #define C(v) static_cast<char>(v)
 
 TEST_F(AuFormatterTest, Int) {
-  formatter.value(0).value(127).value(128);
-  formatter.value(-1).value(-127).value(-128);
-  formatter.value(0xff).value(0x100);
+  writer.value(0).value(127).value(128);
+  writer.value(-1).value(-127).value(-128);
+  writer.value(0xff).value(0x100);
 
   std::vector<char> ints = {
       // Small positives
@@ -125,10 +125,10 @@ TEST_F(AuFormatterTest, Int) {
 }
 
 TEST_F(AuFormatterTest, Int64) {
-  formatter.value(0x1234567890abcdef);
-  formatter.value(-0x1234567890abcdef);
-  formatter.value(0xf234567890abcdef);
-  formatter.value(0xffffFFFFffffFFFF);
+  writer.value(0x1234567890abcdef);
+  writer.value(-0x1234567890abcdef);
+  writer.value(0xf234567890abcdef);
+  writer.value(0xffffFFFFffffFFFF);
   std::vector<char> ints = {
       marker::PosInt64,
       C(0xef), C(0xcd), C(0xab), C(0x90), C(0x78), C(0x56), C(0x34), C(0x12),
@@ -146,10 +146,10 @@ TEST_F(AuFormatterTest, Time) {
   using namespace std::chrono;
   std::string expected;
 
-  formatter.value(nanoseconds(1));
+  writer.value(nanoseconds(1));
   expected += std::string("\x04\x01\x00\x00\x00\x00\x00\x00\x00", 9);
 
-  formatter.value(seconds(35));
+  writer.value(seconds(35));
   expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
 
   EXPECT_EQ(expected, buf.str());
@@ -157,18 +157,18 @@ TEST_F(AuFormatterTest, Time) {
 
 TEST_F(AuFormatterTest, Double) {
   double d = 5.9;
-  formatter.value(d);
+  writer.value(d);
   EXPECT_EQ(std::string("\x03\x9A\x99\x99\x99\x99\x99\x17\x40"), buf.str());
 }
 
 TEST_F(AuFormatterTest, Float) {
   float f = 5.9;
-  formatter.value(f);
+  writer.value(f);
   EXPECT_EQ(std::string("\x03\0\0\0\xA0\x99\x99\x17\x40", 9), buf.str());
 }
 
 TEST_F(AuFormatterTest, NaN) {
-  formatter.array(
+  writer.array(
       std::numeric_limits<float>::quiet_NaN(),
       std::numeric_limits<double>::quiet_NaN(),
       std::numeric_limits<long double>::quiet_NaN(), // converted to double
@@ -187,7 +187,7 @@ TEST_F(AuFormatterTest, NaN) {
 }
 
 TEST_F(AuFormatterTest, Inf) {
-  formatter.array(
+  writer.array(
       std::numeric_limits<double>::infinity(),
       -std::numeric_limits<double>::infinity(),
       std::numeric_limits<float>::infinity(),
@@ -206,13 +206,13 @@ TEST_F(AuFormatterTest, Inf) {
 }
 
 TEST_F(AuFormatterTest, ShortString) {
-  formatter.value("str");
+  writer.value("str");
   std::vector<char> str = {0x20 | 3u, 's', 't', 'r'};
   EXPECT_EQ(std::string(str.data(), str.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, LongString) {
-  formatter.value("aLongerString, longer than 32 chars, the important thing");
+  writer.value("aLongerString, longer than 32 chars, the important thing");
   EXPECT_EQ(
       "\x05\x38"sv
       "aLongerString, longer than 32 chars, the important thing"sv,
@@ -223,26 +223,26 @@ TEST_F(AuFormatterTest, InternString) {
   stringIntern.idx(std::string("aLongInternedString"), true);
   stringIntern.idx(std::string("another string"), true);
 
-  formatter.value("aLongInternedString", true);
-  formatter.value("another string", true);
+  writer.value("aLongInternedString", true);
+  writer.value("another string", true);
 
   std::vector<char> str = {(char)(0x80u | 0u), (char)(0x80u | 1u)};
   EXPECT_EQ(std::string(str.data(), str.size()), buf.str());
 }
 
 TEST_F(AuFormatterTest, EmptyMap) {
-  formatter.map();
+  writer.map();
   EXPECT_EQ(std::string("\x0d\x0e"), buf.str());
 }
 
 TEST_F(AuFormatterTest, FlatMap) {
-  formatter.map("Key1", "value1", "key1", "Value1");
+  writer.map("Key1", "value1", "key1", "Value1");
   EXPECT_EQ(std::string("\x0d\x24Key1\x26value1\x24key1\x26Value1\x0e"),
             buf.str());
 }
 
 TEST_F(AuFormatterTest, NestedMap) {
-  formatter.map("k1", "v1", "nested", formatter.mapVals([&](auto &sink) {
+  writer.map("k1", "v1", "nested", writer.mapVals([&](auto &sink) {
     sink(std::string_view("k2"), "v2");
   }));
   EXPECT_EQ(std::string("\x0d\x22k1\x22v1\x80\x0d\x22k2\x22v2\x0e\x0e"),
@@ -250,18 +250,18 @@ TEST_F(AuFormatterTest, NestedMap) {
 }
 
 TEST_F(AuFormatterTest, EmptyArray) {
-  formatter.array();
+  writer.array();
   EXPECT_EQ(std::string("\x0b\x0c"), buf.str());
 }
 
 TEST_F(AuFormatterTest, FlatArray) {
-  formatter.array(1, 2, 3);
+  writer.array(1, 2, 3);
   EXPECT_EQ(std::string("\x0b\x61\x62\x63\x0c"), buf.str());
 }
 
 TEST_F(AuFormatterTest, NestedArray) {
-  formatter.array(1, 2, formatter.arrayVals([&]() {
-    formatter.value(3).value(4);
+  writer.array(1, 2, writer.arrayVals([&]() {
+    writer.value(3).value(4);
   }));
   EXPECT_EQ(std::string("\x0b\x61\x62\x0b\x63\x64\x0c\x0c"), buf.str());
 }
