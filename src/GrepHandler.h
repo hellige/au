@@ -126,32 +126,32 @@ public:
            != container.cend();
   }
 
-  void onNull() override {
+  void onNull(size_t) override {
     incrCounter();
   }
 
-  void onBool(bool) override {
+  void onBool(size_t, bool) override {
     incrCounter();
   }
 
-  void onInt(int64_t value) override {
+  void onInt(size_t, int64_t value) override {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
-  void onUint(uint64_t value) override {
+  void onUint(size_t, uint64_t value) override {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
-  void onDouble(double value) override {
+  void onDouble(size_t, double value) override {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
-  void onDictRef(size_t dictIdx) override {
+  void onDictRef(size_t, size_t dictIdx) override {
     assert(dictIdx < dictionary_.size());
     checkString(dictionary_[dictIdx]); // TODO optimize by indexing dict first
     incrCounter();
@@ -175,7 +175,7 @@ public:
     incrCounter();
   }
 
-  void onStringStart(size_t len) override {
+  void onStringStart(size_t, size_t len) override {
     str_.clear();
     str_.reserve(len);
   }

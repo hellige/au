@@ -1,11 +1,11 @@
 #pragma once
 
+#include "au/ParseError.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -14,47 +14,30 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstddef>
+#include <chrono>
 
 // TODO add explicit 4-byte float support
 // TODO add small int and small dict-ref support
 // TODO add short string-length support (roll into 'S')
 // TODO add position tracking and length validation
 
-#define THROW(stuff) \
-  do { \
-    std::ostringstream _message; \
-    _message << stuff; \
-    throw parse_error(_message.str()); \
-  } while (0)
-
-#define THROW_RT(stuff) \
-  do { \
-    std::ostringstream _message; \
-    _message << stuff; \
-    throw std::runtime_error(_message.str()); \
-  } while (0)
-
-namespace {
-
-struct parse_error : std::runtime_error {
-  explicit parse_error(const std::string &what)
-      : std::runtime_error(what) {}
-};
-
-
 class FileByteSource {
+protected:
   const size_t BUFFER_SIZE;
 
-  char *buf_; //< Working buffer
+  char *buf_;   //< Working buffer
   size_t pos_;  //< Current position in the underlying data stream
   char *cur_;   //< Current position in the working buffer
   char *limit_; //< End of the current working buffer
   int fd_;      //< Underlying data stream
 
+  bool waitForData_;
+
 public:
-  explicit FileByteSource(const std::string &fname, size_t bufferSizeInK = 256)
+  explicit FileByteSource(const std::string &fname, bool waitForData,
+                          size_t bufferSizeInK = 256)
       : BUFFER_SIZE(bufferSizeInK * 1024), buf_(new char[BUFFER_SIZE]),
-        pos_(0), cur_(buf_), limit_(buf_)
+        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData)
   {
     if (fname == "-") {
       fd_ = fileno(stdin);
@@ -66,7 +49,6 @@ public:
 #ifndef __APPLE__
     ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
 #endif
-    read();
   }
 
   FileByteSource(const FileByteSource &) = delete;
@@ -176,11 +158,20 @@ public:
     }
   }
 
-private:
+protected:
+  /// Free space in the buffer
+  size_t buffFree() const {
+    return BUFFER_SIZE - (limit_ - buf_);
+  }
+
+  /// @return true if some data was read, false of 0 bytes were read.
   bool read() {
+    return read(BUFFER_SIZE / 16);
+  }
+  bool read(size_t minHistSz) {
     // Keep a minimum amount of consumed data in the buffer so we can seek back
     // even in non-seekable data streams.
-    const auto minHistSz = (BUFFER_SIZE / 16);
+    //const auto minHistSz = (BUFFER_SIZE / 16);
     if (cur_ > buf_ + minHistSz) {
       auto startOfHistory = cur_ - minHistSz;
       memmove(buf_, startOfHistory,
@@ -190,15 +181,22 @@ private:
       limit_ -= shift;
     }
 
-    const auto freeSpace = BUFFER_SIZE - (limit_ - buf_);
-    ssize_t bytes_read = ::read(fd_, limit_, static_cast<size_t>(freeSpace));
-    if (bytes_read == -1)
-      throw std::runtime_error("read failed");
-    if (!bytes_read) return false;
-    limit_ += bytes_read;
+    ssize_t bytesRead = 0;
+    do {
+      bytesRead = ::read(fd_, limit_, buffFree());
+      if (bytesRead < 0) // TODO: && errno != EAGAIN ?
+        THROW_RT("Error reading file: " << strerror(errno));
+      if (bytesRead == 0 && waitForData_)
+        sleep(1);
+    } while (!bytesRead && waitForData_);
+
+    if (!bytesRead) return false;
+    limit_ += bytesRead;
     return true;
   }
 };
+
+namespace {
 
 class BaseParser {
 protected:
@@ -218,6 +216,13 @@ protected:
     static_assert(sizeof(val) == 8, "sizeof(double) must be 8");
     source_.read(&val, sizeof(val));
     return val;
+  }
+
+  std::chrono::nanoseconds readTime() const {
+    uint64_t nanos;
+    source_.read(&nanos, sizeof(nanos));
+    std::chrono::nanoseconds n(nanos);
+    return n;
   }
 
   uint64_t readVarint() const {
@@ -240,9 +245,9 @@ protected:
   }
 
   template<typename Handler>
-  void parseString(Handler &handler) const {
+  void parseString(size_t pos, Handler &handler) const {
     auto len = readVarint();
-    handler.onStringStart(len);
+    handler.onStringStart(pos, len);
     source_.read(len, [&](std::string_view fragment) {
       handler.onStringFragment(fragment);
     });
@@ -259,37 +264,45 @@ public:
       : BaseParser(source), handler_(handler) {}
 
   void value() const {
+    size_t sov = source_.pos();
     auto c = source_.next();
     if (c.isEof())
       THROW("Unexpected EOF at start of value");
+    if (c.charValue() & 0x80) {
+      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      return;
+    }
     switch (c.charValue()) {
       case 'T':
-        handler_.onBool(true);
+        handler_.onBool(sov, true);
         break;
       case 'F':
-        handler_.onBool(false);
+        handler_.onBool(sov, false);
         break;
       case 'N':
-        handler_.onNull();
+        handler_.onNull(sov);
         break;
       case 'I':
-        handler_.onUint(readVarint());
+        handler_.onUint(sov, readVarint());
         break;
       case 'J': {
         auto i = readVarint();
         if (i > std::numeric_limits<int64_t>::max() - 1)
           THROW("Signed int overflows int64_t: -" << i);
-        handler_.onInt(-static_cast<int64_t>(i));
+        handler_.onInt(sov, -static_cast<int64_t>(i));
       }
         break;
       case 'D':
-        handler_.onDouble(readDouble());
+        handler_.onDouble(sov, readDouble());
+        break;
+      case 't':
+        handler_.onTime(sov, readTime());
         break;
       case 'X':
-        handler_.onDictRef(readVarint());
+        handler_.onDictRef(sov, readVarint());
         break;
       case 'S':
-        parseString(handler_);
+        parseString(sov, handler_);
         break;
       case '[':
         parseArray();
@@ -307,6 +320,10 @@ private:
     auto c = source_.peek();
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
+    if (c.charValue() & 0x80) {
+      value();
+      return;
+    }
     switch (c.charValue()) {
       case 'S':
       case 'X':
@@ -316,6 +333,7 @@ private:
         THROW("Unexpected character at start of key: " << c);
     }
   }
+
   void parseArray() const {
     handler_.onArrayStart();
     while (source_.peek() != ']') value();
@@ -360,6 +378,7 @@ private:
             THROW("Bad format version: expected " << AU_FORMAT_VERSION
                                                   << ", got " << version);
           }
+          handler_.onHeader(version);
         } else {
           THROW("Expected version number"); // TODO
         }
@@ -373,9 +392,10 @@ private:
         auto backref = readVarint();
         handler_.onDictAddStart(backref);
         while (source_.peek() != 'E') {
+          size_t sov = source_.pos();
           if (source_.next() != 'S')
             THROW("Expected a string"); // TODO
-          parseString(handler_);
+          parseString(sov, handler_);
         }
         term();
         break;
@@ -411,15 +431,19 @@ struct NoopValueHandler {
   virtual void onObjectEnd() {}
   virtual void onArrayStart() {}
   virtual void onArrayEnd() {}
-  virtual void onNull() {}
-  virtual void onBool(bool) {}
-  virtual void onInt(int64_t) {}
-  virtual void onUint(uint64_t) {}
-  virtual void onDouble(double) {}
-  virtual void onDictRef(size_t) {}
-  virtual void onStringStart(size_t) {}
+  virtual void onNull([[maybe_unused]] size_t pos) {}
+  virtual void onBool([[maybe_unused]] size_t pos, bool) {}
+  virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
+  virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
+  virtual void onDouble([[maybe_unused]] size_t pos, double) {}
+  virtual void onTime([[maybe_unused]] size_t pos,
+                      [[maybe_unused]] std::chrono::nanoseconds nanos) {}
+  virtual void onDictRef([[maybe_unused]] size_t pos,
+                         [[maybe_unused]] size_t dictIdx) {}
+  virtual void onStringStart([[maybe_unused]] size_t sov,
+                             [[maybe_unused]] size_t length) {}
   virtual void onStringEnd() {}
-  virtual void onStringFragment(std::string_view) {}
+  virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
 };
 
 struct NoopRecordHandler {
@@ -430,6 +454,7 @@ struct NoopRecordHandler {
                        FileByteSource &source) {
     source.skip(len);
   }
+  virtual void onHeader([[maybe_unused]] uint64_t version) {}
   virtual void onDictClear() {}
   virtual void onDictAddStart([[maybe_unused]] size_t relDictPos) {}
   virtual void onStringStart([[maybe_unused]] size_t strLen) {}
@@ -446,13 +471,13 @@ public:
       : filename_(filename) {}
 
   template<typename H>
-  void decode(H &handler) const {
-    FileByteSource source(filename_);
+  void decode(H &handler, bool waitForData) const {
+    FileByteSource source(filename_, waitForData);
     try {
       RecordParser<H>(source, handler).parseStream();
       handler.onParseEnd();
     } catch (parse_error &e) {
-      std::cout << e.what() << std::endl;
+      std::cerr << e.what() << std::endl;
     }
   }
 };

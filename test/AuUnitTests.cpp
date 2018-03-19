@@ -48,10 +48,40 @@ TEST(AuStringIntern, InternFrequentStrings) {
   }
 }
 
+TEST(AuStringIntern, ReIndex) {
+  AuStringIntern si(1, 2, 10);
+  auto &dict = si.dict();
+
+  using namespace std::string_literals;
+  si.idx("twice"s, true); // idx 0
+  si.idx("once"s, true);  // idx 1
+  si.idx("thrice"s, true);// idx 2
+  si.idx("twice"s, true);
+  si.idx("thrice"s, true);
+  si.idx("thrice"s, true);
+
+  EXPECT_EQ(3, dict.size());
+  EXPECT_EQ("twice"s, dict[0]);
+  EXPECT_EQ("once"s, dict[1]);
+  EXPECT_EQ("thrice"s, dict[2]);
+
+  EXPECT_EQ(1, si.reIndex(2));
+
+  EXPECT_EQ(2, dict.size());
+  EXPECT_EQ("thrice"s, dict[0]);
+  EXPECT_EQ("twice"s, dict[1]);
+
+  EXPECT_EQ(0, *si.idx("thrice"s, true));
+  EXPECT_EQ(1, *si.idx("twice"s, true));
+
+  si.idx("quadrice"s, true);
+  EXPECT_EQ(2, *si.idx("quadrice"s, true));
+}
+
 struct AuFormatterTest : public ::testing::Test {
-  Au::VectorBuffer buf;
+  AuEncoder::VectorBuffer buf;
   AuStringIntern stringIntern;
-  AuFormatter<Au::VectorBuffer> formatter;
+  AuFormatter<AuEncoder::VectorBuffer> formatter;
 
   AuFormatterTest() : formatter(buf, stringIntern) {}
 };
@@ -107,6 +137,19 @@ TEST_F(AuFormatterTest, Int64) {
       C(0xff), C(0xff), C(0x01)
   };
   EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
+}
+
+TEST_F(AuFormatterTest, Time) {
+  using namespace std::chrono;
+  std::string expected;
+
+  formatter.value(nanoseconds(1));
+  expected += std::string("t\x01\x00\x00\x00\x00\x00\x00\x00", 9);
+
+  formatter.value(seconds(35));
+  expected += std::string("t\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
+
+  EXPECT_EQ(expected, buf.str());
 }
 
 TEST_F(AuFormatterTest, Double) {
@@ -216,12 +259,12 @@ TEST_F(AuFormatterTest, NestedArray) {
 
 
 TEST(FileByteSource, SeekStdio) {
-  FileByteSource fbs("/dev/zero");
+  FileByteSource fbs("/dev/zero", false);
   EXPECT_THROW(fbs.seek(5), std::runtime_error);
 }
 
 TEST(Au, creation) {
   std::ostringstream os;
-  Au au(os);
+  AuEncoder au(os);
 }
 

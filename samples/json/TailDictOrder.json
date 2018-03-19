@@ -1,0 +1,4 @@
+"Ensure dictionary is created with items in order"
+{"AnInternKey1":1,"AnInternKey2":2}
+"A new set of objects"
+{"AnInternKey3":3,"AnInternKey4":4}

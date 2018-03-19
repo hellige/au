@@ -1,7 +1,7 @@
 #include "main.h"
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
-#include "JsonHandler.h"
+#include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 
 #include <cmath>
@@ -44,15 +44,15 @@ int help(int, char **) {
 int cat(int argc, char **argv) {
   argc -= 2; argv += 2;
   Dictionary dictionary;
-  JsonHandler valueHandler(dictionary);
-  RecordHandler<JsonHandler> recordHandler(dictionary, valueHandler);
+  JsonOutputHandler valueHandler(dictionary);
+  AuRecordHandler<JsonOutputHandler> recordHandler(dictionary, valueHandler);
 
   if (argc == 0) {
-    AuDecoder("-").decode(recordHandler);
+    AuDecoder("-").decode(recordHandler, false);
   } else {
     for (int i = 0; i < argc; i++) {
       std::string filename(argv[i]);
-      AuDecoder(filename).decode(recordHandler);
+      AuDecoder(filename).decode(recordHandler, false);
     }
   }
   return 0;
@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
   commands["--version"] = version;
   commands["--help"] = help;
   commands["cat"] = cat;
+  commands["au2json"] = cat;
   commands["tail"] = tail;
   commands["grep"] = grep;
   commands["enc"] = json2au;

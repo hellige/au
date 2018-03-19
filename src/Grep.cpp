@@ -1,6 +1,6 @@
 #include "main.h"
 #include "AuDecoder.h"
-#include "JsonHandler.h"
+#include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 
 #include "tclap/CmdLine.h"
@@ -51,7 +51,7 @@ bool setDoublePattern(Pattern &pattern, std::string &intPat) {
 
 void usage() {
   std::cout
-      << "usage: au grep [options] <pattern> <path>...\n"
+      << "usage: au grep [options] [--] <pattern> <path>...\n"
       << "\n"
       << "  -h --help        show usage and exit\n"
       << "  -k --key <key>   match pattern only in object values with key <key>\n"
@@ -85,16 +85,22 @@ public:
 
 }
 
-int grep(int argc, char **argv) {
+// TODO teach grep to recognize null/true/false when appropriate
+// TODO teach grep how to do -C/-A/-B. keep a running position of sor for nth record back and n "force dump" records forward, rewind and dump on match, etc
+//      dumping up to current would naturally move running position forward to rewind would naturally still work.
+// TODO teach grep -c
+
+int grep(int argc, const char * const *argv) {
   Dictionary dictionary;
-  JsonHandler jsonHandler(dictionary);
+  JsonOutputHandler jsonHandler(dictionary);
 
   try {
     UsageVisitor usageVisitor;
-    TCLAP::CmdLine cmd("Grep sub-command", ' ', AU_VERSION, false);
+    TCLAP::CmdLine cmd("", ' ', "", false);
     TCLAP::UnlabeledValueArg<std::string> subCmd(
         "grep", "grep", true, "grep", "command", cmd);
     TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+
     TCLAP::ValueArg<std::string> key(
         "k", "key", "key", false, "", "string", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
@@ -105,22 +111,23 @@ int grep(int argc, char **argv) {
         "pattern", "", true, "", "pattern", cmd);
     TCLAP::UnlabeledMultiArg<std::string> fileNames(
         "fileNames", "", false, "filename", cmd);
+
     GrepOutput output;
     cmd.setOutput(&output);
     cmd.parse(argc, argv);
-
-    if (help.isSet()) {
-      usage();
-      return 0;
-    }
 
     Pattern pattern;
     if (key.isSet()) pattern.keyPattern = key.getValue();
 
     bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
-    bool defaultMatch = !(matchInt.isSet()
-                          || matchDouble.isSet()
-                          || explicitStringMatch);
+    bool numericMatch = matchInt.isSet() || matchDouble.isSet();
+    bool defaultMatch = !(numericMatch || explicitStringMatch);
+
+    if (matchSubstring.isSet() && numericMatch) {
+      std::cerr << "-u (substring search) is not compatible with -i/-d."
+                << std::endl;
+      return 1;
+    }
 
     // by default, we'll try to match anything, but won't be upset if the
     // pattern fails to parse as any particular thing...
@@ -149,21 +156,20 @@ int grep(int argc, char **argv) {
       }
     }
 
-    GrepHandler<JsonHandler> grepHandler(
+    GrepHandler<JsonOutputHandler> grepHandler(
         dictionary, jsonHandler, std::move(pattern));
-    RecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
+    AuRecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
 
     if (fileNames.getValue().empty()) {
-      std::cerr << "Grepping stdin\n";
-      AuDecoder("-").decode(recordHandler);
+      AuDecoder("-").decode(recordHandler, false);
     } else {
       for (auto &f : fileNames.getValue()) {
-        std::cerr << "Grepping " << f << "\n";
-        AuDecoder(f).decode(recordHandler);
+        AuDecoder(f).decode(recordHandler, false);
       }
     }
   } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    std::cerr << "error: " << e.error() << " for arg " << e.argId()
+              << std::endl;
     return 1;
   }
 

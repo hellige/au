@@ -1,13 +1,10 @@
-  au grep [-k "eventID"] <-i 12235 | [-f] "string i want">
-    -k  --key
-    -f  --full (exact full string match)
-    -i  --int  (search for numeric value)
   au bisect -k eventId 123412321321
   au slice -k eventId 123412321321 13412312312
   au slice [-e] -k estdEventTime 2018-05-16T14:40:00 2018-05-16T15:40:00
     -e  --encode (output as encoded value rather than json)
 
-- Stats
-  - Count of ints that are below 64 (or 128)
-  - Count of string refs with IDs below 64 (or 128)
-- New value type of T (time)
+  - encode string lengths as small ints
+  - encode small int values as small ints
+  - combine small-int and varint encoding? burns another bit in the marker (or at least one value)
+  - encode 7 or 8-byte ints as fixed-width 8-byte ints
+  - emit empty dict-add record periodically to keep backrefs from getting too big? (nice to have some stats on those)

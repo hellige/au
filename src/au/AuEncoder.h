@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <list>
 #include <map>
@@ -10,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-class Au;
+class AuEncoder;
 
 class AuStringIntern {
 
@@ -123,6 +126,7 @@ public:
     if (clearUsageTracker) internCache_.clear();
   }
 
+  /// Removes strings that are used less than "threshold" times from the hash
   size_t purge(size_t threshold) {
     // Note: We can't modify dictInOrder_ or else the internIndex will no longer
     // match.
@@ -135,6 +139,31 @@ public:
         ++it;
       }
     }
+    return purged;
+  }
+
+  /// Purges the dictionary and re-idexes the remaining entries so the more
+  /// frequent ones are at the beginning (and have smaller indices).
+  size_t reIndex(size_t threshold) {
+    size_t purged = purge(threshold);
+
+    dictInOrder_.clear();
+    dictInOrder_.reserve(dictionary_.size());
+    for (auto &pr : dictionary_) {
+      dictInOrder_.emplace_back(pr.first);
+    }
+
+    std::sort(dictInOrder_.begin(), dictInOrder_.end(),
+              [this](const auto &a, const auto &b) {
+                // Invert comparison b/c we want frequent strings first
+                return dictionary_[a].occurences > dictionary_[b].occurences;
+              });
+    size_t idx = 0;
+    for (auto &v : dictInOrder_) {
+      dictionary_[v].internIndex = idx++;
+    }
+
+    nextEntry_ = dictInOrder_.size();
     return purged;
   }
 
@@ -167,6 +196,8 @@ class AuFormatter {
     auto idx = stringIntern.idx(sv, intern);
     if (!idx) {
       encodeString(sv);
+    } else if (*idx < 0x80) {
+      msgBuf_.put(0x80 | *idx);
     } else {
       msgBuf_.put('X');
       valueInt(*idx);
@@ -280,6 +311,18 @@ public:
     return *this;
   }
 
+  template <class Rep, class Period>
+  AuFormatter &value(const std::chrono::duration<Rep, Period> &time) {
+    using namespace std::chrono;
+    auto nanoDuration = duration_cast<nanoseconds>(time);
+    uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
+
+    msgBuf_.put('t');
+    auto *dPtr = reinterpret_cast<char *>(&nanos);
+    msgBuf_.write(dPtr, sizeof(nanos));
+    return *this;
+  }
+
   /**
    * @param sv
    * @param intern If uninitialized, it will intern (or not) based on frequency
@@ -336,7 +379,7 @@ public:
   value(F &&func) { func(); }
 
 protected:
-  friend Au;
+  friend AuEncoder;
   void raw(char c) {
     msgBuf_.put(c);
   }
@@ -419,7 +462,7 @@ protected:
 };
 
 
-class Au {
+class AuEncoder {
   static constexpr unsigned FORMAT_VERSION = 1;
   std::ostream &output_;
   OutputTracker outputTracker_;
@@ -430,6 +473,7 @@ class Au {
   size_t records_;
   size_t purgeInterval_;
   size_t purgeThreshold_;
+  size_t reindexInterval_;
   size_t clearThreshold_;
 
   size_t tell() const {
@@ -472,7 +516,11 @@ class Au {
 
     pos_ += tracker.count();
 
-    if (records_ % purgeInterval_ == 0) {
+    if (reindexInterval_ && (records_ % reindexInterval_ == 0)) {
+      reIndexDictionary(purgeThreshold_);
+    }
+
+    if (purgeInterval_ && (records_ % purgeInterval_ == 0) && lastDictSize_) {
       purgeDictionary(purgeThreshold_);
     }
 
@@ -509,17 +557,22 @@ public:
 
   /**
    * @param output
-   * @param purgeInterval The dictionary will be purged after this many records
+   * @param purgeInterval The dictionary will be purged after this many records.
+   * A value of 0 means "never".
    * @param purgeThreshold Entries with a count less than this will be purged
+   * when a purge or reindex is done.
+   * @param reindexInterval The dictionary will be reindexed after this many
+   * records. A value of 0 means "never". A re-index involves a purge.
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  Au(std::ostream &output, size_t purgeInterval = 250'000,
-     size_t purgeThreshold = 50, size_t clearThreshold = 1400)
+  AuEncoder(std::ostream &output, size_t purgeInterval = 250'000,
+     size_t purgeThreshold = 50, size_t reindexInterval = 500'000,
+     size_t clearThreshold = 1400)
       : output_(output), outputTracker_(output),
         pos_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
-        clearThreshold_(clearThreshold)
+        reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
     OutputTracker outputTracker(output_);
     AuFormatter af(output_, stringIntern_);
@@ -556,6 +609,19 @@ public:
   /// Removes strings that are used less than "threshold" times from the hash
   void purgeDictionary(size_t threshold) {
     stringIntern_.purge(threshold);
+  }
+
+  /// Purges the dictionary and re-idexes the remaining entries so the more
+  /// frequent ones are at the beginning (and have smaller indices).
+  void reIndexDictionary(size_t threshold) {
+    stringIntern_.reIndex(threshold);
+    lastDictSize_ = 0;
+    lastDictLoc_ = tell();
+    OutputTracker tracker(output_);
+    AuFormatter af(output_, stringIntern_);
+    af.raw('C');
+    af.term();
+    pos_ += tracker.count();
   }
 
   auto getStats() const {

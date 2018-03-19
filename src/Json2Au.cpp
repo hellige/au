@@ -7,6 +7,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <regex>
 #include <stdio.h>
 #include <string>
 #include <string.h>
@@ -21,6 +22,8 @@ class JsonSaxHandler
   AuFormatter<Buffer> &formatter;
   std::optional<bool> intern;
   bool toInt;
+  const std::regex &timeRegExp;
+  size_t &timeConversionAttempts, &timeConversionFailures;
 
   bool tryInt(const char *str, SizeType length) {
     // 3 extra bytes for: '-', \0 and 1 extra digit (we have no max_digits10)
@@ -47,9 +50,47 @@ class JsonSaxHandler
     return true;
   }
 
+  bool tryTime(const char *str, SizeType length) {
+    using namespace std::chrono;
+
+    timeConversionAttempts++;
+
+    std::cmatch m;
+    if (std::regex_match(str, str + length, m, timeRegExp)) {
+      std::tm tm;
+      memset(&tm, 0, sizeof(tm));
+
+      // Note: tm_year is relative to 1900!
+      tm.tm_year  = static_cast<int>(strtol(m.str(1).c_str(), nullptr, 10))
+                    - 1900;
+      tm.tm_mon   = static_cast<int>(strtol(m.str(2).c_str(), nullptr, 10)) - 1;
+      tm.tm_mday  = static_cast<int>(strtol(m.str(3).c_str(), nullptr, 10));
+      tm.tm_hour  = static_cast<int>(strtol(m.str(4).c_str(), nullptr, 10));
+      tm.tm_min   = static_cast<int>(strtol(m.str(5).c_str(), nullptr, 10));
+      tm.tm_sec   = static_cast<int>(strtol(m.str(6).c_str(), nullptr, 10));
+      auto mics = strtol(m.str(7).c_str(), nullptr, 10);
+
+      std::time_t tt = timegm(&tm);
+      if (tt == -1) return false;
+
+      formatter.value(seconds(tt) + microseconds(mics));
+
+      return true;
+    } else {
+      timeConversionFailures++;
+      return false;
+    }
+  }
+
 public:
-  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter)
-      : formatter(formatter), toInt(false) {}
+  explicit JsonSaxHandler(AuFormatter<Buffer> &formatter,
+                          const std::regex &timeRegExp,
+                          size_t &timeConversionAttempts,
+                          size_t &timeConversionFailures)
+      : formatter(formatter), toInt(false), timeRegExp(timeRegExp),
+        timeConversionAttempts(timeConversionAttempts),
+        timeConversionFailures(timeConversionFailures)
+  {}
 
   bool Null() { formatter.null(); return true; }
   bool Bool(bool b) { formatter.value(b); return true; }
@@ -63,6 +104,8 @@ public:
     if (toInt) {
       toInt = false;
       if (tryInt(str, length)) return true;
+    } else if (length == sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu") - 1) {
+      if (tryTime(str, length)) return true;
     }
     formatter.value(std::string_view(str, length), intern);
     intern.reset();
@@ -108,18 +151,28 @@ public:
 
 } // namespace
 
-int json2au(int argc, char **argv) {
+int json2au(int argc, const char * const *argv) {
   argc -= 2; argv += 2;
 
   if (argc < 2 || argc > 3) {
     return -1;
   }
-  std::string inFName(argv[0]);
-  std::string outFName(argv[1]);
 
+  std::string inFName("-"), outFName("-");
   size_t maxEntries = std::numeric_limits<size_t>::max();
-  if (argc >= 3) {
-    maxEntries = strtoull(argv[2], nullptr, 0);
+
+  switch (argc) {
+    case 3:
+      maxEntries = strtoull(argv[2], nullptr, 0);
+      [[fallthrough]];
+    case 2:
+      outFName = argv[1];
+      [[fallthrough]];
+    case 1:
+      inFName = argv[0];
+      [[fallthrough]];
+    default:
+      break;
   }
 
   FILE *inF;
@@ -147,7 +200,7 @@ int json2au(int argc, char **argv) {
     outBuf = outFileStream.rdbuf();
   }
   std::ostream out(outBuf);
-  Au au(out, 250'000, 100);
+  AuEncoder au(out, 250'000, 100);
 
   char readBuffer[65536];
   FileReadStream in(inF, readBuffer, sizeof(readBuffer));
@@ -155,11 +208,15 @@ int json2au(int argc, char **argv) {
   Reader reader;
   ParseResult res;
   size_t entriesProcessed = 0;
+  size_t timeConversionAttempts = 0, timeConversionFailures = 0;
+  std::regex timeRegExp(
+      R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re");
   auto lastTime = std::chrono::steady_clock::now();
   int lastDictSize = 0;
   while (res) {
     au.encode([&](auto &f) {
-      JsonSaxHandler handler(f);
+      JsonSaxHandler handler(f, timeRegExp,
+                             timeConversionAttempts, timeConversionFailures);
       static constexpr auto parseOpt = kParseStopWhenDoneFlag +
                                        kParseFullPrecisionFlag +
                                        kParseNanAndInfFlag;
@@ -170,8 +227,9 @@ int json2au(int argc, char **argv) {
     if (entriesProcessed % 10'000 == 0) {
       auto stats = au.getStats();
       auto tNow = std::chrono::steady_clock::now();
-      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(tNow - lastTime);
-      std::cerr << "Processed: " << stats["Records"] << " entries in "
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
+                     (tNow - lastTime);
+      std::cerr << "Processed: " << stats["Records"] / 1'000 << "k entries in "
                 << elapsed.count() << "ms. DictSize: " << stats["DictSize"]
                 << " DictDelta: " << stats["DictSize"] - lastDictSize
                 << " HashSize: " << stats["HashSize"]
@@ -183,8 +241,13 @@ int json2au(int argc, char **argv) {
 
     if (entriesProcessed > maxEntries) break;
   }
+  std::cerr << "Time conversion attempts: " << timeConversionAttempts
+            << " failures: " << timeConversionFailures << " ("
+            << (100 * timeConversionFailures / timeConversionAttempts)
+            << "%)\n";
 
   fclose(inF);
+  outFileStream.close();
 
   if (res.Code() == kParseErrorNone || res.Code() == kParseErrorDocumentEmpty) {
     return 0;

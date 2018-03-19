@@ -6,7 +6,7 @@ AuFile          = HeaderRecord, {NonHeaderRecord};
 HeaderRecord    = 'H', AuVersion, EndOfRecord;
 ClearDictRecord = 'C', EndOfRecord;
 AddDictRecord   = 'A', RelDictLocation, {StringValue}, EndOfRecord;
-ValueRecord     = 'V', RelDictLocation, ValueLength, AnyValue, EndOfRecord; 
+ValueRecord     = 'V', RelDictLocation, ValueLength, AnyValue, EndOfRecord;
 EndOfRecord     = 'E', '\n';
 
 AuVersion       = UintValue;
@@ -22,7 +22,7 @@ NullValue       = 'N';
 DoubleValue     = 'D', LEDouble;
 StringValue     = InternString | InlineString;
 ObjectValue     = '{', {KeyValue, AnyValue}, '}'
-ArrayValue      = '[', {AnyValue}, ']' 
+ArrayValue      = '[', {AnyValue}, ']'
 KeyValue        = StringValue
 AnyValue        = UintValue | SintValue | TrueValue | FalseValue | NullValue | DoubleValue | StringValue;
 
@@ -35,7 +35,7 @@ LEDouble        = ? a double value - 8 bytes little-endian ?
 
 Explanations
 ============
-- `RelDictLocation` is the offset from the start of the `ValueRecord` to the previous `ClearDictRecord` or `AddDictRecord` record. 
+- `RelDictLocation` is the offset from the start of the `ValueRecord` to the previous `ClearDictRecord` or `AddDictRecord` record.
 - `ClearDictRecord` invalidates all the interned string IDs
 - `AddDictRecord` adds one or more strings to the interned string dictionary
 - `Bytes` can be any byte sequence.
