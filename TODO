@@ -8,3 +8,6 @@
   - combine small-int and varint encoding? burns another bit in the marker (or at least one value)
   - encode 7 or 8-byte ints as fixed-width 8-byte ints
   - emit empty dict-add record periodically to keep backrefs from getting too big? (nice to have some stats on those)
+
+
+  - the json parser in the encoder chokes on nan rather than NaN, but there isn't any kind of error. why?

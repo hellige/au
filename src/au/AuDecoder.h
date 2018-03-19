@@ -1,6 +1,7 @@
 #pragma once
 
-#include "ParseError.h"
+#include "au/ParseError.h"
+#include "au/AuCommon.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -208,7 +209,13 @@ protected:
   void expect(char e) const {
     auto c = source_.next();
     if (c == e) return;
-    THROW("Unexpected character: '" << c);
+    THROW("Unexpected character: " << c);
+  }
+
+  uint32_t readBackref() const {
+    uint32_t val;
+    source_.read(&val, sizeof(val));
+    return val;
   }
 
   double readDouble() const {
@@ -245,13 +252,23 @@ protected:
   }
 
   template<typename Handler>
-  void parseString(size_t pos, Handler &handler) const {
-    auto len = readVarint();
+  void parseString(size_t pos, size_t len, Handler &handler) const {
     handler.onStringStart(pos, len);
     source_.read(len, [&](std::string_view fragment) {
       handler.onStringFragment(fragment);
     });
     handler.onStringEnd();
+  }
+
+  template<typename Handler>
+  void parseString(size_t pos, Handler &handler) const {
+    auto len = readVarint();
+    parseString(pos, len, handler);
+  }
+
+  void term() const {
+    expect(marker::RecordEnd);
+    expect('\n');
   }
 };
 
@@ -272,42 +289,68 @@ public:
       handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
     }
+    int val = (uint8_t)c.charValue() & ~0xe0;
+    if (c.charValue() & 0x40) {
+      if (c.charValue() & 0x20)
+        handler_.onUint(sov, val);
+      else
+        handler_.onInt(sov, -val);
+      return;
+    }
+    if (c.charValue() & 0x20) {
+      parseString(sov, val, handler_);
+      return;
+    }
     switch (c.charValue()) {
-      case 'T':
+      case marker::True:
         handler_.onBool(sov, true);
         break;
-      case 'F':
+      case marker::False:
         handler_.onBool(sov, false);
         break;
-      case 'N':
+      case marker::Null:
         handler_.onNull(sov);
         break;
-      case 'I':
+      case marker::Varint:
         handler_.onUint(sov, readVarint());
         break;
-      case 'J': {
+      case marker::NegVarint: {
         auto i = readVarint();
-        if (i > std::numeric_limits<int64_t>::max() - 1)
+        if (i > std::numeric_limits<int64_t>::max() - 1) // TODO i don't think this is the right check...
           THROW("Signed int overflows int64_t: -" << i);
         handler_.onInt(sov, -static_cast<int64_t>(i));
-      }
         break;
-      case 'D':
+      }
+      case marker::PosInt64: {
+        uint64_t val;
+        source_.read(&val, sizeof(val));
+        handler_.onUint(sov, val);
+        break;
+      }
+      case marker::NegInt64: {
+        uint64_t val;
+        source_.read(&val, sizeof(val));
+        if (val > std::numeric_limits<int64_t>::max() - 1)
+          THROW("Signed int overflows int64_t: -" << val);
+        handler_.onUint(sov, -static_cast<int64_t>(val));
+        break;
+      }
+      case marker::Double:
         handler_.onDouble(sov, readDouble());
         break;
-      case 't':
+      case marker::Timestamp:
         handler_.onTime(sov, readTime());
         break;
-      case 'X':
+      case marker::DictRef:
         handler_.onDictRef(sov, readVarint());
         break;
-      case 'S':
+      case marker::String:
         parseString(sov, handler_);
         break;
-      case '[':
+      case marker::ArrayStart:
         parseArray();
         break;
-      case '{':
+      case marker::ObjectStart:
         parseObject();
         break;
       default:
@@ -317,6 +360,7 @@ public:
 
 private:
   void key() const {
+      // TODO clean up... this is ugly and redundant. also see the dict-add case
     auto c = source_.peek();
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
@@ -324,9 +368,13 @@ private:
       value();
       return;
     }
+    if ((c.charValue() & ~0x1f) == 0x20) {
+      value();
+      return;
+    }
     switch (c.charValue()) {
-      case 'S':
-      case 'X':
+      case marker::String:
+      case marker::DictRef:
         value();
         break;
       default:
@@ -336,18 +384,18 @@ private:
 
   void parseArray() const {
     handler_.onArrayStart();
-    while (source_.peek() != ']') value();
-    expect(']');
+    while (source_.peek() != marker::ArrayEnd) value();
+    expect(marker::ArrayEnd);
     handler_.onArrayEnd();
   }
 
   void parseObject() const {
     handler_.onObjectStart();
-    while (source_.peek() != '}') {
+    while (source_.peek() != marker::ObjectEnd) {
       key();
       value();
     }
-    expect('}');
+    expect(marker::ObjectEnd);
     handler_.onObjectEnd();
   }
 };
@@ -371,37 +419,47 @@ private:
     if (c.isEof()) THROW("Unexpected EOF at start of record");
     handler_.onRecordStart(source_.pos() - 1);
     switch (c.charValue()) {
-      case 'H':
-        if (source_.next() == 'I') {
-          auto version = readVarint();
-          if (version != AU_FORMAT_VERSION) {
-            THROW("Bad format version: expected " << AU_FORMAT_VERSION
-                                                  << ", got " << version);
-          }
-          handler_.onHeader(version);
+      case 'H': {
+        uint64_t version;
+        c = source_.next();
+        if ((c.charValue() & ~0x1f) == 0x60) {
+          version = c.charValue() & 0x1f;
+        } else if (c == marker::Varint) {
+          version = readVarint();
         } else {
           THROW("Expected version number"); // TODO
         }
+        if (version != AU_FORMAT_VERSION) {
+          THROW("Bad format version: expected " << AU_FORMAT_VERSION
+                                                << ", got " << version);
+        }
+        handler_.onHeader(version);
         term();
         break;
+      }
       case 'C':
         term();
         handler_.onDictClear();
         break;
       case 'A': {
-        auto backref = readVarint();
+        auto backref = readBackref();
         handler_.onDictAddStart(backref);
-        while (source_.peek() != 'E') {
+        while (source_.peek() != marker::RecordEnd) {
           size_t sov = source_.pos();
-          if (source_.next() != 'S')
+          c = source_.next();
+          if (((uint8_t)c.charValue() & ~0x1fu) == 0x20) {
+            parseString(sov, (uint8_t)c.charValue() & 0x1fu, handler_);
+          } else if (c == marker::String) {
+            parseString(sov, handler_);
+          } else {
             THROW("Expected a string"); // TODO
-          parseString(sov, handler_);
+          }
         }
         term();
         break;
       }
       case 'V': {
-        auto backref = readVarint();
+        auto backref = readBackref();
         auto len = readVarint();
         auto startOfValue = source_.pos();
         handler_.onValue(backref, len - 2, source_);
@@ -414,11 +472,6 @@ private:
       default:
         THROW("Unexpected character at start of record: " << c);
     }
-  }
-
-  void term() const {
-    expect('E');
-    expect('\n');
   }
 };
 

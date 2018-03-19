@@ -115,23 +115,29 @@ public:
       if (marker.isEof()) THROW_RT("Reached EoF while building dictionary");
       switch (marker.charValue()) {
         case 'A': {
-          auto prevDictRel = readVarint();
-          while (source_.peek() == 'S') {
-            size_t sov= source_.pos();
-            expect('S');
+          auto prevDictRel = readBackref();
+          while (source_.peek() != marker::RecordEnd) {
+            size_t sov = source_.pos();
+            auto c = source_.next();
             StringBuilder sb(endOfDictAbsPos_ - source_.pos());
-            parseString(sov, sb);
+            if (((uint8_t)c.charValue() & ~0x1fu) == 0x20) {
+              parseString(sov, (uint8_t)c.charValue() & 0x1fu, sb);
+            } else if (c == marker::String) {
+              parseString(sov, sb);
+            } else {
+              THROW_RT("Expected a string"); // TODO
+            }
             dictionary_.emplace(insertionPoint, sb.str_);
           };
+          term();
           if (prevDictRel > dictAbsPos_)
             THROW_RT("Dict before start of file");
           dictAbsPos_ -= prevDictRel;
           source_.seek(dictAbsPos_);
-        }
           break;
+        }
         case 'C':
-          expect('E');
-          expect('\n');
+          term();
           complete = true;
           break;
         default:
@@ -222,13 +228,14 @@ public:
     while (true) {
       size_t sor = source_.pos();
       try {
-        if (!source_.seekTo("E\nV")) {
+        const char marker[] = {marker::RecordEnd,  '\n', 'V', 0};
+        if (!source_.seekTo(marker)) {
           return false;
         }
         sor = source_.pos() + 2;
         term();
         expect('V');
-        auto backDictRef = readVarint();
+        auto backDictRef = readBackref();
         if (backDictRef > sor) {
           THROW_RT("Back dictionary reference is before the start of the file. "
                    "Current absolute position: " << sor << " backDictRef: "
@@ -241,7 +248,7 @@ public:
         // We seem to have a complete dictionary. Let's try validating this val.
         source_.skip(sor - source_.pos());
         expect('V');
-        if (backDictRef != readVarint()) {
+        if (backDictRef != readBackref()) {
           THROW_RT("Read different value 2nd time!");
         }
         auto valueLen = readVarint();
@@ -271,12 +278,6 @@ public:
         source_.seekTo(sor + 1);
       }
     };
-  }
-
-protected:
-  void term() const {
-    expect('E');
-    expect('\n');
   }
 };
 

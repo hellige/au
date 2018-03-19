@@ -1,5 +1,7 @@
 #pragma once
 
+#include "au/AuCommon.h"
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -88,8 +90,8 @@ class AuStringIntern {
 
 public:
 
-  AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
-                 size_t internCacheSize = 1000)
+  explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
+                          size_t internCacheSize = 1000)
       : nextEntry_(0), TINY_STR(tinyStr),
         internCache_(internThresh, internCacheSize) {}
 
@@ -199,8 +201,12 @@ class AuFormatter {
   AuStringIntern &stringIntern;
 
   void encodeString(const std::string_view sv) {
-    msgBuf_.put('S');
-    valueInt(sv.length());
+    if (sv.length() < 32) {
+      msgBuf_.put(0x20 | sv.length());
+    } else {
+      msgBuf_.put(marker::String);
+      valueInt(sv.length());
+    }
     msgBuf_.write(sv.data(), static_cast<std::streamsize>(sv.length()));
   }
 
@@ -212,7 +218,7 @@ class AuFormatter {
     } else if (*idx < 0x80) {
       msgBuf_.put(0x80 | *idx);
     } else {
-      msgBuf_.put('X');
+      msgBuf_.put(marker::DictRef);
       valueInt(*idx);
     }
   }
@@ -240,8 +246,7 @@ class AuFormatter {
     static auto test(...) -> std::false_type;
 
   public:
-    static constexpr bool value = decltype(test<O>(0))
-    ::value;
+    static constexpr bool value = decltype(test<O>(0))::value;
   };
 
 public:
@@ -261,17 +266,17 @@ public:
 
   template<typename... Args>
   AuFormatter &map(Args &&... args) {
-    msgBuf_.put('{');
+    msgBuf_.put(marker::ObjectStart);
     kvs(std::forward<Args>(args)...);
-    msgBuf_.put('}');
+    msgBuf_.put(marker::ObjectEnd);
     return *this;
   }
 
   template<typename... Args>
   AuFormatter &array(Args &&... args) {
-    msgBuf_.put('[');
+    msgBuf_.put(marker::ArrayStart);
     vals(std::forward<Args>(args)...);
-    msgBuf_.put(']');
+    msgBuf_.put(marker::ArrayEnd);
     return *this;
   }
 
@@ -279,36 +284,36 @@ public:
   auto mapVals(F &&f) {
     return [this, f] {
       KeyValSink sink(*this);
-      msgBuf_.put('{');
+      msgBuf_.put(marker::ObjectStart);
       f(sink);
-      msgBuf_.put('}');
+      msgBuf_.put(marker::ObjectEnd);
     };
   }
 
   template<typename F>
   auto arrayVals(F &&f) {
     return [this, f] {
-      msgBuf_.put('[');
+      msgBuf_.put(marker::ArrayStart);
       f();
-      msgBuf_.put(']');
+      msgBuf_.put(marker::ArrayEnd);
     };
   }
 
   // Interface to support SAX handlers
   AuFormatter &startMap() {
-    msgBuf_.put('{');
+    msgBuf_.put(marker::ObjectStart);
     return *this;
   }
   AuFormatter &endMap() {
-    msgBuf_.put('}');
+    msgBuf_.put(marker::ObjectEnd);
     return *this;
   }
   AuFormatter &startArray() {
-    msgBuf_.put('[');
+    msgBuf_.put(marker::ArrayStart);
     return *this;
   }
   AuFormatter &endArray() {
-    msgBuf_.put(']');
+    msgBuf_.put(marker::ArrayEnd);
     return *this;
   }
 
@@ -316,12 +321,38 @@ public:
   AuFormatter &
   value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
     if constexpr (std::is_signed_v<T>) {
-      msgBuf_.put(i < 0 ? 'J' : 'I');
-      if (i < 0) { i *= -1; }
-      valueInt(static_cast<typename std::make_unsigned<T>::type>(i));
+      if (i >= 0 && i < 32) {
+        msgBuf_.put(0x60 | i);
+        return *this;
+      }
+      if (i < 0 && i > -32) {
+        msgBuf_.put(0x40 | -i);
+        return *this;
+      }
+      bool neg = false;
+      uint64_t val = i;
+      if (i < 0) {
+          val = -i;
+          neg = true;
+      }
+      if (val >= 1ull << 48) {
+        msgBuf_.put(neg ? marker::NegInt64 : marker::PosInt64);
+        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
+        return *this;
+      }
+      msgBuf_.put(neg ? marker::NegVarint : marker::Varint);
+      valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
     } else {
-      msgBuf_.put('I');
-      valueInt(i);
+      if (i < 32) {
+        msgBuf_.put(0x60 | i);
+      } else if (i >= 1ull << 48) {
+        msgBuf_.put(marker::PosInt64);
+        uint64_t val = i;
+        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
+      } else {
+        msgBuf_.put(marker::Varint);
+        valueInt(i);
+      }
     }
     return *this;
   }
@@ -331,7 +362,7 @@ public:
                      typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
     double d = static_cast<double>(f); // TODO should we support a float format?
     static_assert(sizeof(d) == 8);
-    msgBuf_.put('D');
+    msgBuf_.put(marker::Double);
     auto *dPtr = reinterpret_cast<char *>(&d);
     msgBuf_.write(dPtr, sizeof(d));
     return *this;
@@ -343,7 +374,7 @@ public:
     auto nanoDuration = duration_cast<nanoseconds>(time);
     uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
 
-    msgBuf_.put('t');
+    msgBuf_.put(marker::Timestamp);
     auto *dPtr = reinterpret_cast<char *>(&nanos);
     msgBuf_.write(dPtr, sizeof(nanos));
     return *this;
@@ -367,7 +398,7 @@ public:
   }
 
   AuFormatter &value(bool b) {
-    msgBuf_.put(b ? 'T' : 'F');
+    msgBuf_.put(b ? marker::True : marker::False);
     return *this;
   }
 
@@ -376,7 +407,7 @@ public:
     return value(std::string_view(s.c_str(), s.length()));
   }
   AuFormatter &null() {
-    msgBuf_.put('N');
+    msgBuf_.put(marker::Null);
     return *this;
   }
   AuFormatter &value(std::nullptr_t) { return null(); }
@@ -414,6 +445,11 @@ protected:
     msgBuf_.put(c);
   }
 
+  void backref(uint32_t val) {
+    auto *iPtr = reinterpret_cast<char *>(&val);
+    msgBuf_.write(iPtr, sizeof(val));
+  }
+
   void valueInt(uint64_t i) {
     while (true) {
       char toWrite = static_cast<char>(i & 0x7fu);
@@ -428,7 +464,7 @@ protected:
   }
 
   void term() {
-    msgBuf_.put('E');
+    msgBuf_.put(marker::RecordEnd);
     msgBuf_.put('\n');
   }
 
@@ -460,17 +496,17 @@ class OutputTracker : public std::streambuf {
   using traits_type = typename std::streambuf::traits_type;
 
 public:
-  OutputTracker(std::streambuf *dest)
+  explicit OutputTracker(std::streambuf *dest)
       : dest_(dest), owner_(nullptr), count_(0)
   {}
 
-  OutputTracker(std::ostream &dest)
+  explicit OutputTracker(std::ostream &dest)
       : dest_(dest.rdbuf()), owner_(&dest), count_(0)
   {
     owner_->rdbuf(this);
   }
 
-  virtual ~OutputTracker() {
+  ~OutputTracker() override {
     if (owner_ != nullptr) {
       owner_->rdbuf(dest_);
     }
@@ -531,7 +567,7 @@ class AuEncoder {
       AuFormatter af(formatterOutput, stringIntern_);
       auto newDictLoc = tell();
       af.raw('A');
-      af.valueInt(newDictLoc - lastDictLoc_);
+      af.backref(newDictLoc - lastDictLoc_);
       lastDictLoc_ = newDictLoc;
       for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
@@ -553,7 +589,7 @@ class AuEncoder {
     AuFormatter af(formatterOutput, stringIntern_);
     auto thisLoc = tell();
     af.raw('V');
-    af.valueInt(thisLoc - lastDictLoc_);
+    af.backref(thisLoc - lastDictLoc_);
     af.valueInt(msg.length());
     output_ << msg;
     records_++;
