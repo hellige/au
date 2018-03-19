@@ -129,8 +129,7 @@ public:
             }
             dictionary_.emplace(insertionPoint, sb.str_);
           };
-          expect(marker::RecordEnd);
-          expect('\n');
+          term();
           if (prevDictRel > dictAbsPos_)
             THROW_RT("Dict before start of file");
           dictAbsPos_ -= prevDictRel;
@@ -138,8 +137,7 @@ public:
           break;
         }
         case 'C':
-          expect(marker::RecordEnd);
-          expect('\n');
+          term();
           complete = true;
           break;
         default:
@@ -280,12 +278,6 @@ public:
         source_.seekTo(sor + 1);
       }
     };
-  }
-
-protected:
-  void term() const {
-    expect(marker::RecordEnd);
-    expect('\n');
   }
 };
 

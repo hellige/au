@@ -265,6 +265,11 @@ protected:
     auto len = readVarint();
     parseString(pos, len, handler);
   }
+
+  void term() const {
+    expect(marker::RecordEnd);
+    expect('\n');
+  }
 };
 
 template<typename Handler>
@@ -467,11 +472,6 @@ private:
       default:
         THROW("Unexpected character at start of record: " << c);
     }
-  }
-
-  void term() const {
-    expect(marker::RecordEnd);
-    expect('\n');
   }
 };
 
