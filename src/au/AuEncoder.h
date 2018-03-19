@@ -220,8 +220,7 @@ class AuFormatter {
     static auto test(...) -> std::false_type;
 
   public:
-    static constexpr bool value = decltype(test<O>(0))
-    ::value;
+    static constexpr bool value = decltype(test<O>(0))::value;
   };
 
 public:
