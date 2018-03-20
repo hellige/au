@@ -251,6 +251,7 @@ class AuWriter {
 public:
   AuWriter(AuBuffer &buf, AuStringIntern &stringIntern)
       : msgBuf_(buf), stringIntern_(stringIntern) {}
+  virtual ~AuWriter() = default;
 
   class KeyValSink {
     AuWriter &writer_;
@@ -315,50 +316,64 @@ public:
     msgBuf_.put(marker::ArrayEnd);
     return *this;
   }
+  void key(std::string_view key) {
+    encodeStringIntern(key, true);
+  }
 
-  template<class T>
-  AuWriter &
-  value(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
-    if constexpr (std::is_signed_v<T>) {
-      if (i >= 0 && i < 32) {
-        msgBuf_.put(0x60 | i);
-        return *this;
-      }
-      if (i < 0 && i > -32) {
-        msgBuf_.put(0x40 | -i);
-        return *this;
-      }
-      bool neg = false;
-      uint64_t val = i;
-      if (i < 0) {
-          val = -i;
-          neg = true;
-      }
-      if (val >= 1ull << 48) {
-        msgBuf_.put(neg ? marker::NegInt64 : marker::PosInt64);
-        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
-        return *this;
-      }
-      msgBuf_.put(neg ? marker::NegVarint : marker::Varint);
-      valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
+  AuWriter &null() {
+    msgBuf_.put(marker::Null);
+    return *this;
+  }
+  AuWriter &value(std::nullptr_t) { return null(); }
+
+  template<typename T>
+  AuWriter &value(const T *t) {
+    if (t) value(*t);
+    else null();
+    return *this;
+  }
+
+  template<typename T>
+  AuWriter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
+
+  template<typename T>
+  AuWriter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
+
+  AuWriter &value(const char *s) { return value(std::string_view(s)); }
+  /**
+   * @param sv
+   * @param intern If uninitialized, it will intern (or not) based on frequency
+   * of the string. If true, it will force interning (subject to tiny string
+   * limits). If false, it will force in-lining.
+   * @return
+   */
+  AuWriter &value(const std::string_view sv,
+                  std::optional<bool> intern = std::optional < bool > ()) {
+    if (intern.has_value() && !intern.value()) {
+      encodeString(sv);
     } else {
-      if (i < 32) {
-        msgBuf_.put(0x60 | i);
-      } else if (i >= 1ull << 48) {
-        msgBuf_.put(marker::PosInt64);
-        uint64_t val = i;
-        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
-      } else {
-        msgBuf_.put(marker::Varint);
-        valueInt(i);
-      }
+      encodeStringIntern(sv, intern);
     }
     return *this;
   }
 
+  AuWriter &value(const std::string &s) {
+    return value(std::string_view(s.c_str(), s.length()));
+  }
+  AuWriter &value(bool b) {
+    msgBuf_.put(b ? marker::True : marker::False);
+    return *this;
+  }
+
+  AuWriter &value(int i)          { return IntSigned(i); }
+  AuWriter &value(unsigned int i) { return IntUnsigned(i); }
+  AuWriter &value(int64_t i)      { return IntSigned(i); }
+  AuWriter &value(uint64_t i)     { return IntUnsigned(i); }
+  AuWriter &value(long long i)    { return IntSigned(i); }
+
   template<class T>
   AuWriter &value(T f,
-                     typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
+                  typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
     double d = static_cast<double>(f); // TODO should we support a float format?
     static_assert(sizeof(d) == 8);
     msgBuf_.put(marker::Double);
@@ -379,50 +394,6 @@ public:
     return *this;
   }
 
-  /**
-   * @param sv
-   * @param intern If uninitialized, it will intern (or not) based on frequency
-   * of the string. If true, it will force interning (subject to tiny string
-   * limits). If false, it will force in-lining.
-   * @return
-   */
-  AuWriter &value(const std::string_view sv,
-                     std::optional<bool> intern = std::optional < bool > ()) {
-    if (intern.has_value() && !intern.value()) {
-      encodeString(sv);
-    } else {
-      encodeStringIntern(sv, intern);
-    }
-    return *this;
-  }
-
-  AuWriter &value(bool b) {
-    msgBuf_.put(b ? marker::True : marker::False);
-    return *this;
-  }
-
-  AuWriter &value(const char *s) { return value(std::string_view(s)); }
-  AuWriter &value(const std::string &s) {
-    return value(std::string_view(s.c_str(), s.length()));
-  }
-  AuWriter &null() {
-    msgBuf_.put(marker::Null);
-    return *this;
-  }
-  AuWriter &value(std::nullptr_t) { return null(); }
-
-  template<typename T>
-  AuWriter &value(const T *t) {
-    if (t) value(*t);
-    else null();
-    return *this;
-  }
-
-  template<typename T>
-  AuWriter &value(const std::unique_ptr<T> &val) { return value(val.get()); }
-
-  template<typename T>
-  AuWriter &value(const std::shared_ptr<T> &val) { return value(val.get()); }
 
   template<typename T>
   AuWriter &value(T val,
@@ -471,7 +442,7 @@ private:
   void kvs() {}
   template<typename V, typename... Args>
   void kvs(std::string_view key, V &&val, Args &&... args) {
-    encodeStringIntern(key, true);
+    this->key(key);
     value(std::forward<V>(val));
     kvs(std::forward<Args>(args)...);
   }
@@ -482,6 +453,50 @@ private:
     value(std::forward<V>(val));
     vals(std::forward<Args>(args)...);
   }
+
+  // TODO: Split into IntUnsigned/Signed
+  template<class T>
+  AuWriter &
+  auInt(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
+    if constexpr (std::is_signed_v<T>) {
+      if (i >= 0 && i < 32) {
+        msgBuf_.put(0x60 | i);
+        return *this;
+      }
+      if (i < 0 && i > -32) {
+        msgBuf_.put(0x40 | -i);
+        return *this;
+      }
+      bool neg = false;
+      uint64_t val = i;
+      if (i < 0) {
+        val = -i;
+        neg = true;
+      }
+      if (val >= 1ull << 48) {
+        msgBuf_.put(neg ? marker::NegInt64 : marker::PosInt64);
+        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
+        return *this;
+      }
+      msgBuf_.put(neg ? marker::NegVarint : marker::Varint);
+      valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
+    } else {
+      if (i < 32) {
+        msgBuf_.put(0x60 | i);
+      } else if (i >= 1ull << 48) {
+        msgBuf_.put(marker::PosInt64);
+        uint64_t val = i;
+        msgBuf_.write(reinterpret_cast<char *>(&val), sizeof(val));
+      } else {
+        msgBuf_.put(marker::Varint);
+        valueInt(i);
+      }
+    }
+    return *this;
+  }
+
+  AuWriter &IntSigned(int64_t i) { return auInt(i); }
+  AuWriter &IntUnsigned(uint64_t i) { return auInt(i); }
 };
 
 
@@ -665,10 +680,24 @@ public:
 
   template<typename F>
   ssize_t encode(F &&f) {
-    AuWriter formatter(buf_, stringIntern_);
-    f(formatter);
+    AuWriter writer(buf_, stringIntern_);
+    f(writer);
     if (buf_.tellp() != 0) {
-      formatter.term();
+      writer.term();
+      write(buf_.str());
+    }
+    buf_.clear();
+    return 0; // TODO: Return bytes written or negative error code
+  }
+
+  AuWriter writer() {
+    return AuWriter(buf_, stringIntern_);
+  }
+
+  // TODO: Maybe change to AuWriter.commit()
+  ssize_t commit(AuWriter &writer) {
+    if (buf_.tellp() != 0) {
+      writer.term();
       write(buf_.str());
     }
     buf_.clear();
