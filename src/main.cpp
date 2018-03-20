@@ -2,7 +2,6 @@
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
 #include "JsonOutputHandler.h"
-#include "GrepHandler.h"
 
 #include <cmath>
 #include <cstdio>

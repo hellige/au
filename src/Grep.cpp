@@ -85,15 +85,13 @@ public:
 
 }
 
+// TODO teach grep about timestamps
 // TODO teach grep to recognize null/true/false when appropriate
 // TODO teach grep how to do -C/-A/-B. keep a running position of sor for nth record back and n "force dump" records forward, rewind and dump on match, etc
 //      dumping up to current would naturally move running position forward to rewind would naturally still work.
 // TODO teach grep -c
 
 int grep(int argc, const char * const *argv) {
-  Dictionary dictionary;
-  JsonOutputHandler jsonHandler(dictionary);
-
   try {
     UsageVisitor usageVisitor;
     TCLAP::CmdLine cmd("", ' ', "", false);
@@ -156,15 +154,12 @@ int grep(int argc, const char * const *argv) {
       }
     }
 
-    GrepHandler<JsonOutputHandler> grepHandler(
-        dictionary, jsonHandler, std::move(pattern));
-    AuRecordHandler<decltype(grepHandler)> recordHandler(dictionary, grepHandler);
 
     if (fileNames.getValue().empty()) {
-      AuDecoder("-").decode(recordHandler, false);
+      doGrep(pattern, "-");
     } else {
       for (auto &f : fileNames.getValue()) {
-        AuDecoder(f).decode(recordHandler, false);
+        doGrep(pattern, f);
       }
     }
   } catch (TCLAP::ArgException &e) {

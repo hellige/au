@@ -26,23 +26,23 @@ struct Pattern {
     return *keyPattern == key;
   }
 
-  bool matchesValue(uint64_t val) {
+  bool matchesValue(uint64_t val) const {
     if (!uintPattern) return false;
     return *uintPattern == val;
   }
 
-  bool matchesValue(int64_t val) {
+  bool matchesValue(int64_t val) const {
     if (!intPattern) return false;
     return *intPattern == val;
 
   }
 
-  bool matchesValue(double val) {
+  bool matchesValue(double val) const {
     if (!doublePattern) return false;
     return *doublePattern == val;
   }
 
-  bool matchesValue(std::string_view sv) {
+  bool matchesValue(std::string_view sv) const {
     if (!strPattern) return false;
     if (strPattern->fullMatch) {
       return strPattern->pattern == sv;
@@ -64,7 +64,7 @@ class GrepHandler : public NoopValueHandler {
   OutputHandler &handler_;
   Dictionary &dictionary_;
 
-  Pattern pattern_;
+  const Pattern &pattern_;
 
   std::vector<char> str_;
   bool matched_;
@@ -89,10 +89,10 @@ class GrepHandler : public NoopValueHandler {
 public:
   GrepHandler(Dictionary &dictionary,
               OutputHandler &handler,
-              Pattern &&pattern)
+              Pattern &pattern)
       : handler_(handler),
         dictionary_(dictionary),
-        pattern_(std::move(pattern)),
+        pattern_(pattern),
         matched_(false) {
     str_.reserve(1<<16);
   }
@@ -201,3 +201,17 @@ private:
     }
   }
 };
+
+namespace {
+
+void doGrep(Pattern &pattern, const std::string &filename) {
+  Dictionary dictionary;
+  JsonOutputHandler jsonHandler(dictionary);
+  GrepHandler<JsonOutputHandler> grepHandler(
+      dictionary, jsonHandler, pattern);
+  AuRecordHandler<decltype(grepHandler)> recordHandler(
+      dictionary, grepHandler);
+  AuDecoder(filename).decode(recordHandler, false);
+}
+
+}

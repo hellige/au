@@ -18,11 +18,6 @@
 #include <cstddef>
 #include <chrono>
 
-// TODO add explicit 4-byte float support
-// TODO add small int and small dict-ref support
-// TODO add short string-length support (roll into 'S')
-// TODO add position tracking and length validation
-
 class FileByteSource {
 protected:
   const size_t BUFFER_SIZE;
