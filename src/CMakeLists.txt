@@ -15,7 +15,8 @@ endif ()
 
 
 add_library(au-cpp INTERFACE)
-include_directories(../external/tclap/include au)
+include_directories(SYSTEM ../external/rapidjson/include ../external/tclap/include)
+include_directories(au)
 target_sources(au-cpp INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuEncoder.h
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuDecoder.h)
