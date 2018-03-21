@@ -9,7 +9,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-exit-time-destructors")
     # TODO should probably remove this and fix unnecessary things once API has settled.
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unneeded-member-function -Wno-unused-member-function -Wno-unused-template")
-    # TODO if we ever go non-header only, we can improve things a tiny bit by b ringing some of the vtable definitions out of line
+    # TODO if we ever go non-header only, we can improve things a tiny bit by bringing some of the vtable definitions out of line
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-weak-vtables")
 endif ()
 
@@ -19,7 +19,7 @@ include_directories(external/tclap/include au)
 target_sources(au-cpp INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuEncoder.h
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuDecoder.h)
-target_include_directories(au-cpp INTERFACE au)
+target_include_directories(au-cpp INTERFACE .)
 install(DIRECTORY au DESTINATION include)
 
 add_executable(au main.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp)
