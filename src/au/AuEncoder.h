@@ -595,16 +595,12 @@ class AuEncoder {
   size_t reindexInterval_;
   size_t clearThreshold_;
 
-  size_t tell() const {
-    return pos_;
-  }
-
   void exportDict() {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
       AuStreamBuffer formatterOutput(output_);
       AuWriter af(formatterOutput, stringIntern_);
-      auto newDictLoc = tell();
+      auto newDictLoc = pos_;
       af.raw('A');
       af.backref(newDictLoc - lastDictLoc_);
       lastDictLoc_ = newDictLoc;
@@ -622,11 +618,12 @@ class AuEncoder {
     write(std::string_view(msg.c_str(), msg.size()));
   }
 
-  void write(const std::string_view &msg) {
+  ssize_t write(const std::string_view &msg) {
+    auto startPos = pos_;
     exportDict();
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
-    auto thisLoc = tell();
+    auto thisLoc = pos_;
     af.raw('V');
     af.backref(thisLoc - lastDictLoc_);
     af.valueInt(msg.length());
@@ -646,6 +643,7 @@ class AuEncoder {
     if (lastDictSize_ > clearThreshold_) {
       clearDictionary(true);
     }
+    return pos_ - startPos;
   }
 
 public:
@@ -680,34 +678,21 @@ public:
 
   template<typename F>
   ssize_t encode(F &&f) {
+    ssize_t result = 0;
     AuWriter writer(buf_, stringIntern_);
     f(writer);
     if (buf_.tellp() != 0) {
       writer.term();
-      write(buf_.str());
+      result = write(buf_.str());
     }
     buf_.clear();
-    return 0; // TODO: Return bytes written or negative error code
-  }
-
-  AuWriter writer() {
-    return AuWriter(buf_, stringIntern_);
-  }
-
-  // TODO: Maybe change to AuWriter.commit()
-  ssize_t commit(AuWriter &writer) {
-    if (buf_.tellp() != 0) {
-      writer.term();
-      write(buf_.str());
-    }
-    buf_.clear();
-    return 0; // TODO: Return bytes written or negative error code
+    return result;
   }
 
   void clearDictionary(bool clearUsageTracker = false) {
     stringIntern_.clear(clearUsageTracker);
     lastDictSize_ = 0;
-    lastDictLoc_ = tell();
+    lastDictLoc_ = pos_;
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
@@ -725,7 +710,7 @@ public:
   void reIndexDictionary(size_t threshold) {
     stringIntern_.reIndex(threshold);
     lastDictSize_ = 0;
-    lastDictLoc_ = tell();
+    lastDictLoc_ = pos_;
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
