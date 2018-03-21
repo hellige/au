@@ -272,7 +272,7 @@ TEST(FileByteSource, SeekStdio) {
   EXPECT_THROW(fbs.seek(5), std::runtime_error);
 }
 
-TEST(Au, creation) {
+TEST(AuEncoder, creation) {
   std::ostringstream os;
   AuEncoder au(os);
 }

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -275,6 +276,10 @@ protected:
 template<typename Handler>
 class ValueParser : BaseParser {
   Handler &handler_;
+  /** A positive value that when multiplied by -1 represents the most negative
+  number we support (std::numeric_limits<int64_t>::min() * -1). */
+  static constexpr uint64_t NEG_INT_LIMIT =
+    static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1;
 
 public:
   ValueParser(FileByteSource &source, Handler &handler)
@@ -316,8 +321,10 @@ public:
         break;
       case marker::NegVarint: {
         auto i = readVarint();
-        if (i > std::numeric_limits<int64_t>::max() - 1) // TODO i don't think this is the right check...
-          THROW("Signed int overflows int64_t: -" << i);
+        if (i > NEG_INT_LIMIT) {
+          THROW("Signed int overflows int64_t: (-)" << i << " 0x"
+                << std::setfill('0') << std::setw(16) << std::hex << i);
+        }
         handler_.onInt(sov, -static_cast<int64_t>(i));
         break;
       }
@@ -330,8 +337,10 @@ public:
       case marker::NegInt64: {
         uint64_t val;
         source_.read(&val, sizeof(val));
-        if (val > std::numeric_limits<int64_t>::max() - 1)
-          THROW("Signed int overflows int64_t: -" << val);
+        if (val > NEG_INT_LIMIT) {
+          THROW("Signed int overflows int64_t: (-)" << val << " 0x"
+                << std::setfill('0') << std::setw(16) << std::hex << val);
+        }
         handler_.onUint(sov, -static_cast<int64_t>(val));
         break;
       }
