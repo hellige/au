@@ -240,6 +240,7 @@ struct StatsRecordHandler {
   bool fullDictDump;
   SizeHistogram valueHist {"Value records"};
   uint64_t formatVersion = 0;
+  std::string metadata;
   size_t numRecords = 0;
   size_t dictClears = 0;
   size_t dictAdds = 0;
@@ -255,10 +256,11 @@ struct StatsRecordHandler {
     next.onRecordStart(pos);
   }
 
-  void onHeader(uint64_t version) {
+  void onHeader(uint64_t version, const std::string &metadata) {
     headers++;
     formatVersion = version;
-    next.onHeader(version);
+    this->metadata = metadata;
+    next.onHeader(version, metadata);
   }
 
   void onDictClear() {
@@ -342,9 +344,11 @@ public:
       std::cout << e.what() << std::endl;
     }
 
+    // TODO record/dump format version and metadata for all headers in stream
     std::cout
         << "Stats for " << filename_ << " (format version "
         << handler.formatVersion << "):\n"
+        << "  Stream metadata: " << handler.metadata << '\n'
         << "  Total read: " << prettyBytes(source.pos()) << '\n'
         << "  Records: " << commafy(handler.numRecords) << '\n'
         << "     Version headers: " << commafy(handler.headers) << '\n'

@@ -76,22 +76,6 @@ class DictionaryBuilder : public BaseParser {
   size_t endOfDictAbsPos_;
   size_t lastDictPos_;
 
-  struct StringBuilder {
-    std::string str_;
-    size_t maxLen_;
-    StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
-
-    void onStringStart(size_t, size_t len) {
-      if (len > maxLen_)
-        throw std::length_error("String too long");
-      str_.reserve(len);
-    }
-    void onStringFragment(std::string_view frag) {
-      str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
-    }
-    void onStringEnd() {}
-  };
-
 public:
   DictionaryBuilder(TailByteSource &source, size_t endOfDictAbsPos)
     : BaseParser(source), source_(source), dictAbsPos_(source.pos()),
@@ -127,7 +111,7 @@ public:
             } else {
               THROW_RT("Expected a string"); // TODO
             }
-            dictionary_.emplace(insertionPoint, sb.str_);
+            dictionary_.emplace(insertionPoint, sb.str());
           };
           term();
           if (prevDictRel > dictAbsPos_)
@@ -137,6 +121,7 @@ public:
           break;
         }
         case 'C':
+          parseFormatVersion();
           term();
           complete = true;
           break;

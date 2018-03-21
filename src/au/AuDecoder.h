@@ -195,8 +195,30 @@ protected:
 
 namespace {
 
+class StringBuilder {
+  std::string str_;
+  size_t maxLen_;
+
+public:
+  StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
+
+  void onStringStart(size_t, size_t len) {
+    if (len > maxLen_)
+      throw std::length_error("String too long");
+    str_.reserve(len);
+  }
+  void onStringFragment(std::string_view frag) {
+    str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
+  }
+  void onStringEnd() {}
+
+  const std::string &str() const { return str_; }
+};
+
 class BaseParser {
 protected:
+  static constexpr int AU_FORMAT_VERSION = 1;
+
   FileByteSource &source_;
 
   explicit BaseParser(FileByteSource &source)
@@ -245,6 +267,36 @@ protected:
       if ((i & moreMask) != moreMask) break;
     }
     return result;
+  }
+
+  uint64_t parseFormatVersion() const {
+    uint64_t version;
+    auto c = source_.next();
+    if ((c.charValue() & ~0x1f) == 0x60) {
+      version = c.charValue() & 0x1f;
+    } else if (c == marker::Varint) {
+      version = readVarint();
+    } else {
+      THROW("Expected version number"); // TODO
+    }
+    if (version != AU_FORMAT_VERSION) {
+      THROW("Bad format version: expected " << AU_FORMAT_VERSION
+                                            << ", got " << version);
+    }
+    return version;
+  }
+
+  template <typename Handler>
+  void parseFullString(Handler &handler) const {
+    size_t sov = source_.pos();
+    auto c = source_.next();
+    if (((uint8_t) c.charValue() & ~0x1fu) == 0x20) {
+      parseString(sov, (uint8_t) c.charValue() & 0x1fu, handler);
+    } else if (c == marker::String) {
+      parseString(sov, handler);
+    } else {
+      THROW("Expected a string"); // TODO
+    }
   }
 
   template<typename Handler>
@@ -410,7 +462,6 @@ private:
 
 template<typename Handler>
 class RecordParser : BaseParser {
-  static constexpr int AU_FORMAT_VERSION = 1;
   Handler &handler_;
 
 public:
@@ -428,41 +479,25 @@ private:
     handler_.onRecordStart(source_.pos() - 1);
     switch (c.charValue()) {
       case 'H': {
-        uint64_t version;
-        c = source_.next();
-        if ((c.charValue() & ~0x1f) == 0x60) {
-          version = c.charValue() & 0x1f;
-        } else if (c == marker::Varint) {
-          version = readVarint();
-        } else {
-          THROW("Expected version number"); // TODO
-        }
-        if (version != AU_FORMAT_VERSION) {
-          THROW("Bad format version: expected " << AU_FORMAT_VERSION
-                                                << ", got " << version);
-        }
-        handler_.onHeader(version);
+        expect('A');
+        expect('U');
+        auto version = parseFormatVersion();
+        StringBuilder sb(16 * 1024); // TODO extract constant
+        parseFullString(sb);
+        handler_.onHeader(version, sb.str());
         term();
         break;
       }
       case 'C':
+        parseFormatVersion();
         term();
         handler_.onDictClear();
         break;
       case 'A': {
         auto backref = readBackref();
         handler_.onDictAddStart(backref);
-        while (source_.peek() != marker::RecordEnd) {
-          size_t sov = source_.pos();
-          c = source_.next();
-          if (((uint8_t)c.charValue() & ~0x1fu) == 0x20) {
-            parseString(sov, (uint8_t)c.charValue() & 0x1fu, handler_);
-          } else if (c == marker::String) {
-            parseString(sov, handler_);
-          } else {
-            THROW("Expected a string"); // TODO
-          }
-        }
+        while (source_.peek() != marker::RecordEnd)
+          parseFullString(handler_);
         term();
         break;
       }
@@ -515,7 +550,8 @@ struct NoopRecordHandler {
                        FileByteSource &source) {
     source.skip(len);
   }
-  virtual void onHeader([[maybe_unused]] uint64_t version) {}
+  virtual void onHeader([[maybe_unused]] uint64_t version,
+                        [[maybe_unused]] const std::string &metadata) {}
   virtual void onDictClear() {}
   virtual void onDictAddStart([[maybe_unused]] size_t relDictPos) {}
   virtual void onStringStart([[maybe_unused]] size_t strLen) {}

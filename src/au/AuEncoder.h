@@ -670,7 +670,10 @@ public:
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('H');
+    af.raw('A');
+    af.raw('U');
     af.value(FORMAT_VERSION);
+    af.value("", false); // TODO expose to API for arbitrary metadata
     af.term();
     pos_ += formatterOutput.tracker().count();
     clearDictionary();
@@ -696,6 +699,7 @@ public:
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
+    af.value(FORMAT_VERSION);
     af.term();
     pos_ += formatterOutput.tracker().count();
   }

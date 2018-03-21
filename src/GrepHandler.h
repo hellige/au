@@ -211,7 +211,13 @@ void doGrep(Pattern &pattern, const std::string &filename) {
       dictionary, jsonHandler, pattern);
   AuRecordHandler<decltype(grepHandler)> recordHandler(
       dictionary, grepHandler);
-  AuDecoder(filename).decode(recordHandler, false);
+  FileByteSource source(filename, false);
+  try {
+    RecordParser(source, recordHandler).parseStream();
+    recordHandler.onParseEnd();
+  } catch (parse_error &e) {
+    std::cerr << e.what() << std::endl;
+  }
 }
 
 }

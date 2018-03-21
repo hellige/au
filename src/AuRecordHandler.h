@@ -24,7 +24,7 @@ public:
     sor_ = pos;
   }
 
-  void onHeader(uint64_t) {}
+  void onHeader(uint64_t, const std::string &) {}
 
   void onDictClear() {
     dictionary_.clear(sor_);
