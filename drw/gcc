@@ -1,1 +1,26 @@
-g++
+#!/bin/bash
+
+set -e
+
+VERSION=7.2.0-1
+EXE=$(basename $0)
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+export FIG_REMOTE_URL=ftp://devnas/builds/Fig/repos
+
+get_gcc_home() {
+    local GCC_HOME_FILE=${ROOT_DIR}/.gcc_home
+    (
+        if [[ ! -e ${GCC_HOME_FILE} ]]; then
+            fig --no-file --log-level=warn \
+                --suppress-cleanup-of-retrieves \
+                --update-if-missing \
+                --suppress-retrieves \
+                gcc/${VERSION} -g GCC_HOME > ${GCC_HOME_FILE}
+        fi
+        cat  ${GCC_HOME_FILE}
+    ) 9> /tmp/fig-${USER}-gcc.flock
+}
+
+GCC_HOME=$(get_gcc_home)
+
+${GCC_HOME}/bin/${EXE} -B/usr/lib/x86_64-linux-gnu -isystem /usr/include/x86_64-linux-gnu -Wl,-rpath,${GCC_HOME}/lib64 "$@"

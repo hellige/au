@@ -18,6 +18,7 @@ clone() {
     mkdir -p $DIR
     cd $DIR
     git clone "$NEW_URL" .
+    git fetch origin
     cd -
 }
 
