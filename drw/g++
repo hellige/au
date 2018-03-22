@@ -23,4 +23,4 @@ get_gcc_home() {
 
 GCC_HOME=$(get_gcc_home)
 
-${GCC_HOME}/bin/${EXE} -B/usr/lib/x86_64-linux-gnu -Wl,-rpath,${GCC_HOME}/lib64 "$@"
+${GCC_HOME}/bin/${EXE} -B/usr/lib/x86_64-linux-gnu -isystem /usr/include/x86_64-linux-gnu -Wl,-rpath,${GCC_HOME}/lib64 "$@"

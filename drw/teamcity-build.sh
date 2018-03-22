@@ -10,6 +10,6 @@ fig_exec() {
 
 mkdir -p ${DIR}/out/test
 cd ${DIR}/out/test
-fig_exec cmake ../..
-fig_exec cmake --build . -- all all-tests -j$(nproc)
+fig_exec cmake -DCMAKE_CXX_COMPILER=${DIR}/drw/g++ -DCMAKE_C_COMPILER=${DIR}/drw/gcc -DSTATIC=ON ../..
+fig_exec cmake --build . -- all -j$(nproc)
 fig_exec ctest . -T Test -V

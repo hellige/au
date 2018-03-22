@@ -1,5 +1,5 @@
-#include "AuEncoder.h"
-#include "AuDecoder.h"
+#include "au/AuEncoder.h"
+#include "au/AuDecoder.h"
 
 #include "gtest/gtest.h"
 
