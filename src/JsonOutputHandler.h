@@ -45,17 +45,17 @@ class JsonOutputHandler {
     }
   };
   OurWriter writer_;
-  Dictionary &dictionary_;
+  Dictionary::Dict *dictionary_ = nullptr;
 
 public:
-  explicit JsonOutputHandler(Dictionary &dictionary)
+  explicit JsonOutputHandler()
       : buffer_(nullptr, 1u << 16),
-        writer_(buffer_),
-        dictionary_(dictionary) {
+        writer_(buffer_) {
     str_.reserve(1u << 16);
   }
 
-  void onValue(FileByteSource &source) {
+  void onValue(FileByteSource &source, Dictionary::Dict &dictionary) {
+    dictionary_ = &dictionary;
     ValueParser<JsonOutputHandler> parser(source, *this);
     parser.value();
     // TODO this function is silly
@@ -112,7 +112,7 @@ public:
 
   void onDictRef(size_t, size_t idx) {
     // TODO error handling, arbitary types? need to distinguish keys?
-    const auto &v = dictionary_[idx];
+    const auto &v = dictionary_->at(idx);
     writer_.String(v.c_str(), static_cast<rapidjson::SizeType>(v.size()));
   }
 

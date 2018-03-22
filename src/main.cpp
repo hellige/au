@@ -43,7 +43,7 @@ int help(int, char **) {
 int cat(int argc, char **argv) {
   argc -= 2; argv += 2;
   Dictionary dictionary;
-  JsonOutputHandler valueHandler(dictionary);
+  JsonOutputHandler valueHandler;
   AuRecordHandler<JsonOutputHandler> recordHandler(dictionary, valueHandler);
 
   if (argc == 0) {

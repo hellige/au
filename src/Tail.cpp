@@ -84,8 +84,9 @@ public:
 
   void populate(Dictionary &dict) {
     dict.clear(lastDictPos_);
+    auto &last = *dict.latest();
     for (auto &word : dictionary_) {
-      dict.add(lastDictPos_, std::string_view(word.c_str(), word.length()));
+      last.add(lastDictPos_, std::string_view(word.c_str(), word.length()));
     }
   }
 
@@ -139,12 +140,13 @@ public:
  * of T's, we don't want to wait until the whole "record" has been unpacked
  * before coming up for air and validating the length. */
 class ValidatingHandler : public NoopValueHandler {
-  Dictionary &dictionary_;
+  const Dictionary::Dict &dictionary_;
   FileByteSource &source_;
   size_t absEndOfValue_;
 
 public:
-  ValidatingHandler(Dictionary &dictionary, FileByteSource &source,
+  ValidatingHandler(const Dictionary::Dict &dictionary,
+                    FileByteSource &source,
                     size_t absEndOfValue)
       : dictionary_(dictionary), source_(source), absEndOfValue_(absEndOfValue)
   {}
@@ -241,9 +243,8 @@ public:
 
         Dictionary validatingDict;
         builder.populate(validatingDict);
-
-        ValidatingHandler validatingHandler(validatingDict, source_,
-                                            startOfValue + valueLen);
+        ValidatingHandler validatingHandler(
+            *validatingDict.latest(), source_, startOfValue + valueLen);
         ValueParser<ValidatingHandler> valueValidator(source_,
                                                       validatingHandler);
         valueValidator.value();
@@ -268,7 +269,7 @@ public:
 
 int tail(int argc, const char *const *argv) {
   Dictionary dictionary;
-  JsonOutputHandler jsonHandler(dictionary);
+  JsonOutputHandler jsonHandler;
 
   try {
     TCLAP::CmdLine cmd("Tail sub-command", ' ', AU_VERSION, true);

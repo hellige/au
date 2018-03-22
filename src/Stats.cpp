@@ -113,7 +113,7 @@ struct VarintHistogram {
   }
 };
 
-void dictStats(Dictionary &dictionary,
+void dictStats(const Dictionary::Dict &dictionary,
                const std::vector<size_t> &dictFrequency,
                const char *event,
                bool fullDump) {
@@ -129,7 +129,7 @@ void dictStats(Dictionary &dictionary,
 
   std::vector<std::pair<size_t, std::string>> byFreq;
   for (auto i = 0u; i < dictionary.size(); i++)
-    byFreq.emplace_back(dictFrequency[i], dictionary[i]);
+    byFreq.emplace_back(dictFrequency[i], dictionary.at(i));
   std::sort(byFreq.begin(), byFreq.end(),
             std::greater<std::pair<size_t, std::string>>());
   std::cout << "     Referral count";
@@ -142,8 +142,8 @@ void dictStats(Dictionary &dictionary,
 }
 
 struct SmallIntValueHandler : public NoopValueHandler {
-  const Dictionary &dictionary;
   std::vector<size_t> &dictFrequency;
+  const Dictionary::Dict *dictionary = nullptr;
   size_t doubles = 0;
   size_t doubleBytes = 0;
   size_t timestamps = 0;
@@ -159,11 +159,11 @@ struct SmallIntValueHandler : public NoopValueHandler {
   VarintHistogram stringLengths {"String length encodings"};
   FileByteSource *source_;
 
-  SmallIntValueHandler(const Dictionary &dictionary,
-                       std::vector<size_t> &dictFrequency)
-      : dictionary(dictionary), dictFrequency(dictFrequency) {}
+  SmallIntValueHandler(std::vector<size_t> &dictFrequency)
+      : dictFrequency(dictFrequency) {}
 
-  void onValue(FileByteSource &source) {
+  void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
+    dictionary = &dict;
     source_ = &source;
     ValueParser<SmallIntValueHandler> parser(source, *this);
     parser.value();
@@ -199,7 +199,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
   }
 
   void onDictRef(size_t pos, size_t idx) override {
-    dictStringHist.add(dictionary[idx].size());
+    dictStringHist.add(dictionary->at(idx).size());
     dictRefs.add(source_->pos() - pos);
     dictFrequency[idx]++;
   }
@@ -247,7 +247,7 @@ struct StatsRecordHandler {
   size_t headers = 0;
 
   StatsRecordHandler(bool fullDictDump)
-  : vh(dictionary, dictFrequency),
+  : vh(dictFrequency),
     next(dictionary, vh),
     fullDictDump(fullDictDump) {}
 
@@ -265,8 +265,9 @@ struct StatsRecordHandler {
 
   void onDictClear() {
     dictClears++;
-    if (dictionary.size())
-      dictStats(dictionary, dictFrequency, "upon clear", fullDictDump);
+    auto *dict = dictionary.latest();
+    if (dict && dict->size())
+      dictStats(*dict, dictFrequency, "upon clear", fullDictDump);
     dictFrequency.clear();
     next.onDictClear();
   }
@@ -295,7 +296,9 @@ struct StatsRecordHandler {
   }
 
   void onParseEnd() {
-    dictStats(dictionary, dictFrequency, "at end of file", fullDictDump);
+    auto *dict = dictionary.latest();
+    if (dict && dict->size())
+      dictStats(*dict, dictFrequency, "at end of file", fullDictDump);
     next.onParseEnd();
   }
 };

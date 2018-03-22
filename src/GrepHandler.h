@@ -60,11 +60,10 @@ struct Pattern {
  * @tparam OutputHandler A ValueHandler to delegate matching records to.
  */
 class GrepHandler : public NoopValueHandler {
-  Dictionary &dictionary_;
-
   const Pattern &pattern_;
 
   std::vector<char> str_;
+  const Dictionary::Dict *dictionary_ = nullptr;
   bool matched_;
 
   // Keeps track of the context we're in so we know if the string we're
@@ -85,10 +84,8 @@ class GrepHandler : public NoopValueHandler {
   std::vector<ContextMarker> context_;
 
 public:
-  GrepHandler(Dictionary &dictionary,
-              Pattern &pattern)
-      : dictionary_(dictionary),
-        pattern_(pattern),
+  GrepHandler(Pattern &pattern)
+      : pattern_(pattern),
         matched_(false) {
     str_.reserve(1<<16);
   }
@@ -104,7 +101,8 @@ public:
     context_.back().counter++;
   }
 
-  void onValue(FileByteSource &source) {
+  void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
+    dictionary_ = &dict;
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
     matched_ = false;
@@ -144,8 +142,8 @@ public:
   }
 
   void onDictRef(size_t, size_t dictIdx) override {
-    assert(dictIdx < dictionary_.size());
-    checkString(dictionary_[dictIdx]); // TODO optimize by indexing dict first
+    assert(dictIdx < dictionary_->size());
+    checkString(dictionary_->at(dictIdx)); // TODO optimize by indexing dict first
     incrCounter();
   }
 
@@ -207,8 +205,8 @@ void doGrep(Pattern &pattern, const std::string &filename,
   if (count) beforeContext = afterContext = 0;
 
   Dictionary dictionary;
-  JsonOutputHandler jsonHandler(dictionary);
-  GrepHandler grepHandler(dictionary, pattern);
+  JsonOutputHandler jsonHandler;
+  GrepHandler grepHandler(pattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);
   AuRecordHandler outputHandler(dictionary, jsonHandler);
   FileByteSource source(filename, false);

@@ -12,11 +12,12 @@ class AuRecordHandler {
   Dictionary &dictionary_;
   ValueHandler &valueHandler_;
   std::vector<char> str_;
-  size_t sor_;
+  size_t sor_ = 0;
+  Dictionary::Dict *dict_ = nullptr;
 
 public:
   AuRecordHandler(Dictionary &dictionary, ValueHandler &valueHandler)
-      : dictionary_(dictionary), valueHandler_(valueHandler), sor_(0) {
+      : dictionary_(dictionary), valueHandler_(valueHandler) {
     str_.reserve(1 << 16);
   }
 
@@ -31,19 +32,14 @@ public:
   }
 
   void onDictAddStart(size_t relDictPos) {
-    if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onDictAddStart wrong backref: "
-                << sor_ << " " << relDictPos << " "
-                << dictionary_.lastDictPos()); // TODO improve
+    auto &dictionary = dictionary_.findDictionary(sor_, relDictPos);
+    if (!dictionary.includes(sor_))
+      dict_ = &dictionary;
   }
 
   void onValue(size_t relDictPos, size_t, FileByteSource &source) {
-    if (!dictionary_.valid(sor_ - relDictPos))
-      THROW("onValue wrong backref: sor = " << sor_ << " relDictPos = "
-                                            << relDictPos
-                                            << " lastDictPos = "
-                                            << dictionary_.lastDictPos()); // TODO improve
-    valueHandler_.onValue(source);
+    auto &dictionary = dictionary_.findDictionary(sor_, relDictPos);
+    valueHandler_.onValue(source, dictionary);
   }
 
   void onStringStart(size_t, size_t len) {
@@ -52,7 +48,7 @@ public:
   }
 
   void onStringEnd() {
-    dictionary_.add(sor_, std::string_view(str_.data(), str_.size()));
+    if (dict_) dict_->add(sor_, std::string_view(str_.data(), str_.size()));
   }
 
   void onStringFragment(std::string_view frag) {
