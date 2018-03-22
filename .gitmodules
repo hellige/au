@@ -1,12 +1,12 @@
 [submodule "rapidjson"]
 	path = external/rapidjson
-	url = http://github.com/Tencent/rapidjson
+	url = https://github.com/Tencent/rapidjson
 [submodule "googletest"]
 	path = external/googletest
-	url = http://github.com/google/googletest
+	url = https://github.com/google/googletest
 [submodule "benchmark"]
 	path = external/benchmark
-	url = http://github.com/google/benchmark
+	url = https://github.com/google/benchmark
 [submodule "external/tclap"]
 	path = external/tclap
-	url = http://github.com/gburca/tclap
+	url = https://github.com/gburca/tclap
