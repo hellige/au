@@ -5,10 +5,13 @@
 
 # TODO: Handle recursive cloning of submodules
 
+set -x
+
 clone() {
     local DIR=$(echo "$1" | sed 's/path = \(.*\)/\1/')
     local URL=$(echo "$2" | sed 's/url = \(.*\)/\1/')
-    local REPO=$(basename --suffix=.git "$URL")
+    #local REPO=$(basename --suffix=.git "$URL")
+    local REPO=$(basename "$URL")
     local NEW_URL="git@git.drwholdings.com:mirror/${REPO}.git"
 
     echo "DIR = $DIR   URL = $URL   NEW_URL = $NEW_URL"
