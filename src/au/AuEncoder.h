@@ -614,8 +614,8 @@ class AuEncoder {
     }
   }
 
-  void write(const std::string &msg) {
-    write(std::string_view(msg.c_str(), msg.size()));
+  ssize_t write(const std::string &msg) {
+    return write(std::string_view(msg.c_str(), msg.size()));
   }
 
   ssize_t write(const std::string_view &msg) {
