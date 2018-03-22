@@ -718,6 +718,7 @@ public:
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
+    af.value(FORMAT_VERSION);
     af.term();
     pos_ += formatterOutput.tracker().count();
   }
