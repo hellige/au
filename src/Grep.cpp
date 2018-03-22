@@ -53,14 +53,18 @@ void usage() {
   std::cout
       << "usage: au grep [options] [--] <pattern> <path>...\n"
       << "\n"
-      << "  -h --help        show usage and exit\n"
-      << "  -k --key <key>   match pattern only in object values with key <key>\n"
-      << "  -i --integer     match <pattern> with integer values\n"
-      << "  -d --double      match <pattern> with double-precision float values\n"
-      << "  -s --string      match <pattern> with string values\n"
-      << "  -u --substring   match <pattern> as a substring of string values\n"
-      << "                   implies -s, not compatible with -i/-d\n"
-      << "  -i --integer     match <pattern> with integer values\n";
+      << "  -h --help         show usage and exit\n"
+      << "  -k --key <key>    match pattern only in object values with key <key>\n"
+      << "  -i --integer      match <pattern> with integer values\n"
+      << "  -d --double       match <pattern> with double-precision float values\n"
+      << "  -s --string       match <pattern> with string values\n"
+      << "  -u --substring    match <pattern> as a substring of string values\n"
+      << "                    implies -s, not compatible with -i/-d\n"
+      << "  -i --integer      match <pattern> with integer values\n"
+      << "  -B --before <n>   show <n> records of context before each match\n"
+      << "  -A --after <n>    show <n> records of context after each match\n"
+      << "  -C --context <n>  equivalent to -A n -B n\n"
+      << "  -c --count        print count of matching records per file\n";
 }
 
 struct UsageVisitor : public TCLAP::Visitor {
@@ -87,9 +91,6 @@ public:
 
 // TODO teach grep about timestamps
 // TODO teach grep to recognize null/true/false when appropriate
-// TODO teach grep how to do -C/-A/-B. keep a running position of sor for nth record back and n "force dump" records forward, rewind and dump on match, etc
-//      dumping up to current would naturally move running position forward to rewind would naturally still work.
-// TODO teach grep -c
 
 int grep(int argc, const char * const *argv) {
   try {
@@ -101,6 +102,13 @@ int grep(int argc, const char * const *argv) {
 
     TCLAP::ValueArg<std::string> key(
         "k", "key", "key", false, "", "string", cmd);
+    TCLAP::ValueArg<uint32_t> context(
+        "C", "context", "context", false, 0, "uint32_t", cmd);
+    TCLAP::ValueArg<uint32_t> before(
+        "B", "before", "before", false, 0, "uint32_t", cmd);
+    TCLAP::ValueArg<uint32_t> after(
+        "A", "after", "after", false, 0, "uint32_t", cmd);
+    TCLAP::SwitchArg count("c", "count", "count", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
     TCLAP::SwitchArg matchDouble("d", "double", "double", cmd);
     TCLAP::SwitchArg matchString("s", "string", "string", cmd);
@@ -154,12 +162,21 @@ int grep(int argc, const char * const *argv) {
       }
     }
 
+    auto beforeContext = 0u;
+    auto afterContext = 0u;
+
+    if (context.isSet())
+      beforeContext = afterContext = context.getValue();
+    if (before.isSet())
+      beforeContext = before.getValue();
+    if (after.isSet())
+      afterContext = after.getValue();
 
     if (fileNames.getValue().empty()) {
-      doGrep(pattern, "-");
+      doGrep(pattern, "-", count.isSet(), beforeContext, afterContext);
     } else {
       for (auto &f : fileNames.getValue()) {
-        doGrep(pattern, f);
+        doGrep(pattern, f, count.isSet(), beforeContext, afterContext);
       }
     }
   } catch (TCLAP::ArgException &e) {

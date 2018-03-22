@@ -472,8 +472,14 @@ public:
     while (source_.peek() != EOF) record();
   }
 
+  bool parseUntilValue() {
+    while (source_.peek() != EOF)
+      if (record()) return true;
+    return false;
+  }
+
 private:
-  void record() const {
+  bool record() const {
     auto c = source_.next();
     if (c.isEof()) THROW("Unexpected EOF at start of record");
     handler_.onRecordStart(source_.pos() - 1);
@@ -510,11 +516,12 @@ private:
         if (source_.pos() - startOfValue != len)
           THROW(
               "could be a parse error, or internal error: value handler didn't skip value!");
-        break;
+        return true;
       }
       default:
         THROW("Unexpected character at start of record: " << c);
     }
+    return false;
   }
 };
 

@@ -59,9 +59,7 @@ struct Pattern {
  *
  * @tparam OutputHandler A ValueHandler to delegate matching records to.
  */
-template<typename OutputHandler>
 class GrepHandler : public NoopValueHandler {
-  OutputHandler &handler_;
   Dictionary &dictionary_;
 
   const Pattern &pattern_;
@@ -88,14 +86,14 @@ class GrepHandler : public NoopValueHandler {
 
 public:
   GrepHandler(Dictionary &dictionary,
-              OutputHandler &handler,
               Pattern &pattern)
-      : handler_(handler),
-        dictionary_(dictionary),
+      : dictionary_(dictionary),
         pattern_(pattern),
         matched_(false) {
     str_.reserve(1<<16);
   }
+
+  bool matched() const { return matched_; }
 
   bool isKey() const {
     auto &c = context_.back();
@@ -110,14 +108,8 @@ public:
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
     matched_ = false;
-    auto sov = source.pos();
     ValueParser<GrepHandler> parser(source, *this);
     parser.value();
-
-    if (matched_) {
-      source.seek(sov);
-      handler_.onValue(source);
-    }
   }
 
   template<typename C, typename V>
@@ -176,6 +168,9 @@ public:
   }
 
   void onStringStart(size_t, size_t len) override {
+    if (!pattern_.strPattern
+        && !(pattern_.requiresKeyMatch() && isKey()))
+      return;
     str_.clear();
     str_.reserve(len);
   }
@@ -186,6 +181,9 @@ public:
   }
 
   void onStringFragment(std::string_view frag) override {
+    if (!pattern_.strPattern
+        && !(pattern_.requiresKeyMatch() && isKey()))
+      return;
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 
@@ -204,16 +202,52 @@ private:
 
 namespace {
 
-void doGrep(Pattern &pattern, const std::string &filename) {
+void doGrep(Pattern &pattern, const std::string &filename,
+            bool count, uint32_t beforeContext, uint32_t afterContext) {
+  if (count) beforeContext = afterContext = 0;
+
   Dictionary dictionary;
   JsonOutputHandler jsonHandler(dictionary);
-  GrepHandler<JsonOutputHandler> grepHandler(
-      dictionary, jsonHandler, pattern);
-  AuRecordHandler<decltype(grepHandler)> recordHandler(
-      dictionary, grepHandler);
+  GrepHandler grepHandler(dictionary, pattern);
+  AuRecordHandler recordHandler(dictionary, grepHandler);
+  AuRecordHandler outputHandler(dictionary, jsonHandler);
   FileByteSource source(filename, false);
   try {
-    RecordParser(source, recordHandler).parseStream();
+    std::vector<size_t> posBuffer;
+    posBuffer.reserve(beforeContext+1);
+    size_t force = 0;
+    size_t total = 0;
+
+    // TODO in order to work correctly, dictionary needs to detect and ignore
+    // replayed add records! and dictionary needs to know how to replay across clears (with prior dictionary!)
+    while (source.peek() != EOF) {
+      if (!count) {
+        if (posBuffer.size() == beforeContext + 1)
+          posBuffer.erase(posBuffer.begin());
+      }
+      posBuffer.push_back(source.pos());
+      if (!RecordParser(source, recordHandler).parseUntilValue())
+        break;
+      if (grepHandler.matched()) {
+        total++;
+        if (count) continue;
+        source.seek(posBuffer.front());
+        while (!posBuffer.empty()) {
+          RecordParser(source, outputHandler).parseUntilValue();
+          posBuffer.pop_back();
+        }
+        force = afterContext;
+      } else if (force) {
+        source.seek(posBuffer.back());
+        RecordParser(source, outputHandler).parseUntilValue();
+        force--;
+      }
+    }
+
+    if (count) {
+      std::cout << total << std::endl;
+    }
+
     recordHandler.onParseEnd();
   } catch (parse_error &e) {
     std::cerr << e.what() << std::endl;
