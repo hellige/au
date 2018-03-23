@@ -12,6 +12,8 @@
 #include <chrono>
 #include <inttypes.h>
 #include <iostream>
+#include <stdio.h>
+#include <stdint.h>
 #include <string>
 #include <string_view>
 #include <vector>
