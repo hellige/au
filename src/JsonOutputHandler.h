@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AuDecoder.h"
+#include "au/AuDecoder.h"
 #include "Dictionary.h"
 #include "AuRecordHandler.h"
 
@@ -8,12 +8,13 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
-#include <cmath>
 #include <chrono>
-#include <inttypes.h>
+#include <cinttypes>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
-#include <stdio.h>
-#include <stdint.h>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -107,7 +108,11 @@ public:
 
     // Isolate the sub-second (fractional portion)
     auto micros = duration_cast<microseconds>(nanos - s);
-    snprintf(strTime + 20, 7, "%06" PRIu64, micros.count());
+    // TODO: Why does the TC build not find PRIu64?
+    //snprintf(strTime + 20, 7, "%06" PRIu64, micros.count());
+    std::ostringstream oss;
+    oss << std::setfill('0') << std::setw(6) << micros.count();
+    snprintf(strTime + 20, 7, "%s", oss.str().c_str());
 
     writer_.String(strTime,
                    static_cast<rapidjson::SizeType>(sizeof(strTime) - 1));
@@ -131,5 +136,9 @@ public:
   void onStringFragment(std::string_view frag) {
     // TODO is this the best way to do this?
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
+  }
+
+  std::string str() {
+    return std::string(buffer_.GetString(), buffer_.GetSize());
   }
 };
