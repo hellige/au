@@ -36,5 +36,8 @@ parseGitModules() {
 }
 
 #parseGitModules
+cd ${ROOT_DIR}
+ls -la
+pwd
 env HOME=${ROOT_DIR}/drw git submodule init
 env HOME=${ROOT_DIR}/drw git submodule update --force
