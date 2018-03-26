@@ -294,13 +294,6 @@ struct StatsRecordHandler {
   void onStringFragment(std::string_view fragment) {
     next.onStringFragment(fragment);
   }
-
-  void onParseEnd() {
-    auto *dict = dictionary.latest();
-    if (dict && dict->size())
-      dictStats(*dict, dictFrequency, "at end of file", fullDictDump);
-    next.onParseEnd();
-  }
 };
 
 void usage() {
@@ -342,10 +335,14 @@ public:
     FileByteSource source(filename_, false);
     try {
       RecordParser(source, handler).parseStream();
-      handler.onParseEnd();
     } catch (parse_error &e) {
       std::cout << e.what() << std::endl;
     }
+
+    auto *dict = handler.dictionary.latest();
+    if (dict && dict->size())
+      dictStats(*dict, handler.dictFrequency, "at end of file",
+                handler.fullDictDump);
 
     // TODO record/dump format version and metadata for all headers in stream
     std::cout

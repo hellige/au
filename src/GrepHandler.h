@@ -1,7 +1,10 @@
 #pragma once
 
-#include "AuDecoder.h"
+#include "au/AuDecoder.h"
+#include "JsonOutputHandler.h"
+#include "Tail.h"
 
+#include <cassert>
 #include <optional>
 #include <variant>
 
@@ -19,6 +22,13 @@ struct Pattern {
   std::optional<double> doublePattern;
   std::optional<StrPattern> strPattern;
 
+  std::optional<uint32_t> numMatches;
+  std::optional<size_t> scanSuffixAmount;
+  uint32_t beforeContext = 0;
+  uint32_t afterContext = 0;
+  bool bisect = false;
+  bool count = false;
+
   bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
 
   bool matchesKey(std::string_view key) const {
@@ -34,7 +44,6 @@ struct Pattern {
   bool matchesValue(int64_t val) const {
     if (!intPattern) return false;
     return *intPattern == val;
-
   }
 
   bool matchesValue(double val) const {
@@ -65,6 +74,7 @@ class GrepHandler : public NoopValueHandler {
   std::vector<char> str_;
   const Dictionary::Dict *dictionary_ = nullptr;
   bool matched_;
+  bool less_ = false; // TODO DELETE
 
   // Keeps track of the context we're in so we know if the string we're
   // constructing or reading is a key or a value
@@ -91,6 +101,7 @@ public:
   }
 
   bool matched() const { return matched_; }
+  bool recordPrecedesPattern() const { return less_; }
 
   bool isKey() const {
     auto &c = context_.back();
@@ -106,6 +117,7 @@ public:
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
     matched_ = false;
+    less_ = false;
     ValueParser<GrepHandler> parser(source, *this);
     parser.value();
   }
@@ -127,12 +139,30 @@ public:
   void onInt(size_t, int64_t value) override {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
+
+    // TODO TOTAL HACK FIX THIS
+    //if (context_.back().checkVal && pattern_.intPattern)
+      //less_ = *pattern_.intPattern < value;
+    if (context_.back().checkVal
+            && pattern_.intPattern
+            && value < *pattern_.intPattern)
+      less_ = true;
+
     incrCounter();
   }
 
   void onUint(size_t, uint64_t value) override {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
+
+    // TODO TOTAL HACK FIX THIS
+    //if (context_.back().checkVal && pattern_.uintPattern)
+      //less_ = *pattern_.uintPattern < value;
+    if (context_.back().checkVal
+            && pattern_.uintPattern
+            && value < *pattern_.uintPattern)
+      less_ = true;
+
     incrCounter();
   }
   void onDouble(size_t, double value) override {
@@ -188,8 +218,7 @@ public:
 private:
   void checkString(std::string_view sv) {
     if (isKey()) {
-      if (pattern_.matchesKey(sv))
-        context_.back().checkVal = true;
+      context_.back().checkVal = pattern_.matchesKey(sv);
       return;
     } else {
       if (context_.back().checkVal && pattern_.matchesValue(sv))
@@ -198,43 +227,52 @@ private:
   }
 };
 
+
 namespace {
 
-void doGrep(Pattern &pattern, const std::string &filename,
-            bool count, uint32_t beforeContext, uint32_t afterContext) {
-  if (count) beforeContext = afterContext = 0;
 
-  Dictionary dictionary;
+void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
+                  FileByteSource &source) {
+  if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
+
   JsonOutputHandler jsonHandler;
   GrepHandler grepHandler(pattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);
   AuRecordHandler outputHandler(dictionary, jsonHandler);
-  FileByteSource source(filename, false);
   try {
     std::vector<size_t> posBuffer;
-    posBuffer.reserve(beforeContext+1);
+    posBuffer.reserve(pattern.beforeContext+1);
     size_t force = 0;
     size_t total = 0;
+    size_t matchPos = 0;
+    size_t numMatches = std::numeric_limits<size_t>::max();
+    if (pattern.numMatches) numMatches = *pattern.numMatches;
+    size_t suffixLength = std::numeric_limits<size_t>::max();
+    if (pattern.scanSuffixAmount) suffixLength = *pattern.scanSuffixAmount;
 
-    // TODO in order to work correctly, dictionary needs to detect and ignore
-    // replayed add records! and dictionary needs to know how to replay across clears (with prior dictionary!)
     while (source.peek() != EOF) {
-      if (!count) {
-        if (posBuffer.size() == beforeContext + 1)
+      if (!force) {
+        if (total >= numMatches) break;
+        if (total && source.pos() - matchPos > suffixLength) break;
+      }
+
+      if (!pattern.count) {
+        if (posBuffer.size() == pattern.beforeContext + 1)
           posBuffer.erase(posBuffer.begin());
       }
       posBuffer.push_back(source.pos());
       if (!RecordParser(source, recordHandler).parseUntilValue())
         break;
-      if (grepHandler.matched()) {
+      if (grepHandler.matched() && total < numMatches) {
+        matchPos = posBuffer.back();
         total++;
-        if (count) continue;
+        if (pattern.count) continue;
         source.seek(posBuffer.front());
         while (!posBuffer.empty()) {
           RecordParser(source, outputHandler).parseUntilValue();
           posBuffer.pop_back();
         }
-        force = afterContext;
+        force = pattern.afterContext;
       } else if (force) {
         source.seek(posBuffer.back());
         RecordParser(source, outputHandler).parseUntilValue();
@@ -242,14 +280,73 @@ void doGrep(Pattern &pattern, const std::string &filename,
       }
     }
 
-    if (count) {
+    if (pattern.count) {
       std::cout << total << std::endl;
     }
-
-    recordHandler.onParseEnd();
   } catch (parse_error &e) {
     std::cerr << e.what() << std::endl;
   }
+}
+
+void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
+  source.seek(pos); // TODO tail seekTo function is a little funky. can we get rid of it?
+  TailHandler tailHandler(dictionary, source);
+  if (!tailHandler.sync()) {
+    THROW("Failed to find record at position " << pos);
+  }
+}
+
+void doBisect(Pattern &pattern, const std::string &filename) {
+  constexpr size_t SCAN_THRESHOLD = 256 * 1024;
+  constexpr size_t PREFIX_AMOUNT = 512 * 1024;
+  constexpr size_t SUFFIX_AMOUNT = 1024 * 1024;
+  Dictionary dictionary(32);
+  GrepHandler grepHandler(pattern);
+  AuRecordHandler recordHandler(dictionary, grepHandler);
+  TailByteSource source(filename, false);
+
+  try {
+    size_t start = 0;
+    size_t end = source.endPos();
+    while (end > start) {
+      if (end - start <= SCAN_THRESHOLD) {
+        seekSync(source, dictionary,
+                 start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
+        pattern.scanSuffixAmount = SUFFIX_AMOUNT;
+        reallyDoGrep(pattern, dictionary, source);
+        return;
+      }
+
+      size_t next = start + (end-start)/2;
+      seekSync(source, dictionary, next);
+
+      auto sor = source.pos();
+      if (!RecordParser(source, recordHandler).parseUntilValue())
+        break;
+
+      // this indicates that the current record *strictly* precedes any records
+      // matching the pattern. so we should eventually find the approximate
+      // location of the first such record.
+      if (grepHandler.recordPrecedesPattern()) {
+        start = sor;
+      } else {
+        end = sor;
+      }
+    }
+  } catch (parse_error &e) {
+    std::cerr << e.what() << std::endl;
+  }
+}
+
+void doGrep(Pattern &pattern, const std::string &filename) {
+  if (pattern.bisect) {
+    doBisect(pattern, filename);
+    return;
+  }
+
+  Dictionary dictionary;
+  FileByteSource source(filename, false);
+  reallyDoGrep(pattern, dictionary, source);
 }
 
 }

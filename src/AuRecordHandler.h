@@ -54,6 +54,4 @@ public:
   void onStringFragment(std::string_view frag) {
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
-
-  void onParseEnd() {}
 };

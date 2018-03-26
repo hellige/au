@@ -1,5 +1,7 @@
 #pragma once
 
+#include "au/ParseError.h"
+
 #include <string>
 #include <vector>
 
@@ -41,19 +43,20 @@ private:
   uint32_t maxDicts_;
 
 public:
-  Dictionary(uint32_t maxDicts = 1) // TODO maxDicts > 1 will be handy for bisect
+  Dictionary(uint32_t maxDicts = 1)
   : maxDicts_(maxDicts) {
     dictionaries_.reserve(maxDicts_);
   }
 
-  void clear(size_t sor) {
+  Dict &clear(size_t sor) {
     Dict *dict = search(sor);
 
     if (dict) {
-      if (dict->startPos_ == sor) return;
+      if (dict->startPos_ == sor) return *dict;
       THROW("dictionary mismatch. dict-clear at "
                 << sor << " appears to be within valid range of dictionary "
-                          "starting at " << dict->startPos_);
+                          "starting at " << dict->startPos_
+                << ", last dict pos " << dict->lastDictPos_);
     }
 
     if (dictionaries_.size() == maxDicts_) {
@@ -64,6 +67,7 @@ public:
     } else {
       dictionaries_.emplace_back(sor);
     }
+    return dictionaries_.back();
   }
 
   Dict &findDictionary(size_t sor, size_t relDictPos) {
@@ -83,7 +87,6 @@ public:
     return &dictionaries_.back();
   }
 
-private:
   Dict *search(size_t pos) {
     // usually the one we want is the most recently added one... the other
     // case is something like a bisect, in which case we don't mind scanning.

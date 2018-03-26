@@ -137,10 +137,11 @@ public:
   }
 
   void seek(size_t abspos) {
-    if (abspos > pos_)
-      THROW_RT("seeking forward not supported");
-    auto relseek = pos_ - abspos;
-    if (relseek <= static_cast<size_t>(cur_ - buf_)) {
+    // TODO why not?
+    //if (abspos > pos_)
+    //  THROW_RT("seeking forward not supported");
+    if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
+      auto relseek = pos_ - abspos;
       cur_ -= relseek;
       pos_ -= relseek;
     } else {
@@ -192,8 +193,6 @@ protected:
     return true;
   }
 };
-
-namespace {
 
 class StringBuilder {
   std::string str_;
@@ -525,8 +524,6 @@ private:
   }
 };
 
-}
-
 struct NoopValueHandler {
   virtual ~NoopValueHandler() = default;
 
@@ -564,7 +561,6 @@ struct NoopRecordHandler {
   virtual void onStringStart([[maybe_unused]] size_t strLen) {}
   virtual void onStringEnd() {}
   virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
-  virtual void onParseEnd() {}
 };
 
 class AuDecoder {
@@ -579,7 +575,6 @@ public:
     FileByteSource source(filename_, waitForData);
     try {
       RecordParser<H>(source, handler).parseStream();
-      handler.onParseEnd();
     } catch (parse_error &e) {
       std::cerr << e.what() << std::endl;
     }

@@ -53,18 +53,20 @@ void usage() {
   std::cout
       << "usage: au grep [options] [--] <pattern> <path>...\n"
       << "\n"
-      << "  -h --help         show usage and exit\n"
-      << "  -k --key <key>    match pattern only in object values with key <key>\n"
-      << "  -i --integer      match <pattern> with integer values\n"
-      << "  -d --double       match <pattern> with double-precision float values\n"
-      << "  -s --string       match <pattern> with string values\n"
-      << "  -u --substring    match <pattern> as a substring of string values\n"
-      << "                    implies -s, not compatible with -i/-d\n"
-      << "  -i --integer      match <pattern> with integer values\n"
-      << "  -B --before <n>   show <n> records of context before each match\n"
-      << "  -A --after <n>    show <n> records of context after each match\n"
-      << "  -C --context <n>  equivalent to -A n -B n\n"
-      << "  -c --count        print count of matching records per file\n";
+      << "  -h --help           show usage and exit\n"
+      << "  -k --key <key>      match pattern only in object values with key <key>\n"
+      << "  -o --ordered <key>  like -k, but values for <key> are assumed to to be\n"
+      << "                      roughly ordered\n"
+      << "  -i --integer        match <pattern> with integer values\n"
+      << "  -d --double         match <pattern> with double-precision float values\n"
+      << "  -s --string         match <pattern> with string values\n"
+      << "  -u --substring      match <pattern> as a substring of string values\n"
+      << "                      implies -s, not compatible with -i/-d\n"
+      << "  -m --matches <n>    show only the first <n> matching records\n"
+      << "  -B --before <n>     show <n> records of context before each match\n"
+      << "  -A --after <n>      show <n> records of context after each match\n"
+      << "  -C --context <n>    equivalent to -A n -B n\n"
+      << "  -c --count          print count of matching records per file\n";
 }
 
 struct UsageVisitor : public TCLAP::Visitor {
@@ -102,12 +104,16 @@ int grep(int argc, const char * const *argv) {
 
     TCLAP::ValueArg<std::string> key(
         "k", "key", "key", false, "", "string", cmd);
+    TCLAP::ValueArg<std::string> ordered(
+        "o", "ordered", "oredered", false, "", "string", cmd);
     TCLAP::ValueArg<uint32_t> context(
         "C", "context", "context", false, 0, "uint32_t", cmd);
     TCLAP::ValueArg<uint32_t> before(
         "B", "before", "before", false, 0, "uint32_t", cmd);
     TCLAP::ValueArg<uint32_t> after(
         "A", "after", "after", false, 0, "uint32_t", cmd);
+    TCLAP::ValueArg<uint32_t> matches(
+        "m", "matches", "matches", false, 0, "uint32_t", cmd);
     TCLAP::SwitchArg count("c", "count", "count", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
     TCLAP::SwitchArg matchDouble("d", "double", "double", cmd);
@@ -122,8 +128,19 @@ int grep(int argc, const char * const *argv) {
     cmd.setOutput(&output);
     cmd.parse(argc, argv);
 
+    if (key.isSet() && ordered.isSet()) {
+      std::cerr << "only one of -k or -o may be specified." << std::endl;
+      return 1;
+    }
+
     Pattern pattern;
     if (key.isSet()) pattern.keyPattern = key.getValue();
+    if (ordered.isSet()) {
+      pattern.keyPattern = ordered.getValue();
+      pattern.bisect = true;
+    }
+
+    if (matches.isSet()) pattern.numMatches = matches.getValue();
 
     bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
     bool numericMatch = matchInt.isSet() || matchDouble.isSet();
@@ -162,21 +179,20 @@ int grep(int argc, const char * const *argv) {
       }
     }
 
-    auto beforeContext = 0u;
-    auto afterContext = 0u;
-
     if (context.isSet())
-      beforeContext = afterContext = context.getValue();
+      pattern.beforeContext = pattern.afterContext = context.getValue();
     if (before.isSet())
-      beforeContext = before.getValue();
+      pattern.beforeContext = before.getValue();
     if (after.isSet())
-      afterContext = after.getValue();
+      pattern.afterContext = after.getValue();
+
+    pattern.count = count.isSet();
 
     if (fileNames.getValue().empty()) {
-      doGrep(pattern, "-", count.isSet(), beforeContext, afterContext);
+      doGrep(pattern, "-");
     } else {
       for (auto &f : fileNames.getValue()) {
-        doGrep(pattern, f, count.isSet(), beforeContext, afterContext);
+        doGrep(pattern, f);
       }
     }
   } catch (TCLAP::ArgException &e) {
