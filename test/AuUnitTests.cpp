@@ -266,12 +266,6 @@ TEST_F(AuFormatterTest, NestedArray) {
   EXPECT_EQ(std::string("\x0b\x61\x62\x0b\x63\x64\x0c\x0c"), buf.str());
 }
 
-
-TEST(FileByteSource, SeekStdio) {
-  FileByteSource fbs("/dev/zero", false);
-  EXPECT_THROW(fbs.seek(5), std::runtime_error);
-}
-
 TEST(AuEncoder, creation) {
   std::ostringstream os;
   AuEncoder au(os);

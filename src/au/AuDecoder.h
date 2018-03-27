@@ -133,13 +133,10 @@ public:
   }
 
   void skip(size_t len) {
-    read(len, [](std::string_view) {});
+    seek(pos_ + len);
   }
 
   void seek(size_t abspos) {
-    // TODO why not?
-    //if (abspos > pos_)
-    //  THROW_RT("seeking forward not supported");
     if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
       auto relseek = pos_ - abspos;
       cur_ -= relseek;
