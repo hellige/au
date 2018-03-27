@@ -307,7 +307,7 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
 }
 
 void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
-  source.seek(pos); // TODO tail seekTo function is a little funky. can we get rid of it?
+  source.seek(pos);
   TailHandler tailHandler(dictionary, source);
   if (!tailHandler.sync()) {
     THROW("Failed to find record at position " << pos);

@@ -29,14 +29,6 @@ public:
     }
   }
 
-  void seekTo(size_t absPos) {
-    if (absPos < pos()) {
-      seek(absPos);
-    } else if (absPos > pos()) {
-      skip(absPos - pos());
-    }
-  }
-
   size_t endPos() const {
     struct stat stat;
     if (auto res = fstat(fd_, &stat); res < 0)
@@ -255,7 +247,6 @@ public:
           DictionaryBuilder builder(source_, dictionary_, sor);
           builder.build();
           // We seem to have a complete dictionary. Let's try validating this val.
-//          source_.skip(sor - source_.pos()); // TODO at this point, we're pretty committed to having a seekable stream. probably better just to seek forward than to 'skip'
           source_.seek(sor);
           expect('V');
           if (backDictRef != readBackref()) {
@@ -284,7 +275,7 @@ public:
       } catch (std::exception &e) {
         std::cerr << "Ignoring exception while synchronizing start of tailing: "
                   << e.what() << "\n";
-        source_.seekTo(sor + 1);
+        source_.seek(sor + 1);
       }
     };
   }
