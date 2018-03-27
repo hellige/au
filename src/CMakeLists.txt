@@ -29,6 +29,8 @@ install(TARGETS au
         RUNTIME DESTINATION bin)
 
 if (STATIC)
+    set_target_properties(au PROPERTIES LINK_FLAGS_DEBUG -static)
     set_target_properties(au PROPERTIES LINK_FLAGS_RELEASE -static)
     set_target_properties(au PROPERTIES LINK_FLAGS_RELWITHDEBINFO -static)
+    set_target_properties(au PROPERTIES LINK_FLAGS_MINSIZEREL -static)
 endif ()
