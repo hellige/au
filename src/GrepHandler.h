@@ -5,6 +5,7 @@
 #include "Tail.h"
 
 #include <cassert>
+#include <chrono>
 #include <optional>
 #include <variant>
 
@@ -21,6 +22,8 @@ struct Pattern {
   std::optional<uint64_t> uintPattern;
   std::optional<double> doublePattern;
   std::optional<StrPattern> strPattern;
+  std::optional<std::pair<std::chrono::nanoseconds, std::chrono::nanoseconds>>
+      timestampPattern; // half-open interval [start, end)
 
   std::optional<uint32_t> numMatches;
   std::optional<size_t> scanSuffixAmount;
@@ -34,6 +37,11 @@ struct Pattern {
   bool matchesKey(std::string_view key) const {
     if (!keyPattern) return true;
     return *keyPattern == key;
+  }
+
+  bool matchesValue(std::chrono::nanoseconds val) const {
+    if (!timestampPattern) return false;
+    return val >= timestampPattern->first && val < timestampPattern->second;
   }
 
   bool matchesValue(uint64_t val) const {
@@ -68,7 +76,7 @@ struct Pattern {
  *
  * @tparam OutputHandler A ValueHandler to delegate matching records to.
  */
-class GrepHandler : public NoopValueHandler {
+class GrepHandler {
   const Pattern &pattern_;
 
   std::vector<char> str_;
@@ -128,21 +136,19 @@ public:
            != container.cend();
   }
 
-  void onNull(size_t) override {
+  void onNull(size_t) {
     incrCounter();
   }
 
-  void onBool(size_t, bool) override {
+  void onBool(size_t, bool) {
     incrCounter();
   }
 
-  void onInt(size_t, int64_t value) override {
+  void onInt(size_t, int64_t value) {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
 
     // TODO TOTAL HACK FIX THIS
-    //if (context_.back().checkVal && pattern_.intPattern)
-      //less_ = *pattern_.intPattern < value;
     if (context_.back().checkVal
             && pattern_.intPattern
             && value < *pattern_.intPattern)
@@ -151,13 +157,11 @@ public:
     incrCounter();
   }
 
-  void onUint(size_t, uint64_t value) override {
+  void onUint(size_t, uint64_t value) {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
 
     // TODO TOTAL HACK FIX THIS
-    //if (context_.back().checkVal && pattern_.uintPattern)
-      //less_ = *pattern_.uintPattern < value;
     if (context_.back().checkVal
             && pattern_.uintPattern
             && value < *pattern_.uintPattern)
@@ -165,37 +169,51 @@ public:
 
     incrCounter();
   }
-  void onDouble(size_t, double value) override {
+
+  void onTime(size_t, std::chrono::nanoseconds value) {
+    if (context_.back().checkVal && pattern_.matchesValue(value))
+      matched_ = true;
+
+    // TODO TOTAL HACK FIX THIS
+    if (context_.back().checkVal
+        && pattern_.timestampPattern
+        && value < pattern_.timestampPattern->first)
+      less_ = true;
+
+    incrCounter();
+  }
+
+  void onDouble(size_t, double value) {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
-  void onDictRef(size_t, size_t dictIdx) override {
+  void onDictRef(size_t, size_t dictIdx) {
     assert(dictIdx < dictionary_->size());
     checkString(dictionary_->at(dictIdx)); // TODO optimize by indexing dict first
     incrCounter();
   }
 
-  void onObjectStart() override {
+  void onObjectStart() {
     context_.emplace_back(Context::OBJECT, 0, false);
   }
 
-  void onObjectEnd() override {
+  void onObjectEnd() {
     context_.pop_back();
     incrCounter();
   }
 
-  void onArrayStart() override {
+  void onArrayStart() {
     context_.emplace_back(Context::ARRAY, 0, context_.back().checkVal);
   }
 
-  void onArrayEnd() override {
+  void onArrayEnd() {
     context_.pop_back();
     incrCounter();
   }
 
-  void onStringStart(size_t, size_t len) override {
+  void onStringStart(size_t, size_t len) {
     if (!pattern_.strPattern
         && !(pattern_.requiresKeyMatch() && isKey()))
       return;
@@ -203,12 +221,12 @@ public:
     str_.reserve(len);
   }
 
-  void onStringEnd() override {
+  void onStringEnd() {
     checkString(std::string_view(str_.data(), str_.size()));
     incrCounter();
   }
 
-  void onStringFragment(std::string_view frag) override {
+  void onStringFragment(std::string_view frag) {
     if (!pattern_.strPattern
         && !(pattern_.requiresKeyMatch() && isKey()))
       return;
@@ -244,7 +262,7 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
     posBuffer.reserve(pattern.beforeContext+1);
     size_t force = 0;
     size_t total = 0;
-    size_t matchPos = 0;
+    size_t matchPos = source.pos();
     size_t numMatches = std::numeric_limits<size_t>::max();
     if (pattern.numMatches) numMatches = *pattern.numMatches;
     size_t suffixLength = std::numeric_limits<size_t>::max();
@@ -253,7 +271,7 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
     while (source.peek() != EOF) {
       if (!force) {
         if (total >= numMatches) break;
-        if (total && source.pos() - matchPos > suffixLength) break;
+        if (source.pos() - matchPos > suffixLength) break;
       }
 
       if (!pattern.count) {
@@ -299,7 +317,16 @@ void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
 void doBisect(Pattern &pattern, const std::string &filename) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
-  constexpr size_t SUFFIX_AMOUNT = 1024 * 1024;
+  // it's important that the suffix amount be large enough to cover the entire
+  // scan length + the prefix buffer. this is to guarantee that we will search
+  // AT LEAST the entire scan region for the first match before giving up.
+  // after finding the first match, we'll keep scanning until we go
+  // SUFFIX_AMOUNT without seeing any matches. but we do want to make sure we
+  // look for the first match in the entire region where it could possibly be
+  // (and a bit beyond).
+  constexpr size_t SUFFIX_AMOUNT = SCAN_THRESHOLD + PREFIX_AMOUNT + 266 * 1024;
+  static_assert(SUFFIX_AMOUNT > PREFIX_AMOUNT + SCAN_THRESHOLD);
+
   Dictionary dictionary(32);
   GrepHandler grepHandler(pattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);

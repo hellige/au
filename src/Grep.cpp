@@ -5,7 +5,10 @@
 
 #include "tclap/CmdLine.h"
 
+#include <chrono>
 #include <cstdlib>
+#include <optional>
+#include <regex>
 
 namespace {
 
@@ -49,6 +52,77 @@ bool setDoublePattern(Pattern &pattern, std::string &intPat) {
   return true;
 }
 
+bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
+                 int &end, int max, int min = 0, int base = 0) {
+  if (str.empty()) {
+    start = end = 0;
+    return true;
+  }
+
+  auto result = 0;
+  auto i = 0u;
+  for (; i < len; i++) {
+    if (i == str.size()) break;
+    auto c = str[i];
+    if (c == delim) return false;
+    if (!isdigit(c)) return false;
+    result = 10 * result + c - '0';
+  }
+  str.remove_prefix(i);
+  start = end = result;
+  if (str.empty()) {
+    end += 1;
+  } else {
+    if (str[0] != delim) return false;
+    str.remove_prefix(1);
+    if (str.empty()) return false;
+  }
+  for (; i < len; i++) {
+    start *= 10;
+    end *= 10;
+  }
+  if (start < min || start > max) return false;
+  start -= base;
+  if (end < min || end > max + 1) return false;
+  end -= base;
+  return true;
+}
+
+bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
+  std::tm start;
+  std::tm end;
+  memset(&start, 0, sizeof(tm));
+  memset(&end, 0, sizeof(tm));
+
+  std::string_view sv(tsPat);
+  if (!parsePrefix(sv, 4, '-', start.tm_year, end.tm_year, 9999, 1900, 1900))
+    return false;
+  if (!parsePrefix(sv, 2, '-', start.tm_mon, end.tm_mon, 12, 1, 1))
+    return false;
+  if (!parsePrefix(sv, 2, 'T', start.tm_mday, end.tm_mday, 31, 1)) return false;
+  if (!parsePrefix(sv, 2, ':', start.tm_hour, end.tm_hour, 12)) return false;
+  if (!parsePrefix(sv, 2, ':', start.tm_min, end.tm_min, 59)) return false;
+  if (!parsePrefix(sv, 2, '.', start.tm_sec, end.tm_sec, 59)) return false;
+
+  int startNanos;
+  int endNanos;
+  if (!parsePrefix(sv, 9, 0, startNanos, endNanos, 999999999)) return false;
+
+  std::time_t ttstart = timegm(&start);
+  std::time_t ttend = timegm(&end);
+  if (ttstart == -1 || ttend == -1) return false;
+
+  using namespace std::chrono;
+  auto startInt = duration_cast<nanoseconds>(
+      seconds(ttstart) + nanoseconds(startNanos));
+  auto endInt = duration_cast<nanoseconds>(
+      seconds(ttend) + nanoseconds(endNanos));
+
+  if (startInt == endInt) endInt++;
+  pattern.timestampPattern = std::make_pair(startInt, endInt);
+  return true;
+}
+
 void usage() {
   std::cout
       << "usage: au grep [options] [--] <pattern> <path>...\n"
@@ -59,6 +133,7 @@ void usage() {
       << "                      roughly ordered\n"
       << "  -i --integer        match <pattern> with integer values\n"
       << "  -d --double         match <pattern> with double-precision float values\n"
+      << "  -t --timestamp      match <pattern> with timestamps\n"
       << "  -s --string         match <pattern> with string values\n"
       << "  -u --substring      match <pattern> as a substring of string values\n"
       << "                      implies -s, not compatible with -i/-d\n"
@@ -91,7 +166,6 @@ public:
 
 }
 
-// TODO teach grep about timestamps
 // TODO teach grep to recognize null/true/false when appropriate
 
 int grep(int argc, const char * const *argv) {
@@ -116,6 +190,7 @@ int grep(int argc, const char * const *argv) {
         "m", "matches", "matches", false, 0, "uint32_t", cmd);
     TCLAP::SwitchArg count("c", "count", "count", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
+    TCLAP::SwitchArg matchTimestamp("t", "timestamp", "timestamp", cmd);
     TCLAP::SwitchArg matchDouble("d", "double", "double", cmd);
     TCLAP::SwitchArg matchString("s", "string", "string", cmd);
     TCLAP::SwitchArg matchSubstring("u", "substring", "substring", cmd);
@@ -143,11 +218,12 @@ int grep(int argc, const char * const *argv) {
     if (matches.isSet()) pattern.numMatches = matches.getValue();
 
     bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
-    bool numericMatch = matchInt.isSet() || matchDouble.isSet();
+    bool numericMatch = matchInt.isSet() || matchDouble.isSet()
+                        || matchTimestamp.isSet();
     bool defaultMatch = !(numericMatch || explicitStringMatch);
 
     if (matchSubstring.isSet() && numericMatch) {
-      std::cerr << "-u (substring search) is not compatible with -i/-d."
+      std::cerr << "-u (substring search) is not compatible with -i/-d/-t."
                 << std::endl;
       return 1;
     }
@@ -174,6 +250,16 @@ int grep(int argc, const char * const *argv) {
       if (!success && matchDouble.isSet()) {
         std::cerr << "-d specified, but pattern '"
                   << pat.getValue() << "' is not a double-precision number."
+                  << std::endl;
+        return 1;
+      }
+    }
+
+    if (defaultMatch || matchTimestamp.isSet()) {
+      bool success = setTimestampPattern(pattern, pat.getValue());
+      if (!success && matchTimestamp.isSet()) {
+        std::cerr << "-t specified, but pattern '"
+                  << pat.getValue() << "' is not a date/time."
                   << std::endl;
         return 1;
       }
