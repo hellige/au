@@ -382,16 +382,24 @@ public:
     return *this;
   }
 
+  /** Duration since UNIX epoch. */
   template <class Rep, class Period>
-  AuWriter &value(const std::chrono::duration<Rep, Period> &time) {
+  AuWriter &value(const std::chrono::duration<Rep, Period> &duration) {
     using namespace std::chrono;
-    auto nanoDuration = duration_cast<nanoseconds>(time);
+    auto nanoDuration = duration_cast<nanoseconds>(duration);
     uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
 
     msgBuf_.put(marker::Timestamp);
     auto *dPtr = reinterpret_cast<char *>(&nanos);
     msgBuf_.write(dPtr, sizeof(nanos));
     return *this;
+  }
+
+  template <class Clock, class Duration>
+  AuWriter &value(const std::chrono::time_point<Clock, Duration> &tp) {
+    // Note: system_clock will be UNIX epoc based in C++20
+    std::chrono::time_point<std::chrono::system_clock, Duration> unixT0;
+    return value(tp - unixT0);
   }
 
 

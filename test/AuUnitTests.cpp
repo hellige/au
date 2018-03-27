@@ -145,11 +145,16 @@ TEST_F(AuFormatterTest, Int64) {
 TEST_F(AuFormatterTest, Time) {
   using namespace std::chrono;
   std::string expected;
+  std::chrono::system_clock::time_point tp;
 
   writer.value(nanoseconds(1));
   expected += std::string("\x04\x01\x00\x00\x00\x00\x00\x00\x00", 9);
 
   writer.value(seconds(35));
+  expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
+
+  tp += seconds(35);
+  writer.value(tp);
   expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
 
   EXPECT_EQ(expected, buf.str());
