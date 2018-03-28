@@ -93,15 +93,15 @@ struct VarintHistogram {
 
   void dumpStats(size_t totalBytes) {
     size_t totalInts = 0;
-    auto lastPopulated = 0u;
+    auto onePastLastPopulated = 0u;
     for (auto i = 0u; i < buckets.size(); i++) {
       totalInts += buckets[i];
-      if (buckets[i]) lastPopulated = i;
+      if (buckets[i]) onePastLastPopulated = i + 1;
     }
     std::cout << "     " << name << ": " << commafy(totalInts) << '\n'
               << "       By length:\n";
     size_t totalIntBytes = 0;
-    for (auto i = 0u; i <= lastPopulated; i++) {
+    for (auto i = 0u; i < onePastLastPopulated; i++) {
       auto bytes = buckets[i] * (i + 1);
       totalIntBytes += bytes;
       printf("        %3d: %s (%zu%%) %s\n", i + 1, commafy(buckets[i]).c_str(),
