@@ -102,17 +102,12 @@ public:
     std::tm *tm = gmtime(&tt);
 
     //                   12345678901234567890123456
-    char strTime[sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu")];
+    char strTime[sizeof("yyyy-mm-ddThh:mm:ss.mmmuuunnn")];
     strftime(strTime, 21, "%FT%T.", tm);
 
     // Isolate the sub-second (fractional portion)
-    auto micros = duration_cast<microseconds>(nanos - s);
-    // TODO: Why does the TC build not find PRIu64?
-    //snprintf(strTime + 20, 7, "%06" PRIu64, micros.count());
-    std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(6) << micros.count();
-    snprintf(strTime + 20, 7, "%s", oss.str().c_str());
-
+    auto fraction = duration_cast<nanoseconds>(nanos - s);
+    snprintf(strTime + 20, 10, "%09" PRIu64, fraction.count());
     writer_.String(strTime,
                    static_cast<rapidjson::SizeType>(sizeof(strTime) - 1));
   }
