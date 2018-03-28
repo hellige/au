@@ -52,6 +52,22 @@ bool setDoublePattern(Pattern &pattern, std::string &intPat) {
   return true;
 }
 
+bool setAtomPattern(Pattern &pattern, std::string &atomPat) {
+  if (atomPat == "true") {
+    pattern.atomPattern = Pattern::Atom::True;
+    return true;
+  }
+  if (atomPat == "false") {
+    pattern.atomPattern = Pattern::Atom::False;
+    return true;
+  }
+  if (atomPat == "null") {
+    pattern.atomPattern = Pattern::Atom::Null;
+    return true;
+  }
+  return false;
+}
+
 bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
                  int &end, int max, int min = 0, int base = 0) {
   if (str.empty()) {
@@ -136,6 +152,8 @@ void usage() {
       << "  -t --timestamp      match <pattern> with timestamps: format is\n"
       << "                      2018-03-27T18:45:00.123456789 or any prefix thereof\n"
       << "                      2018-03-27T18:45:00.123, 2018-03-27T18:4, 2018-03, etc.\n"
+      << "  -a --atom           match <pattern> only with atomic literals:\n"
+      << "                      true, false, null\n"
       << "  -s --string         match <pattern> with string values\n"
       << "  -u --substring      match <pattern> as a substring of string values\n"
       << "                      implies -s, not compatible with -i/-d\n"
@@ -168,8 +186,6 @@ public:
 
 }
 
-// TODO teach grep to recognize null/true/false when appropriate
-
 int grep(int argc, const char * const *argv) {
   try {
     UsageVisitor usageVisitor;
@@ -191,6 +207,7 @@ int grep(int argc, const char * const *argv) {
     TCLAP::ValueArg<uint32_t> matches(
         "m", "matches", "matches", false, 0, "uint32_t", cmd);
     TCLAP::SwitchArg count("c", "count", "count", cmd);
+    TCLAP::SwitchArg matchAtom("a", "atom", "atom", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
     TCLAP::SwitchArg matchTimestamp("t", "timestamp", "timestamp", cmd);
     TCLAP::SwitchArg matchDouble("d", "double", "double", cmd);
@@ -221,11 +238,11 @@ int grep(int argc, const char * const *argv) {
 
     bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
     bool numericMatch = matchInt.isSet() || matchDouble.isSet()
-                        || matchTimestamp.isSet();
+                        || matchTimestamp.isSet() || matchAtom.isSet();
     bool defaultMatch = !(numericMatch || explicitStringMatch);
 
     if (matchSubstring.isSet() && numericMatch) {
-      std::cerr << "-u (substring search) is not compatible with -i/-d/-t."
+      std::cerr << "-u (substring search) is not compatible with -i/-d/-t/-a."
                 << std::endl;
       return 1;
     }
@@ -262,6 +279,16 @@ int grep(int argc, const char * const *argv) {
       if (!success && matchTimestamp.isSet()) {
         std::cerr << "-t specified, but pattern '"
                   << pat.getValue() << "' is not a date/time."
+                  << std::endl;
+        return 1;
+      }
+    }
+
+    if (defaultMatch || matchAtom.isSet()) {
+      bool success = setAtomPattern(pattern, pat.getValue());
+      if (!success && matchAtom.isSet()) {
+        std::cerr << "-a specified, but pattern '"
+                  << pat.getValue() << "' is not true, false or null."
                   << std::endl;
         return 1;
       }

@@ -17,7 +17,12 @@ struct Pattern {
     bool fullMatch;
   };
 
+  enum class Atom {
+    True, False, Null
+  };
+
   std::optional<std::string> keyPattern;
+  std::optional<Atom> atomPattern;
   std::optional<int64_t> intPattern;
   std::optional<uint64_t> uintPattern;
   std::optional<double> doublePattern;
@@ -37,6 +42,11 @@ struct Pattern {
   bool matchesKey(std::string_view key) const {
     if (!keyPattern) return true;
     return *keyPattern == key;
+  }
+
+  bool matchesValue(Atom val) const {
+    if (!atomPattern) return false;
+    return *atomPattern == val;
   }
 
   bool matchesValue(std::chrono::nanoseconds val) const {
@@ -137,10 +147,15 @@ public:
   }
 
   void onNull(size_t) {
+    if (context_.back().checkVal && pattern_.matchesValue(Pattern::Atom::Null))
+      matched_ = true;
     incrCounter();
   }
 
-  void onBool(size_t, bool) {
+  void onBool(size_t, bool val) {
+    auto atom = val ? Pattern::Atom::True : Pattern::Atom::False;
+    if (context_.back().checkVal && pattern_.matchesValue(atom))
+      matched_ = true;
     incrCounter();
   }
 
