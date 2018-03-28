@@ -207,8 +207,6 @@ int grep(int argc, const char * const *argv) {
   try {
     UsageVisitor usageVisitor;
     TCLAP::CmdLine cmd("", ' ', "", false);
-    TCLAP::UnlabeledValueArg<std::string> subCmd(
-        "grep", "grep", true, "grep", "command", cmd);
     TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
 
     TCLAP::ValueArg<std::string> key(
@@ -238,7 +236,7 @@ int grep(int argc, const char * const *argv) {
 
     GrepOutput output;
     cmd.setOutput(&output);
-    cmd.parse(argc, argv);
+    cmd.parse(argc-1, argv+1);
 
     if (key.isSet() && ordered.isSet()) {
       std::cerr << "only one of -k or -o may be specified." << std::endl;

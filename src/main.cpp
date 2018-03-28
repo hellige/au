@@ -29,13 +29,10 @@ int usage(std::ostream &os) {
 int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
-    << "   cat      Decode listed files to stdout (au2json)\n"
+    << "   cat      Decode listed files to stdout (alias au2json)\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
-    << "   enc      Encode listed files to stdout\n"
-    << "   json2au  <json_file> <au_file> [count]\n"
-    << "            Encode json to au (either file can be '-')\n"
-    << "            Optionally stops after count lines have been encoded\n"
+    << "   enc      Encode listed files to stdout (alias json2au)\n"
     << "   stats    Display file statistics\n";
   return 0;
 }

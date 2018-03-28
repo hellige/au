@@ -382,8 +382,6 @@ int stats(int argc, const char * const *argv) {
   try {
     UsageVisitor usageVisitor;
     TCLAP::CmdLine cmd("", ' ', "", false);
-    TCLAP::UnlabeledValueArg<std::string> subCmd(
-        "stats", "stats", true, "stats", "command", cmd);
     TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
 
     TCLAP::SwitchArg dictDump("d", "dict", "Dictionary dump", cmd, false);
@@ -392,7 +390,7 @@ int stats(int argc, const char * const *argv) {
 
     StatsOutput output;
     cmd.setOutput(&output);
-    cmd.parse(argc, argv);
+    cmd.parse(argc-1, argv+1);
 
     if (fileNames.getValue().empty()) {
       StatsRecordHandler handler(dictDump.isSet());

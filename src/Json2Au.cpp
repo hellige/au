@@ -4,6 +4,7 @@
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 #include <rapidjson/reader.h>
+#include <tclap/CmdLine.h>
 
 #include <chrono>
 #include <fstream>
@@ -150,32 +151,10 @@ public:
   }
 };
 
-} // namespace
-
-int json2au(int argc, const char * const *argv) {
-  argc -= 2; argv += 2;
-
-  if (argc < 2 || argc > 3) {
-    return -1;
-  }
-
-  std::string inFName("-"), outFName("-");
-  size_t maxEntries = std::numeric_limits<size_t>::max();
-
-  switch (argc) {
-    case 3:
-      maxEntries = strtoull(argv[2], nullptr, 0);
-      [[fallthrough]];
-    case 2:
-      outFName = argv[1];
-      [[fallthrough]];
-    case 1:
-      inFName = argv[0];
-      [[fallthrough]];
-    default:
-      break;
-  }
-
+ssize_t encodeFile(const std::string &inFName,
+                   std::ostream &out,
+                   size_t maxEntries,
+                   bool quiet) {
   FILE *inF;
 
   if (inFName == "-") {
@@ -188,19 +167,6 @@ int json2au(int argc, const char * const *argv) {
     return 1;
   }
 
-  std::streambuf *outBuf;
-  std::ofstream outFileStream;
-  if (outFName == "-") {
-    outBuf = std::cout.rdbuf();
-  } else {
-    outFileStream.open(outFName, std::ios_base::binary);
-    if (!outFileStream) {
-      std::cerr << "Unable to open output " << outFName << std::endl;
-      return 1;
-    }
-    outBuf = outFileStream.rdbuf();
-  }
-  std::ostream out(outBuf);
   auto metadata = STR("Encoded from json file "
                           << (inFName == "-" ? "<stdin>" : inFName )
                           << " by au");
@@ -213,6 +179,7 @@ int json2au(int argc, const char * const *argv) {
   ParseResult res;
   size_t entriesProcessed = 0;
   size_t timeConversionAttempts = 0, timeConversionFailures = 0;
+  // TODO probably be nicer to use the more flexible time parsing code from grep
   std::regex timeRegExp(
       R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re");
   auto lastTime = std::chrono::steady_clock::now();
@@ -228,11 +195,11 @@ int json2au(int argc, const char * const *argv) {
     });
 
     entriesProcessed++;
-    if (entriesProcessed % 10'000 == 0) {
+    if (!quiet && entriesProcessed % 10'000 == 0) {
       auto stats = au.getStats();
       auto tNow = std::chrono::steady_clock::now();
       auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
-                     (tNow - lastTime);
+          (tNow - lastTime);
       std::cerr << "Processed: " << stats["Records"] / 1'000 << "k entries in "
                 << elapsed.count() << "ms. DictSize: " << stats["DictSize"]
                 << " DictDelta: " << stats["DictSize"] - lastDictSize
@@ -243,9 +210,9 @@ int json2au(int argc, const char * const *argv) {
       lastDictSize = stats["DictSize"];
     }
 
-    if (entriesProcessed > maxEntries) break;
+    if (entriesProcessed >= maxEntries) break;
   }
-  if (timeConversionAttempts) {
+  if (!quiet && timeConversionAttempts) {
     std::cerr << "Time conversion attempts: " << timeConversionAttempts
               << " failures: " << timeConversionFailures << " ("
               << (100 * timeConversionFailures / timeConversionAttempts)
@@ -253,11 +220,106 @@ int json2au(int argc, const char * const *argv) {
   }
 
   fclose(inF);
-  outFileStream.close();
 
   if (res.Code() == kParseErrorNone || res.Code() == kParseErrorDocumentEmpty) {
-    return 0;
+    return entriesProcessed;
   } else {
-    return res.Code();
+    std::cerr << "json parse error reading "
+              << (inFName == "-" ? "stdin" : inFName)
+              << " (rapidjson error code " << res.Code() << ")" << std::endl;
+    return -1;
   }
 }
+
+void usage() {
+  std::cout
+    << "usage: au enc [options] [--] [<path>...]\n"
+    << "\n"
+    << " Encodes json to au. Reads stdin if no files specified. Writes to\n"
+    << " stdout unless -o is specified. <path> may be \"-\" for stdin.\n"
+    << "\n"
+    << "  -o --output <path>  output to file\n"
+    << "  -q --quiet          do not print encoding statistics to stderr\n"
+    << "  -c --count <count>  stop after encoding <count> records.\n";
+}
+
+struct EncVisitor : public TCLAP::Visitor {
+  void visit() override {
+    usage();
+    exit(0);
+  };
+};
+
+class EncOutput : public TCLAP::StdOutput {
+public:
+  void failure(TCLAP::CmdLineInterface &, TCLAP::ArgException &e) override {
+    std::cerr << e.error() << std::endl;
+    ::usage();
+    exit(1);
+  }
+
+  void usage(TCLAP::CmdLineInterface &) override {
+    ::usage();
+  }
+};
+
+
+} // namespace
+
+int json2au(int argc, const char * const *argv) {
+  try {
+    EncVisitor usageVisitor;
+    TCLAP::CmdLine cmd("", ' ', "", false);
+    TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+
+    TCLAP::ValueArg<std::string> outfile(
+        "o", "output", "output", false, "-", "string", cmd);
+    TCLAP::ValueArg<size_t> count(
+        "c", "count", "count", false, std::numeric_limits<size_t>::max(),
+        "size_t", cmd);
+    TCLAP::SwitchArg quiet("q", "quiet", "quiet", cmd, false);
+    TCLAP::UnlabeledMultiArg<std::string> fileNames(
+        "fileNames", "", false, "filename", cmd);
+
+    EncOutput output;
+    cmd.setOutput(&output);
+    cmd.parse(argc-1, argv+1);
+
+
+    auto maxEntries = count.getValue();
+    auto outFName = outfile.getValue();
+
+    std::vector<std::string> inputFiles{"-"};
+    if (fileNames.isSet()) inputFiles = fileNames.getValue();
+
+
+    std::streambuf *outBuf;
+    std::ofstream outFileStream;
+    if (outFName == "-") {
+      outBuf = std::cout.rdbuf();
+    } else {
+      outFileStream.open(outFName, std::ios_base::binary);
+      if (!outFileStream) {
+        std::cerr << "Unable to open output " << outFName << std::endl;
+        return 1;
+      }
+      outBuf = outFileStream.rdbuf();
+    }
+    std::ostream out(outBuf);
+
+    for (const auto &f : inputFiles) {
+      auto result = encodeFile(f, out, maxEntries, quiet.isSet());
+      if (result == -1) break;
+      maxEntries -= result;
+    }
+
+    // no need to explicitly close outFileStream
+  } catch (TCLAP::ArgException &e) {
+    std::cerr << "error: " << e.error() << " for arg " << e.argId()
+              << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
