@@ -1,5 +1,7 @@
 option(STATIC "Build statically linked binary" OFF)
 option(LTO "Use link-time optimization" OFF)
+option(GeneratePGO "Generate PGO information" OFF)
+option(UsePGO "User previously-generated PGO information" OFF)
 
 if (LTO)
     message("Enabling link-time optimization")
@@ -7,6 +9,20 @@ if (LTO)
     check_ipo_supported()
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif ()
+
+if (GeneratePGO)
+    if (UsePGO)
+        message(FATAL "Can't have both generate and use PGO on at the same time")
+    endif ()
+    set(PGO "-fprofile-generate=${CMAKE_BINARY_DIR}")
+endif ()
+
+if (UsePGO)
+    set(PGO "-fprofile-use=${CMAKE_BINARY_DIR}")
+endif ()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PGO}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PGO}")
 
 # clang -Wextra only for our own code
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
