@@ -51,7 +51,7 @@ struct SizeHistogram {
   size_t totalValBytes = 0;
   std::vector<size_t> buckets; // by power of two
 
-  SizeHistogram(const char *name) : name(name) {}
+  explicit SizeHistogram(const char *name) : name(name) {}
 
   void add(size_t size) {
     totalValBytes += size;
@@ -84,7 +84,7 @@ struct VarintHistogram {
   std::string name;
   std::vector<size_t> buckets; // by size
 
-  VarintHistogram(const char *name) : name(name) {}
+  explicit VarintHistogram(const char *name) : name(name) {}
 
   void add(size_t size) {
     if (size > buckets.size()) buckets.resize(size);
@@ -246,7 +246,7 @@ struct StatsRecordHandler {
   size_t dictAdds = 0;
   size_t headers = 0;
 
-  StatsRecordHandler(bool fullDictDump)
+  explicit StatsRecordHandler(bool fullDictDump)
   : vh(dictFrequency),
     next(dictionary, vh),
     fullDictDump(fullDictDump) {}
