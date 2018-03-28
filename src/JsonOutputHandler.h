@@ -21,8 +21,6 @@
 
 // TODO disable rapidjson debug? is it just NDEBUG?
 
-// TODO this whole file should be split up and rearranged.
-
 class JsonOutputHandler {
   rapidjson::StringBuffer buffer_;
   std::vector<char> str_;

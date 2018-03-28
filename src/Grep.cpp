@@ -1,9 +1,10 @@
 #include "main.h"
-#include "AuDecoder.h"
+#include "AuOutputHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
+#include "au/AuDecoder.h"
 
-#include "tclap/CmdLine.h"
+#include <tclap/CmdLine.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -144,6 +145,7 @@ void usage() {
       << "usage: au grep [options] [--] <pattern> <path>...\n"
       << "\n"
       << "  -h --help           show usage and exit\n"
+      << "  -e --encode         output au-encoded records rather than json\n"
       << "  -k --key <key>      match pattern only in object values with key <key>\n"
       << "  -o --ordered <key>  like -k, but values for <key> are assumed to to be\n"
       << "                      roughly ordered\n"
@@ -184,6 +186,18 @@ public:
   }
 };
 
+template <typename OutputHandler>
+void runGrep(const std::vector<std::string> &fileNames,
+             Pattern &pattern) {
+  if (fileNames.empty()) {
+    doGrep<OutputHandler>(pattern, "-");
+  } else {
+    for (auto &f : fileNames) {
+      doGrep<OutputHandler>(pattern, f);
+    }
+  }
+}
+
 }
 
 int grep(int argc, const char * const *argv) {
@@ -206,6 +220,7 @@ int grep(int argc, const char * const *argv) {
         "A", "after", "after", false, 0, "uint32_t", cmd);
     TCLAP::ValueArg<uint32_t> matches(
         "m", "matches", "matches", false, 0, "uint32_t", cmd);
+    TCLAP::SwitchArg encode("e", "encode", "encode", cmd);
     TCLAP::SwitchArg count("c", "count", "count", cmd);
     TCLAP::SwitchArg matchAtom("a", "atom", "atom", cmd);
     TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
@@ -303,12 +318,10 @@ int grep(int argc, const char * const *argv) {
 
     pattern.count = count.isSet();
 
-    if (fileNames.getValue().empty()) {
-      doGrep(pattern, "-");
+    if (encode.isSet()) {
+      runGrep<AuOutputHandler>(fileNames.getValue(), pattern);
     } else {
-      for (auto &f : fileNames.getValue()) {
-        doGrep(pattern, f);
-      }
+      runGrep<JsonOutputHandler>(fileNames.getValue(), pattern);
     }
   } catch (TCLAP::ArgException &e) {
     std::cerr << "error: " << e.error() << " for arg " << e.argId()

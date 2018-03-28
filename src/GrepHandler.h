@@ -1,15 +1,12 @@
 #pragma once
 
 #include "au/AuDecoder.h"
-#include "JsonOutputHandler.h"
 #include "Tail.h"
 
 #include <cassert>
 #include <chrono>
 #include <optional>
 #include <variant>
-
-// TODO teach grep to emit au-encoded when desired (-e flag?)
 
 struct Pattern {
   struct StrPattern {
@@ -112,7 +109,7 @@ class GrepHandler {
   std::vector<ContextMarker> context_;
 
 public:
-  GrepHandler(Pattern &pattern)
+  GrepHandler(const Pattern &pattern)
       : pattern_(pattern),
         matched_(false) {
     str_.reserve(1<<16);
@@ -263,15 +260,15 @@ private:
 
 namespace {
 
-
+template <typename OutputHandler>
 void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
                   FileByteSource &source) {
   if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
 
-  JsonOutputHandler jsonHandler;
+  OutputHandler outputHandler;
   GrepHandler grepHandler(pattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);
-  AuRecordHandler outputHandler(dictionary, jsonHandler);
+  AuRecordHandler outputRecordHandler(dictionary, outputHandler);
   try {
     std::vector<size_t> posBuffer;
     posBuffer.reserve(pattern.beforeContext+1);
@@ -302,13 +299,13 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
         if (pattern.count) continue;
         source.seek(posBuffer.front());
         while (!posBuffer.empty()) {
-          RecordParser(source, outputHandler).parseUntilValue();
+          RecordParser(source, outputRecordHandler).parseUntilValue();
           posBuffer.pop_back();
         }
         force = pattern.afterContext;
       } else if (force) {
         source.seek(posBuffer.back());
-        RecordParser(source, outputHandler).parseUntilValue();
+        RecordParser(source, outputRecordHandler).parseUntilValue();
         force--;
       }
     }
@@ -329,6 +326,7 @@ void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
   }
 }
 
+template <typename OutputHandler>
 void doBisect(Pattern &pattern, const std::string &filename) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
@@ -355,7 +353,7 @@ void doBisect(Pattern &pattern, const std::string &filename) {
         seekSync(source, dictionary,
                  start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
         pattern.scanSuffixAmount = SUFFIX_AMOUNT;
-        reallyDoGrep(pattern, dictionary, source);
+        reallyDoGrep<OutputHandler>(pattern, dictionary, source);
         return;
       }
 
@@ -380,15 +378,16 @@ void doBisect(Pattern &pattern, const std::string &filename) {
   }
 }
 
+template <typename OutputHandler>
 void doGrep(Pattern &pattern, const std::string &filename) {
   if (pattern.bisect) {
-    doBisect(pattern, filename);
+    doBisect<OutputHandler>(pattern, filename);
     return;
   }
 
   Dictionary dictionary;
   FileByteSource source(filename, false);
-  reallyDoGrep(pattern, dictionary, source);
+    reallyDoGrep<OutputHandler>(pattern, dictionary, source);
 }
 
 }
