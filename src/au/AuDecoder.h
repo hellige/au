@@ -239,11 +239,11 @@ protected:
     return val;
   }
 
-  std::chrono::nanoseconds readTime() const {
+  std::chrono::system_clock::time_point readTime() const {
     uint64_t nanos;
     source_.read(&nanos, sizeof(nanos));
     std::chrono::nanoseconds n(nanos);
-    return n;
+    return std::chrono::system_clock::time_point() + n;
   }
 
   uint64_t readVarint() const {
@@ -533,8 +533,9 @@ struct NoopValueHandler {
   virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
   virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
   virtual void onDouble([[maybe_unused]] size_t pos, double) {}
-  virtual void onTime([[maybe_unused]] size_t pos,
-                      [[maybe_unused]] std::chrono::nanoseconds nanos) {}
+  virtual void onTime(
+      [[maybe_unused]] size_t pos,
+      [[maybe_unused]] std::chrono::system_clock::time_point nanos) {}
   virtual void onDictRef([[maybe_unused]] size_t pos,
                          [[maybe_unused]] size_t dictIdx) {}
   virtual void onStringStart([[maybe_unused]] size_t sov,

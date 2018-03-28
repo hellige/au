@@ -130,12 +130,13 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
   if (ttstart == -1 || ttend == -1) return false;
 
   using namespace std::chrono;
-  auto startInt = duration_cast<nanoseconds>(
+  auto epoch = std::chrono::system_clock::time_point();
+  auto startInt = epoch + duration_cast<nanoseconds>(
       seconds(ttstart) + nanoseconds(startNanos));
-  auto endInt = duration_cast<nanoseconds>(
+  auto endInt = epoch + duration_cast<nanoseconds>(
       seconds(ttend) + nanoseconds(endNanos));
 
-  if (startInt == endInt) endInt++;
+  if (startInt == endInt) endInt += nanoseconds(1);
   pattern.timestampPattern = std::make_pair(startInt, endInt);
   return true;
 }

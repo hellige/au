@@ -193,7 +193,7 @@ struct SmallIntValueHandler : public NoopValueHandler {
     doubleBytes += source_->pos() - pos;
   }
 
-  void onTime(size_t pos, std::chrono::nanoseconds) {
+  void onTime(size_t pos, std::chrono::system_clock::time_point) {
     timestamps++;
     timestampBytes += source_->pos() - pos;
   }

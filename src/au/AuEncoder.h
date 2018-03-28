@@ -389,14 +389,6 @@ public:
     return *this;
   }
 
-  /** Duration is treated as a simple integer. */
-  template <class Rep, class Period>
-  AuWriter &value(const std::chrono::duration<Rep, Period> &duration) {
-    using namespace std::chrono;
-    auto nanoDuration = duration_cast<nanoseconds>(duration);
-    return value(nanoDuration.count());
-  }
-
   /** Time points are converted to nanos since UNIX epoch. */
   template <class Clock, class Duration>
   AuWriter &value(const std::chrono::time_point<Clock, Duration> &tp) {

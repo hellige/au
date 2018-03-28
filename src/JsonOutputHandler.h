@@ -91,10 +91,11 @@ public:
     else writer_.Raw("inf"sv);
   }
 
-  void onTime(size_t, std::chrono::nanoseconds nanos) {
+  void onTime(size_t, std::chrono::system_clock::time_point timestamp) {
     using namespace std::chrono;
     using Clock = std::chrono::high_resolution_clock;
 
+    auto nanos = timestamp.time_since_epoch();
     auto s = duration_cast<seconds>(nanos); // Because to_time_t might round
     auto tp = time_point<Clock, seconds>(s);
     std::time_t tt = system_clock::to_time_t(tp);

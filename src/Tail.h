@@ -174,7 +174,9 @@ public:
   void onInt(size_t, int64_t) override { checkBounds(); }
   void onUint(size_t, uint64_t) override { checkBounds(); }
   void onDouble(size_t, double) override { checkBounds(); }
-  void onTime(size_t, std::chrono::nanoseconds) override { checkBounds(); }
+  void onTime(size_t, std::chrono::system_clock::time_point) override {
+    checkBounds();
+  }
 
   void onDictRef(size_t, size_t dictIdx) override {
     if (dictIdx >= dictionary_.size()) {

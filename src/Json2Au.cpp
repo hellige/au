@@ -72,7 +72,8 @@ class JsonSaxHandler
       std::time_t tt = timegm(&tm);
       if (tt == -1) return false;
 
-      writer_.value(seconds(tt) + microseconds(mics));
+      std::chrono::system_clock::time_point epoch;
+      writer_.value(epoch + seconds(tt) + microseconds(mics));
 
       return true;
     } else {
