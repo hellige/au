@@ -1,4 +1,12 @@
 option(STATIC "Build statically linked binary" OFF)
+option(LTO "Use link-time optimization" OFF)
+
+if (LTO)
+    message("Enabling link-time optimization")
+    include(CheckIPOSupported)
+    check_ipo_supported()
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif ()
 
 # clang -Wextra only for our own code
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
