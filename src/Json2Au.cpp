@@ -2,6 +2,7 @@
 #include "au/ParseError.h"
 
 #include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
 #include <rapidjson/filereadstream.h>
 #include <rapidjson/reader.h>
 #include <tclap/CmdLine.h>
@@ -224,9 +225,10 @@ ssize_t encodeFile(const std::string &inFName,
   if (res.Code() == kParseErrorNone || res.Code() == kParseErrorDocumentEmpty) {
     return entriesProcessed;
   } else {
-    std::cerr << "json parse error reading "
+    std::cerr << "json parse error at "
               << (inFName == "-" ? "stdin" : inFName)
-              << " (rapidjson error code " << res.Code() << ")" << std::endl;
+              << ":" << res.Offset() << ": "
+              << rapidjson::GetParseError_En(res.Code()) << std::endl;
     return -1;
   }
 }
