@@ -110,16 +110,16 @@ TEST_F(AuFormatterTest, Int) {
 
   std::vector<char> ints = {
       // Small positives
-      0x60,             // 0
-      marker::Varint, C(127),        // 127
-      marker::Varint, C(0x80), 0x01, // 128
+      marker::SmallInt::Positive | 0u, // 0
+      marker::Varint, C(127),           // 127
+      marker::Varint, C(0x80), 0x01,    // 128
       // Small negatives
-      0x40 | 1u,             // -1
+      marker::SmallInt::Negative | 1u, // -1
       marker::NegVarint, C(127),        // -127
       marker::NegVarint, C(0x80), 0x01, // -128
       // Larger positives
-      marker::Varint, C(0xff), 0x01, // 0xff
-      marker::Varint, C(0x80), 0x02, // 0x100
+      marker::Varint, C(0xff), 0x01,    // 0xff
+      marker::Varint, C(0x80), 0x02,    // 0x100
   };
   EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
 }
@@ -148,10 +148,13 @@ TEST_F(AuFormatterTest, Time) {
   std::chrono::system_clock::time_point tp;
 
   writer.value(nanoseconds(1));
-  expected += std::string("\x04\x01\x00\x00\x00\x00\x00\x00\x00", 9);
+  expected += (char)(marker::SmallInt::Positive | 1u);
 
   writer.value(seconds(35));
-  expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
+  std::vector<char> s35 = {
+      marker::Varint, C(0x80), C(0xbc), C(0xa6), C(0xb1), C(0x82), C(0x01)
+  };
+  expected += std::string(s35.data(), s35.size());
 
   tp += seconds(35);
   writer.value(tp);

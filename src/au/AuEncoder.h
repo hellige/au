@@ -382,26 +382,31 @@ public:
     return *this;
   }
 
-  /** Duration since UNIX epoch. */
+  AuWriter &nanos(uint64_t n) {
+    msgBuf_.put(marker::Timestamp);
+    auto *dPtr = reinterpret_cast<char *>(&n);
+    msgBuf_.write(dPtr, sizeof(n));
+    return *this;
+  }
+
+  /** Duration is treated as a simple integer. */
   template <class Rep, class Period>
   AuWriter &value(const std::chrono::duration<Rep, Period> &duration) {
     using namespace std::chrono;
     auto nanoDuration = duration_cast<nanoseconds>(duration);
-    uint64_t nanos = static_cast<uint64_t>(nanoDuration.count());
-
-    msgBuf_.put(marker::Timestamp);
-    auto *dPtr = reinterpret_cast<char *>(&nanos);
-    msgBuf_.write(dPtr, sizeof(nanos));
-    return *this;
+    return value(nanoDuration.count());
   }
 
+  /** Time points are converted to nanos since UNIX epoch. */
   template <class Clock, class Duration>
   AuWriter &value(const std::chrono::time_point<Clock, Duration> &tp) {
-    // Note: system_clock will be UNIX epoc based in C++20
-    std::chrono::time_point<std::chrono::system_clock, Duration> unixT0;
-    return value(tp - unixT0);
-  }
+    using namespace std::chrono;
 
+    // Note: system_clock will be UNIX epoch based in C++20
+    time_point<system_clock, Duration> unixT0;
+    auto nanoDuration = duration_cast<nanoseconds>(tp - unixT0);
+    return nanos(static_cast<uint64_t>(nanoDuration.count()));
+  }
 
   template<typename T>
   AuWriter &value(T val,
@@ -468,11 +473,11 @@ private:
   auInt(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
     if constexpr (std::is_signed_v<T>) {
       if (i >= 0 && i < 32) {
-        msgBuf_.put(0x60 | i);
+        msgBuf_.put(marker::SmallInt::Positive | i);
         return *this;
       }
       if (i < 0 && i > -32) {
-        msgBuf_.put(0x40 | -i);
+        msgBuf_.put(marker::SmallInt::Negative | -i);
         return *this;
       }
       bool neg = false;
@@ -490,7 +495,7 @@ private:
       valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
     } else {
       if (i < 32) {
-        msgBuf_.put(0x60 | i);
+        msgBuf_.put(marker::SmallInt::Positive | i);
       } else if (i >= 1ull << 48) {
         msgBuf_.put(marker::PosInt64);
         uint64_t val = i;

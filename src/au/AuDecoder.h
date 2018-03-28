@@ -268,7 +268,7 @@ protected:
   uint64_t parseFormatVersion() const {
     uint64_t version;
     auto c = source_.next();
-    if ((c.charValue() & ~0x1f) == 0x60) {
+    if ((c.charValue() & ~0x1f) == marker::SmallInt::Positive) {
       version = c.charValue() & 0x1f;
     } else if (c == marker::Varint) {
       version = readVarint();
@@ -338,7 +338,7 @@ public:
       return;
     }
     int val = (uint8_t)c.charValue() & ~0xe0;
-    if (c.charValue() & 0x40) {
+    if (c.charValue() & marker::SmallInt::Negative) {
       if (c.charValue() & 0x20)
         handler_.onUint(sov, val);
       else

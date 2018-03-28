@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 namespace marker {
 enum M {
@@ -19,4 +20,10 @@ enum M {
   ObjectEnd,
   RecordEnd
 };
+
+enum SmallInt : uint8_t {
+  Positive = 0x60,
+  Negative = 0x40
+};
+
 }
