@@ -146,16 +146,7 @@ TEST_F(AuFormatterTest, Time) {
   using namespace std::chrono;
   std::string expected;
   std::chrono::system_clock::time_point tp;
-
-  writer.value(nanoseconds(1));
-  expected += (char)(marker::SmallInt::Positive | 1u);
-
-  writer.value(seconds(35));
-  std::vector<char> s35 = {
-      marker::Varint, C(0x80), C(0xbc), C(0xa6), C(0xb1), C(0x82), C(0x01)
-  };
-  expected += std::string(s35.data(), s35.size());
-
+  
   tp += seconds(35);
   writer.value(tp);
   expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
