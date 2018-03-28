@@ -146,7 +146,7 @@ TEST_F(AuFormatterTest, Time) {
   using namespace std::chrono;
   std::string expected;
   std::chrono::system_clock::time_point tp;
-  
+
   tp += seconds(35);
   writer.value(tp);
   expected += std::string("\x04\x00\x9e\x29\x26\x08\x00\x00\x00", 9);
