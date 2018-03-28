@@ -54,8 +54,8 @@ class AuOutputHandler {
   };
 
 public:
-  explicit AuOutputHandler()
-  : encoder_(std::cout) {
+  explicit AuOutputHandler(const std::string &metadata = "")
+  : encoder_(std::cout, metadata) {
     str_.reserve(1u << 16);
   }
 

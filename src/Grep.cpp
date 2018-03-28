@@ -187,15 +187,17 @@ public:
   }
 };
 
-template <typename OutputHandler>
-void runGrep(const std::vector<std::string> &fileNames,
-             Pattern &pattern) {
-  if (fileNames.empty()) {
-    doGrep<OutputHandler>(pattern, "-");
+void grepFile(Pattern &pattern,
+              const std::string &fileName,
+              bool encodeOutput) {
+  if (encodeOutput) {
+    AuOutputHandler handler(
+        STR("Encoded by au: grep output from json file "
+                << (fileName == "-" ? "<stdin>" : fileName)));
+    doGrep(pattern, fileName, handler);
   } else {
-    for (auto &f : fileNames) {
-      doGrep<OutputHandler>(pattern, f);
-    }
+    JsonOutputHandler handler;
+    doGrep(pattern, fileName, handler);
   }
 }
 
@@ -319,10 +321,12 @@ int grep(int argc, const char * const *argv) {
 
     pattern.count = count.isSet();
 
-    if (encode.isSet()) {
-      runGrep<AuOutputHandler>(fileNames.getValue(), pattern);
+    if (fileNames.getValue().empty()) {
+      grepFile(pattern, "-", encode.isSet());
     } else {
-      runGrep<JsonOutputHandler>(fileNames.getValue(), pattern);
+      for (auto &f : fileNames) {
+        grepFile(pattern, f, encode.isSet());
+      }
     }
   } catch (TCLAP::ArgException &e) {
     std::cerr << "error: " << e.error() << " for arg " << e.argId()

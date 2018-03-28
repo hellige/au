@@ -655,6 +655,7 @@ public:
 
   /**
    * @param output
+   * @param metadata Metadata string to write in the header record
    * @param purgeInterval The dictionary will be purged after this many records.
    * A value of 0 means "never".
    * @param purgeThreshold Entries with a count less than this will be purged
@@ -664,9 +665,12 @@ public:
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  AuEncoder(std::ostream &output, size_t purgeInterval = 250'000,
-     size_t purgeThreshold = 50, size_t reindexInterval = 500'000,
-     size_t clearThreshold = 1400)
+  AuEncoder(std::ostream &output,
+            const std::string &metadata = "",
+            size_t purgeInterval = 250'000,
+            size_t purgeThreshold = 50,
+            size_t reindexInterval = 500'000,
+            size_t clearThreshold = 1400)
       : output_(output),
         pos_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
@@ -678,7 +682,7 @@ public:
     af.raw('A');
     af.raw('U');
     af.value(FORMAT_VERSION);
-    af.value("", false); // TODO expose to API for arbitrary metadata
+    af.value(metadata, false);
     af.term();
     pos_ += formatterOutput.tracker().count();
     clearDictionary();

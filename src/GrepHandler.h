@@ -251,13 +251,12 @@ namespace {
 
 template <typename OutputHandler>
 void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
-                  FileByteSource &source) {
+                  FileByteSource &source, OutputHandler &handler) {
   if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
 
-  OutputHandler outputHandler;
   GrepHandler grepHandler(pattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);
-  AuRecordHandler outputRecordHandler(dictionary, outputHandler);
+  AuRecordHandler outputRecordHandler(dictionary, handler);
   try {
     std::vector<size_t> posBuffer;
     posBuffer.reserve(pattern.beforeContext+1);
@@ -316,7 +315,8 @@ void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
 }
 
 template <typename OutputHandler>
-void doBisect(Pattern &pattern, const std::string &filename) {
+void doBisect(Pattern &pattern, const std::string &filename,
+              OutputHandler &handler) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
   // it's important that the suffix amount be large enough to cover the entire
@@ -345,7 +345,7 @@ void doBisect(Pattern &pattern, const std::string &filename) {
         seekSync(source, dictionary,
                  start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
         pattern.scanSuffixAmount = SUFFIX_AMOUNT;
-        reallyDoGrep<OutputHandler>(pattern, dictionary, source);
+        reallyDoGrep(pattern, dictionary, source, handler);
         return;
       }
 
@@ -372,15 +372,16 @@ void doBisect(Pattern &pattern, const std::string &filename) {
 }
 
 template <typename OutputHandler>
-void doGrep(Pattern &pattern, const std::string &filename) {
+void doGrep(Pattern &pattern, const std::string &filename,
+            OutputHandler &handler) {
   if (pattern.bisect) {
-    doBisect<OutputHandler>(pattern, filename);
+    doBisect(pattern, filename, handler);
     return;
   }
 
   Dictionary dictionary;
   FileByteSource source(filename, false);
-    reallyDoGrep<OutputHandler>(pattern, dictionary, source);
+    reallyDoGrep(pattern, dictionary, source, handler);
 }
 
 }

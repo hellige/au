@@ -1,4 +1,5 @@
-#include "AuEncoder.h"
+#include "au/AuEncoder.h"
+#include "au/ParseError.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
@@ -200,7 +201,10 @@ int json2au(int argc, const char * const *argv) {
     outBuf = outFileStream.rdbuf();
   }
   std::ostream out(outBuf);
-  AuEncoder au(out, 250'000, 100);
+  auto metadata = STR("Encoded from json file "
+                          << (inFName == "-" ? "<stdin>" : inFName )
+                          << " by au");
+  AuEncoder au(out, metadata, 250'000, 100);
 
   char readBuffer[65536];
   FileReadStream in(inF, readBuffer, sizeof(readBuffer));

@@ -246,8 +246,6 @@ struct StatsRecordHandler {
   AuRecordHandler<StatsValueHandler> next;
   bool fullDictDump;
   SizeHistogram valueHist {"Value records"};
-  uint64_t formatVersion = 0;
-  std::string metadata;
   size_t numRecords = 0;
   size_t dictClears = 0;
   size_t dictAdds = 0;
@@ -362,7 +360,7 @@ public:
       if (h.metadata.empty())
         std::cout << "No metadata.\n";
       else
-        std::cout << "With metadata:\n       " << handler.metadata << "\n";
+        std::cout << "With metadata:\n       " << h.metadata << "\n";
     }
 
     std::cout
