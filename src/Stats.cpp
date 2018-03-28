@@ -141,7 +141,7 @@ void dictStats(const Dictionary::Dict &dictionary,
               << byFreq[i].second << '\n';
 }
 
-struct SmallIntValueHandler : public NoopValueHandler {
+struct StatsValueHandler : public NoopValueHandler {
   std::vector<size_t> &dictFrequency;
   const Dictionary::Dict *dictionary = nullptr;
   size_t doubles = 0;
@@ -159,13 +159,13 @@ struct SmallIntValueHandler : public NoopValueHandler {
   VarintHistogram stringLengths {"String length encodings"};
   FileByteSource *source_;
 
-  SmallIntValueHandler(std::vector<size_t> &dictFrequency)
+  StatsValueHandler(std::vector<size_t> &dictFrequency)
       : dictFrequency(dictFrequency) {}
 
   void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
     dictionary = &dict;
     source_ = &source;
-    ValueParser<SmallIntValueHandler> parser(source, *this);
+    ValueParser<StatsValueHandler> parser(source, *this);
     parser.value();
     source_ = nullptr;
   }
@@ -233,10 +233,17 @@ struct SmallIntValueHandler : public NoopValueHandler {
 };
 
 struct StatsRecordHandler {
+  struct Header {
+    size_t pos;
+    size_t recordNum;
+    uint64_t version;
+    std::string metadata;
+  };
+
   Dictionary dictionary;
   std::vector<size_t> dictFrequency;
-  SmallIntValueHandler vh;
-  AuRecordHandler<SmallIntValueHandler> next;
+  StatsValueHandler vh;
+  AuRecordHandler<StatsValueHandler> next;
   bool fullDictDump;
   SizeHistogram valueHist {"Value records"};
   uint64_t formatVersion = 0;
@@ -244,7 +251,8 @@ struct StatsRecordHandler {
   size_t numRecords = 0;
   size_t dictClears = 0;
   size_t dictAdds = 0;
-  size_t headers = 0;
+  std::vector<Header> headers;
+  size_t sor = 0;
 
   explicit StatsRecordHandler(bool fullDictDump)
   : vh(dictFrequency),
@@ -252,14 +260,13 @@ struct StatsRecordHandler {
     fullDictDump(fullDictDump) {}
 
   void onRecordStart(size_t pos) {
+    sor = pos;
     numRecords++;
     next.onRecordStart(pos);
   }
 
   void onHeader(uint64_t version, const std::string &metadata) {
-    headers++;
-    formatVersion = version;
-    this->metadata = metadata;
+    headers.push_back(Header{sor, numRecords, version, metadata});
     next.onHeader(version, metadata);
   }
 
@@ -344,14 +351,24 @@ public:
       dictStats(*dict, handler.dictFrequency, "at end of file",
                 handler.fullDictDump);
 
-    // TODO record/dump format version and metadata for all headers in stream
     std::cout
-        << "Stats for " << filename_ << " (format version "
-        << handler.formatVersion << "):\n"
-        << "  Stream metadata: " << handler.metadata << '\n'
+        << "Stats for " << filename_ << ":\n"
+        << "  Headers seen:\n";
+
+    for (const auto &h : handler.headers) {
+      std::cout
+          << "     Record number " << commafy(h.recordNum) << " at byte "
+          << commafy(h.pos) << ", format version " << h.version << ". ";
+      if (h.metadata.empty())
+        std::cout << "No metadata.\n";
+      else
+        std::cout << "With metadata:\n       " << handler.metadata << "\n";
+    }
+
+    std::cout
         << "  Total read: " << prettyBytes(source.pos()) << '\n'
         << "  Records: " << commafy(handler.numRecords) << '\n'
-        << "     Version headers: " << commafy(handler.headers) << '\n'
+        << "     Version headers: " << commafy(handler.headers.size()) << '\n'
         << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
         << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n';
     handler.valueHist.dumpStats(source.pos());
