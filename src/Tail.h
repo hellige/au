@@ -212,7 +212,6 @@ public:
 
   template <typename OutputHandler>
   void parseStream(OutputHandler &handler) {
-    // TODO: What assumptions do we make about AU_FORMAT_VERSION we're tailing?
     if (!sync()) {
       std::cerr
           << "Unable to find the start of a valid value record. "

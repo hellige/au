@@ -374,7 +374,7 @@ public:
   template<class T>
   AuWriter &value(T f,
                   typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr) {
-    double d = static_cast<double>(f); // TODO should we support a float format?
+    double d = static_cast<double>(f);
     static_assert(sizeof(d) == 8);
     msgBuf_.put(marker::Double);
     auto *dPtr = reinterpret_cast<char *>(&d);
@@ -587,7 +587,8 @@ public:
 
 
 class AuEncoder {
-  static constexpr unsigned FORMAT_VERSION = 1;
+  static constexpr uint32_t AU_FORMAT_VERSION
+      = FormatVersion1::AU_FORMAT_VERSION;
   std::ostream &output_;
   AuStringIntern stringIntern_;
   AuVectorBuffer buf_;
@@ -655,7 +656,8 @@ public:
 
   /**
    * @param output
-   * @param metadata Metadata string to write in the header record
+   * @param metadata Metadata string to write in the header record. Values
+   * longer than 16k will be truncated.
    * @param purgeInterval The dictionary will be purged after this many records.
    * A value of 0 means "never".
    * @param purgeThreshold Entries with a count less than this will be purged
@@ -666,7 +668,7 @@ public:
    * be cleared. Large dictionaries slow down encoding.
    */
   AuEncoder(std::ostream &output,
-            const std::string &metadata = "",
+            std::string metadata = "",
             size_t purgeInterval = 250'000,
             size_t purgeThreshold = 50,
             size_t reindexInterval = 500'000,
@@ -676,12 +678,14 @@ public:
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
+    if (metadata.size() > FormatVersion1::MAX_METADATA_SIZE)
+      metadata.resize(FormatVersion1::MAX_METADATA_SIZE);
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('H');
     af.raw('A');
     af.raw('U');
-    af.value(FORMAT_VERSION);
+    af.value(AU_FORMAT_VERSION);
     af.value(metadata, false);
     af.term();
     pos_ += formatterOutput.tracker().count();
@@ -708,7 +712,7 @@ public:
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
-    af.value(FORMAT_VERSION);
+    af.value(AU_FORMAT_VERSION);
     af.term();
     pos_ += formatterOutput.tracker().count();
   }
@@ -727,7 +731,7 @@ public:
     AuStreamBuffer formatterOutput(output_);
     AuWriter af(formatterOutput, stringIntern_);
     af.raw('C');
-    af.value(FORMAT_VERSION);
+    af.value(AU_FORMAT_VERSION);
     af.term();
     pos_ += formatterOutput.tracker().count();
   }

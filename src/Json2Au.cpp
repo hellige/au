@@ -1,6 +1,7 @@
 #include "au/AuEncoder.h"
 #include "au/ParseError.h"
 #include "TclapHelper.h"
+#include "TimestampPattern.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
@@ -10,7 +11,6 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <stdio.h>
 #include <string>
 #include <string.h>
@@ -24,7 +24,6 @@ class JsonSaxHandler
   AuWriter &writer_;
   std::optional<bool> intern_;
   bool toInt_;
-  const std::regex &timeRegExp_;
   size_t &timeConversionAttempts_, &timeConversionFailures_;
 
   bool tryInt(const char *str, SizeType length) {
@@ -54,30 +53,10 @@ class JsonSaxHandler
 
   bool tryTime(const char *str, SizeType length) {
     using namespace std::chrono;
-
     timeConversionAttempts_++;
-
-    std::cmatch m;
-    if (std::regex_match(str, str + length, m, timeRegExp_)) {
-      std::tm tm;
-      memset(&tm, 0, sizeof(tm));
-
-      // Note: tm_year is relative to 1900!
-      tm.tm_year  = static_cast<int>(strtol(m.str(1).c_str(), nullptr, 10))
-                    - 1900;
-      tm.tm_mon   = static_cast<int>(strtol(m.str(2).c_str(), nullptr, 10)) - 1;
-      tm.tm_mday  = static_cast<int>(strtol(m.str(3).c_str(), nullptr, 10));
-      tm.tm_hour  = static_cast<int>(strtol(m.str(4).c_str(), nullptr, 10));
-      tm.tm_min   = static_cast<int>(strtol(m.str(5).c_str(), nullptr, 10));
-      tm.tm_sec   = static_cast<int>(strtol(m.str(6).c_str(), nullptr, 10));
-      auto mics = strtol(m.str(7).c_str(), nullptr, 10);
-
-      std::time_t tt = timegm(&tm);
-      if (tt == -1) return false;
-
-      std::chrono::system_clock::time_point epoch;
-      writer_.value(epoch + seconds(tt) + microseconds(mics));
-
+    auto result = parseTimestampPattern(std::string_view(str, length));
+    if (result) {
+      writer_.value(result->first);
       return true;
     } else {
       timeConversionFailures_++;
@@ -87,10 +66,9 @@ class JsonSaxHandler
 
 public:
   explicit JsonSaxHandler(AuWriter &writer,
-                          const std::regex &timeRegExp,
                           size_t &timeConversionAttempts,
                           size_t &timeConversionFailures)
-      : writer_(writer), toInt_(false), timeRegExp_(timeRegExp),
+      : writer_(writer), toInt_(false),
         timeConversionAttempts_(timeConversionAttempts),
         timeConversionFailures_(timeConversionFailures)
   {}
@@ -104,10 +82,16 @@ public:
   bool Double(double d) { writer_.value(d); return true; }
 
   bool String(const char *str, SizeType length, [[maybe_unused]] bool copy) {
+    constexpr size_t MAX_TIMESTAMP_LEN =
+        sizeof("yyyy-mm-ddThh:mm:ss.mmmuuunnn") - 1;
     if (toInt_) {
       toInt_ = false;
       if (tryInt(str, length)) return true;
-    } else if (length == sizeof("yyyy-mm-ddThh:mm:ss.mmmuuu") - 1) {
+    } else if (length == MAX_TIMESTAMP_LEN
+               || length == MAX_TIMESTAMP_LEN - 3
+               || length == MAX_TIMESTAMP_LEN - 6
+               || length == MAX_TIMESTAMP_LEN - 10) {
+      // try times with ms, us, ns or just seconds...
       if (tryTime(str, length)) return true;
     }
     writer_.value(std::string_view(str, length), intern_);
@@ -180,15 +164,11 @@ ssize_t encodeFile(const std::string &inFName,
   ParseResult res;
   size_t entriesProcessed = 0;
   size_t timeConversionAttempts = 0, timeConversionFailures = 0;
-  // TODO probably be nicer to use the more flexible time parsing code from grep
-  std::regex timeRegExp(
-      R"re(^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})$)re");
   auto lastTime = std::chrono::steady_clock::now();
   int lastDictSize = 0;
   while (res) {
     au.encode([&](auto &f) {
-      JsonSaxHandler handler(f, timeRegExp,
-                             timeConversionAttempts, timeConversionFailures);
+      JsonSaxHandler handler(f, timeConversionAttempts, timeConversionFailures);
       static constexpr auto parseOpt = kParseStopWhenDoneFlag +
                                        kParseFullPrecisionFlag +
                                        kParseNanAndInfFlag;

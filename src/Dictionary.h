@@ -33,7 +33,16 @@ public:
       return startPos_ <= sor && sor <= lastDictPos_;
     }
 
-    const std::string &at(size_t idx) const { return dictionary_.at(idx); }
+    const std::string &at(size_t idx) const {
+      if (idx >= dictionary_.size()) {
+        THROW("Dictionary reference index "
+                  << idx << " out of range. Dictionary started at position "
+                  << startPos_ << ", last add occurred at position "
+                  << lastDictPos_ << ", and currently has "
+                  << dictionary_.size() << " entries.");
+      }
+      return dictionary_.at(idx);
+    }
     const std::vector<std::string> &entries() const { return dictionary_; }
     size_t size() const { return dictionary_.size(); }
   };

@@ -19,8 +19,6 @@
 #include <string_view>
 #include <vector>
 
-// TODO disable rapidjson debug? is it just NDEBUG?
-
 class JsonOutputHandler {
   rapidjson::StringBuffer buffer_;
   std::vector<char> str_;
@@ -57,28 +55,26 @@ public:
   }
 
   void onValue(FileByteSource &source, Dictionary::Dict &dictionary) {
+    buffer_.Clear();
+    writer_.Reset(buffer_);
     dictionary_ = &dictionary;
     ValueParser<JsonOutputHandler> parser(source, *this);
     parser.value();
-    // TODO this function is silly
+    if (!writer_.IsComplete()) {
+      THROW("rapidjson writer does not report a complete value after parse of"
+            " au value!");
+    }
     if (buffer_.GetSize()) {
-      assert(writer_.IsComplete());
       std::cout
           << std::string_view(buffer_.GetString(), buffer_.GetSize())
           << std::endl;
     }
-    // TODO doing this even if exceptions are thrown? bring some RAII?
-    buffer_.Clear();
-    writer_.Reset(buffer_);
   }
 
   void onObjectStart() { writer_.StartObject(); }
   void onObjectEnd() { writer_.EndObject(); }
   void onArrayStart() { writer_.StartArray(); }
   void onArrayEnd() { writer_.EndArray(); }
-
-  // TODO must distinguish keys? doesn't look like it
-
   void onNull(size_t) { writer_.Null(); }
   void onBool(size_t, bool v) { writer_.Bool(v); }
   void onInt(size_t, int64_t v) { writer_.Int64(v); }
@@ -113,7 +109,6 @@ public:
   }
 
   void onDictRef(size_t, size_t idx) {
-    // TODO error handling, arbitary types? need to distinguish keys?
     const auto &v = dictionary_->at(idx);
     writer_.String(v.c_str(), static_cast<rapidjson::SizeType>(v.size()));
   }
@@ -128,7 +123,6 @@ public:
   }
 
   void onStringFragment(std::string_view frag) {
-    // TODO is this the best way to do this?
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 

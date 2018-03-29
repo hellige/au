@@ -1,7 +1,17 @@
 #pragma once
+
 #include <cstdint>
+#include <cstdlib>
+
+namespace FormatVersion1 {
+
+constexpr uint32_t AU_FORMAT_VERSION = 1;
+constexpr size_t MAX_METADATA_SIZE = 16 * 1024;
+
+}
 
 namespace marker {
+
 enum M {
   Null,
   True,

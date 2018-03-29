@@ -18,6 +18,8 @@
 #include <cstddef>
 #include <chrono>
 
+// TODO add position/expectation info to all error messages
+
 class FileByteSource {
 protected:
   const size_t BUFFER_SIZE;
@@ -44,7 +46,7 @@ public:
     if (fd_ == -1)
       THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
 #ifndef __APPLE__
-    ::posix_fadvise(fd_, 0, 0, 1);  // FDADVICE_SEQUENTIAL TODO report error?
+    ::posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL);  // TODO report error?
 #endif
   }
 
@@ -213,7 +215,7 @@ public:
 
 class BaseParser {
 protected:
-  static constexpr int AU_FORMAT_VERSION = 1;
+  static constexpr int AU_FORMAT_VERSION = FormatVersion1::AU_FORMAT_VERSION;
 
   FileByteSource &source_;
 
@@ -273,8 +275,14 @@ protected:
     } else if (c == marker::Varint) {
       version = readVarint();
     } else {
-      THROW("Expected version number"); // TODO
+      THROW("Expected version number");
     }
+
+    // note: this would be one possible place to check that the format is one
+    // of multiple supported versions, return the version number, and then
+    // dispatch to one of several value parsers. i think that would currently
+    // do the right thing for tail as well as for other use sites.
+
     if (version != AU_FORMAT_VERSION) {
       THROW("Bad format version: expected " << AU_FORMAT_VERSION
                                             << ", got " << version);
@@ -291,7 +299,7 @@ protected:
     } else if (c == marker::String) {
       parseString(sov, handler);
     } else {
-      THROW("Expected a string"); // TODO
+      THROW("Expected a string");
     }
   }
 
@@ -412,7 +420,6 @@ public:
 
 private:
   void key() const {
-      // TODO clean up... this is ugly and redundant. also see the dict-add case
     size_t sov = source_.pos();
     auto c = source_.next();
     if (c.isEof())
@@ -484,7 +491,7 @@ private:
         expect('A');
         expect('U');
         auto version = parseFormatVersion();
-        StringBuilder sb(16 * 1024); // TODO extract constant
+        StringBuilder sb(FormatVersion1::MAX_METADATA_SIZE);
         parseFullString(sb);
         handler_.onHeader(version, sb.str());
         term();

@@ -1,5 +1,7 @@
 #include "main.h"
 
+#include "au/AuCommon.h"
+
 #include <functional>
 #include <iostream>
 #include <string>
@@ -9,7 +11,8 @@ namespace {
 
 int version(int, char **) {
   std::cout << "au version " << AU_VERSION
-    << " (format version " << AU_FORMAT_VERSION << ")" << std::endl;
+            << " (encodes/decodes format version "
+            << FormatVersion1::AU_FORMAT_VERSION << ")" << std::endl;
   return 0;
 }
 

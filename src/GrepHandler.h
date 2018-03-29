@@ -3,6 +3,7 @@
 #include "au/AuDecoder.h"
 #include "AuRecordHandler.h"
 #include "Tail.h"
+#include "TimestampPattern.h"
 
 #include <cassert>
 #include <chrono>
@@ -25,10 +26,7 @@ struct Pattern {
   std::optional<uint64_t> uintPattern;
   std::optional<double> doublePattern;
   std::optional<StrPattern> strPattern;
-  std::optional<
-      std::pair<std::chrono::system_clock::time_point,
-          std::chrono::system_clock::time_point>>
-      timestampPattern; // half-open interval [start, end)
+  std::optional<TimestampPattern> timestampPattern; // half-open interval [start, end)
 
   std::optional<uint32_t> numMatches;
   std::optional<size_t> scanSuffixAmount;
@@ -191,8 +189,12 @@ public:
   }
 
   void onDictRef(size_t, size_t dictIdx) {
-    assert(dictIdx < dictionary_->size());
-    checkString(dictionary_->at(dictIdx)); // TODO optimize by indexing dict first
+    // this could perhaps be optimized by indexing the dictionary as things are
+    // added and then just checking whether dictIdx refers to a known matching
+    // value. but, particularly since most dictionary entries and most patterns
+    // are very short strings, it's not clear whether that would be worth it.
+    // probably worth a try someday, but not essential...
+    checkString(dictionary_->at(dictIdx));
     incrCounter();
   }
 
