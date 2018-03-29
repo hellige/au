@@ -1,11 +1,11 @@
 #include "au/AuEncoder.h"
 #include "au/ParseError.h"
+#include "TclapHelper.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
 #include <rapidjson/filereadstream.h>
 #include <rapidjson/reader.h>
-#include <tclap/CmdLine.h>
 
 #include <chrono>
 #include <fstream>
@@ -238,90 +238,58 @@ void usage() {
     << "usage: au enc [options] [--] [<path>...]\n"
     << "\n"
     << " Encodes json to au. Reads stdin if no files specified. Writes to\n"
-    << " stdout unless -o is specified. <path> may be \"-\" for stdin.\n"
+    << " stdout unless -o is specified. Any <path> may be \"-\" for stdin.\n"
     << "\n"
+    << "  -h --help           show usage and exit\n"
     << "  -o --output <path>  output to file\n"
     << "  -q --quiet          do not print encoding statistics to stderr\n"
     << "  -c --count <count>  stop after encoding <count> records.\n";
 }
 
-struct EncVisitor : public TCLAP::Visitor {
-  void visit() override {
-    usage();
-    exit(0);
-  };
-};
-
-class EncOutput : public TCLAP::StdOutput {
-public:
-  void failure(TCLAP::CmdLineInterface &, TCLAP::ArgException &e) override {
-    std::cerr << e.error() << std::endl;
-    ::usage();
-    exit(1);
-  }
-
-  void usage(TCLAP::CmdLineInterface &) override {
-    ::usage();
-  }
-};
-
-
 } // namespace
 
 int json2au(int argc, const char * const *argv) {
-  try {
-    EncVisitor usageVisitor;
-    TCLAP::CmdLine cmd("", ' ', "", false);
-    TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+  TclapHelper tclap(usage);
 
-    TCLAP::ValueArg<std::string> outfile(
-        "o", "output", "output", false, "-", "string", cmd);
-    TCLAP::ValueArg<size_t> count(
-        "c", "count", "count", false, std::numeric_limits<size_t>::max(),
-        "size_t", cmd);
-    TCLAP::SwitchArg quiet("q", "quiet", "quiet", cmd, false);
-    TCLAP::UnlabeledMultiArg<std::string> fileNames(
-        "fileNames", "", false, "filename", cmd);
+  TCLAP::ValueArg<std::string> outfile(
+      "o", "output", "output", false, "-", "string", tclap.cmd());
+  TCLAP::ValueArg<size_t> count(
+      "c", "count", "count", false, std::numeric_limits<size_t>::max(),
+      "size_t", tclap.cmd());
+  TCLAP::SwitchArg quiet("q", "quiet", "quiet", tclap.cmd(), false);
+  TCLAP::UnlabeledMultiArg<std::string> fileNames(
+      "fileNames", "", false, "filename", tclap.cmd());
 
-    EncOutput output;
-    cmd.setOutput(&output);
-    cmd.parse(argc-1, argv+1);
+  if (!tclap.parse(argc, argv)) return 1;
 
+  auto maxEntries = count.getValue();
+  auto outFName = outfile.getValue();
 
-    auto maxEntries = count.getValue();
-    auto outFName = outfile.getValue();
-
-    std::vector<std::string> inputFiles{"-"};
-    if (fileNames.isSet()) inputFiles = fileNames.getValue();
+  std::vector<std::string> inputFiles{"-"};
+  if (fileNames.isSet()) inputFiles = fileNames.getValue();
 
 
-    std::streambuf *outBuf;
-    std::ofstream outFileStream;
-    if (outFName == "-") {
-      outBuf = std::cout.rdbuf();
-    } else {
-      outFileStream.open(outFName, std::ios_base::binary);
-      if (!outFileStream) {
-        std::cerr << "Unable to open output " << outFName << std::endl;
-        return 1;
-      }
-      outBuf = outFileStream.rdbuf();
+  std::streambuf *outBuf;
+  std::ofstream outFileStream;
+  if (outFName == "-") {
+    outBuf = std::cout.rdbuf();
+  } else {
+    outFileStream.open(outFName, std::ios_base::binary);
+    if (!outFileStream) {
+      std::cerr << "Unable to open output " << outFName << std::endl;
+      return 1;
     }
-    std::ostream out(outBuf);
+    outBuf = outFileStream.rdbuf();
+  }
+  std::ostream out(outBuf);
 
-    for (const auto &f : inputFiles) {
-      auto result = encodeFile(f, out, maxEntries, quiet.isSet());
-      if (result == -1) break;
-      maxEntries -= result;
-    }
-
-    // no need to explicitly close outFileStream
-  } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId()
-              << std::endl;
-    return 1;
+  for (const auto &f : inputFiles) {
+    auto result = encodeFile(f, out, maxEntries, quiet.isSet());
+    if (result == -1) break;
+    maxEntries -= result;
   }
 
+  // no need to explicitly close outFileStream
   return 0;
 }
 

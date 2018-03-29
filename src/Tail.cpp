@@ -1,40 +1,44 @@
 #include "main.h"
 #include "JsonOutputHandler.h"
 #include "Tail.h"
+#include "TclapHelper.h"
 
-#include <tclap/CmdLine.h>
+
+namespace {
+
+void usage() {
+  std::cout
+      << "usage: au tail [options] [--] <path>...\n"
+      << "\n"
+      << "  -h --help        show usage and exit\n"
+      << "  -f --follow      output appended data as the file grows\n"
+      << "  -b --bytes <n>   start <n> bytes from end of file (default 5k)\n";
+}
+
+}
 
 int tail(int argc, const char *const *argv) {
+  TclapHelper tclap(usage);
+
+  TCLAP::SwitchArg follow("f", "follow", "follow", tclap.cmd(), false);
+  // Offset in bytes so we can fine-tune the starting point for test purposes.
+  TCLAP::ValueArg<size_t> startOffset(
+      "b", "bytes", "bytes", false, 5 * 1024, "integer", tclap.cmd());
+  TCLAP::UnlabeledValueArg<std::string> fileName(
+      "path", "", true, "path", "", tclap.cmd());
+
+  if (!tclap.parse(argc, argv)) return 1;
+
   Dictionary dictionary;
   JsonOutputHandler jsonHandler;
 
-  try {
-    TCLAP::CmdLine cmd("Tail sub-command", ' ', AU_VERSION, true);
-    TCLAP::UnlabeledValueArg<std::string> subCmd("subCmd", "Must be \"tail\"",
-                                                 true, "tail", "command", cmd);
-    TCLAP::SwitchArg follow("f", "follow", "Output appended data as file grows",
-                            cmd, false);
-    // Offset in bytes so we can fine-tune the starting point for test purposes.
-    TCLAP::ValueArg<size_t> startOffset("b", "bytes",
-                                        "output last b bytes (default 1024)",
-                                        false, 5 * 1024, "integer", cmd);
-    TCLAP::UnlabeledValueArg<std::string> fileName("fileNames", "Au files",
-                                                    true, "", "FileName", cmd);
-    cmd.parse(argc, argv);
-
-    if (fileName.getValue().empty() || fileName.getValue() == "-") {
-      std::cerr << "Tailing stdin not supported\n";
-    } else {
-      TailByteSource source(fileName, follow);
-      source.tail(startOffset);
-      TailHandler tailHandler(dictionary, source);
-      tailHandler.parseStream(jsonHandler);
-    }
-
-  } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId()
-              << std::endl;
-    return 1;
+  if (fileName.getValue().empty() || fileName.getValue() == "-") {
+    std::cerr << "Tailing stdin not supported\n";
+  } else {
+    TailByteSource source(fileName, follow);
+    source.tail(startOffset);
+    TailHandler tailHandler(dictionary, source);
+    tailHandler.parseStream(jsonHandler);
   }
 
   return 0;

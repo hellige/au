@@ -2,9 +2,8 @@
 #include "AuOutputHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
+#include "TclapHelper.h"
 #include "au/AuDecoder.h"
-
-#include <tclap/CmdLine.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -141,6 +140,20 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
   return true;
 }
 
+void grepFile(Pattern &pattern,
+              const std::string &fileName,
+              bool encodeOutput) {
+  if (encodeOutput) {
+    AuOutputHandler handler(
+        STR("Encoded by au: grep output from json file "
+                << (fileName == "-" ? "<stdin>" : fileName)));
+    doGrep(pattern, fileName, handler);
+  } else {
+    JsonOutputHandler handler;
+    doGrep(pattern, fileName, handler);
+  }
+}
+
 void usage() {
   std::cout
       << "usage: au grep [options] [--] <pattern> <path>...\n"
@@ -167,169 +180,125 @@ void usage() {
       << "  -c --count          print count of matching records per file\n";
 }
 
-struct UsageVisitor : public TCLAP::Visitor {
-  void visit() override {
-    usage();
-    exit(0);
-  };
-};
-
-class GrepOutput : public TCLAP::StdOutput {
-public:
-  void failure(TCLAP::CmdLineInterface &, TCLAP::ArgException &e) override {
-    std::cerr << e.error() << std::endl;
-    ::usage();
-    exit(1);
-  }
-
-  void usage(TCLAP::CmdLineInterface &) override {
-    ::usage();
-  }
-};
-
-void grepFile(Pattern &pattern,
-              const std::string &fileName,
-              bool encodeOutput) {
-  if (encodeOutput) {
-    AuOutputHandler handler(
-        STR("Encoded by au: grep output from json file "
-                << (fileName == "-" ? "<stdin>" : fileName)));
-    doGrep(pattern, fileName, handler);
-  } else {
-    JsonOutputHandler handler;
-    doGrep(pattern, fileName, handler);
-  }
-}
-
 }
 
 int grep(int argc, const char * const *argv) {
-  try {
-    UsageVisitor usageVisitor;
-    TCLAP::CmdLine cmd("", ' ', "", false);
-    TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+  TclapHelper tclap(usage);
 
-    TCLAP::ValueArg<std::string> key(
-        "k", "key", "key", false, "", "string", cmd);
-    TCLAP::ValueArg<std::string> ordered(
-        "o", "ordered", "oredered", false, "", "string", cmd);
-    TCLAP::ValueArg<uint32_t> context(
-        "C", "context", "context", false, 0, "uint32_t", cmd);
-    TCLAP::ValueArg<uint32_t> before(
-        "B", "before", "before", false, 0, "uint32_t", cmd);
-    TCLAP::ValueArg<uint32_t> after(
-        "A", "after", "after", false, 0, "uint32_t", cmd);
-    TCLAP::ValueArg<uint32_t> matches(
-        "m", "matches", "matches", false, 0, "uint32_t", cmd);
-    TCLAP::SwitchArg encode("e", "encode", "encode", cmd);
-    TCLAP::SwitchArg count("c", "count", "count", cmd);
-    TCLAP::SwitchArg matchAtom("a", "atom", "atom", cmd);
-    TCLAP::SwitchArg matchInt("i", "integer", "integer", cmd);
-    TCLAP::SwitchArg matchTimestamp("t", "timestamp", "timestamp", cmd);
-    TCLAP::SwitchArg matchDouble("d", "double", "double", cmd);
-    TCLAP::SwitchArg matchString("s", "string", "string", cmd);
-    TCLAP::SwitchArg matchSubstring("u", "substring", "substring", cmd);
-    TCLAP::UnlabeledValueArg<std::string> pat(
-        "pattern", "", true, "", "pattern", cmd);
-    TCLAP::UnlabeledMultiArg<std::string> fileNames(
-        "fileNames", "", false, "filename", cmd);
+  TCLAP::ValueArg<std::string> key(
+      "k", "key", "key", false, "", "string", tclap.cmd());
+  TCLAP::ValueArg<std::string> ordered(
+      "o", "ordered", "oredered", false, "", "string", tclap.cmd());
+  TCLAP::ValueArg<uint32_t> context(
+      "C", "context", "context", false, 0, "uint32_t", tclap.cmd());
+  TCLAP::ValueArg<uint32_t> before(
+      "B", "before", "before", false, 0, "uint32_t", tclap.cmd());
+  TCLAP::ValueArg<uint32_t> after(
+      "A", "after", "after", false, 0, "uint32_t", tclap.cmd());
+  TCLAP::ValueArg<uint32_t> matches(
+      "m", "matches", "matches", false, 0, "uint32_t", tclap.cmd());
+  TCLAP::SwitchArg encode("e", "encode", "encode", tclap.cmd());
+  TCLAP::SwitchArg count("c", "count", "count", tclap.cmd());
+  TCLAP::SwitchArg matchAtom("a", "atom", "atom", tclap.cmd());
+  TCLAP::SwitchArg matchInt("i", "integer", "integer", tclap.cmd());
+  TCLAP::SwitchArg matchTimestamp("t", "timestamp", "timestamp", tclap.cmd());
+  TCLAP::SwitchArg matchDouble("d", "double", "double", tclap.cmd());
+  TCLAP::SwitchArg matchString("s", "string", "string", tclap.cmd());
+  TCLAP::SwitchArg matchSubstring("u", "substring", "substring", tclap.cmd());
+  TCLAP::UnlabeledValueArg<std::string> pat(
+      "pattern", "", true, "", "pattern", tclap.cmd());
+  TCLAP::UnlabeledMultiArg<std::string> fileNames(
+      "path", "", false, "path", tclap.cmd());
 
-    GrepOutput output;
-    cmd.setOutput(&output);
-    cmd.parse(argc-1, argv+1);
+  if (!tclap.parse(argc, argv)) return 1;
 
-    if (key.isSet() && ordered.isSet()) {
-      std::cerr << "only one of -k or -o may be specified." << std::endl;
+  if (key.isSet() && ordered.isSet()) {
+    std::cerr << "only one of -k or -o may be specified." << std::endl;
+    return 1;
+  }
+
+  Pattern pattern;
+  if (key.isSet()) pattern.keyPattern = key.getValue();
+  if (ordered.isSet()) {
+    pattern.keyPattern = ordered.getValue();
+    pattern.bisect = true;
+  }
+
+  if (matches.isSet()) pattern.numMatches = matches.getValue();
+
+  bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
+  bool numericMatch = matchInt.isSet() || matchDouble.isSet()
+                      || matchTimestamp.isSet() || matchAtom.isSet();
+  bool defaultMatch = !(numericMatch || explicitStringMatch);
+
+  if (matchSubstring.isSet() && numericMatch) {
+    std::cerr << "-u (substring search) is not compatible with -i/-d/-t/-a."
+              << std::endl;
+    return 1;
+  }
+
+  // by default, we'll try to match anything, but won't be upset if the
+  // pattern fails to parse as any particular thing...
+
+  if (defaultMatch || explicitStringMatch) {
+    pattern.strPattern = Pattern::StrPattern{
+        pat.getValue(), !matchSubstring.isSet()};
+  }
+
+  if (defaultMatch || matchInt.isSet()) {
+    bool success = setIntPattern(pattern, pat.getValue());
+    if (!success && matchInt.isSet()) {
+      std::cerr << "-i specified, but pattern '"
+                << pat.getValue() << "' is not an integer." << std::endl;
       return 1;
     }
+  }
 
-    Pattern pattern;
-    if (key.isSet()) pattern.keyPattern = key.getValue();
-    if (ordered.isSet()) {
-      pattern.keyPattern = ordered.getValue();
-      pattern.bisect = true;
-    }
-
-    if (matches.isSet()) pattern.numMatches = matches.getValue();
-
-    bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
-    bool numericMatch = matchInt.isSet() || matchDouble.isSet()
-                        || matchTimestamp.isSet() || matchAtom.isSet();
-    bool defaultMatch = !(numericMatch || explicitStringMatch);
-
-    if (matchSubstring.isSet() && numericMatch) {
-      std::cerr << "-u (substring search) is not compatible with -i/-d/-t/-a."
+  if (defaultMatch || matchDouble.isSet()) {
+    bool success = setDoublePattern(pattern, pat.getValue());
+    if (!success && matchDouble.isSet()) {
+      std::cerr << "-d specified, but pattern '"
+                << pat.getValue() << "' is not a double-precision number."
                 << std::endl;
       return 1;
     }
+  }
 
-    // by default, we'll try to match anything, but won't be upset if the
-    // pattern fails to parse as any particular thing...
-
-    if (defaultMatch || explicitStringMatch) {
-      pattern.strPattern = Pattern::StrPattern{
-        pat.getValue(), !matchSubstring.isSet()};
+  if (defaultMatch || matchTimestamp.isSet()) {
+    bool success = setTimestampPattern(pattern, pat.getValue());
+    if (!success && matchTimestamp.isSet()) {
+      std::cerr << "-t specified, but pattern '"
+                << pat.getValue() << "' is not a date/time."
+                << std::endl;
+      return 1;
     }
+  }
 
-    if (defaultMatch || matchInt.isSet()) {
-      bool success = setIntPattern(pattern, pat.getValue());
-      if (!success && matchInt.isSet()) {
-        std::cerr << "-i specified, but pattern '"
-                  << pat.getValue() << "' is not an integer." << std::endl;
-        return 1;
-      }
+  if (defaultMatch || matchAtom.isSet()) {
+    bool success = setAtomPattern(pattern, pat.getValue());
+    if (!success && matchAtom.isSet()) {
+      std::cerr << "-a specified, but pattern '"
+                << pat.getValue() << "' is not true, false or null."
+                << std::endl;
+      return 1;
     }
+  }
 
-    if (defaultMatch || matchDouble.isSet()) {
-      bool success = setDoublePattern(pattern, pat.getValue());
-      if (!success && matchDouble.isSet()) {
-        std::cerr << "-d specified, but pattern '"
-                  << pat.getValue() << "' is not a double-precision number."
-                  << std::endl;
-        return 1;
-      }
+  if (context.isSet())
+    pattern.beforeContext = pattern.afterContext = context.getValue();
+  if (before.isSet())
+    pattern.beforeContext = before.getValue();
+  if (after.isSet())
+    pattern.afterContext = after.getValue();
+
+  pattern.count = count.isSet();
+
+  if (fileNames.getValue().empty()) {
+    grepFile(pattern, "-", encode.isSet());
+  } else {
+    for (auto &f : fileNames) {
+      grepFile(pattern, f, encode.isSet());
     }
-
-    if (defaultMatch || matchTimestamp.isSet()) {
-      bool success = setTimestampPattern(pattern, pat.getValue());
-      if (!success && matchTimestamp.isSet()) {
-        std::cerr << "-t specified, but pattern '"
-                  << pat.getValue() << "' is not a date/time."
-                  << std::endl;
-        return 1;
-      }
-    }
-
-    if (defaultMatch || matchAtom.isSet()) {
-      bool success = setAtomPattern(pattern, pat.getValue());
-      if (!success && matchAtom.isSet()) {
-        std::cerr << "-a specified, but pattern '"
-                  << pat.getValue() << "' is not true, false or null."
-                  << std::endl;
-        return 1;
-      }
-    }
-
-    if (context.isSet())
-      pattern.beforeContext = pattern.afterContext = context.getValue();
-    if (before.isSet())
-      pattern.beforeContext = before.getValue();
-    if (after.isSet())
-      pattern.afterContext = after.getValue();
-
-    pattern.count = count.isSet();
-
-    if (fileNames.getValue().empty()) {
-      grepFile(pattern, "-", encode.isSet());
-    } else {
-      for (auto &f : fileNames) {
-        grepFile(pattern, f, encode.isSet());
-      }
-    }
-  } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId()
-              << std::endl;
-    return 1;
   }
 
   return 0;

@@ -1,8 +1,6 @@
-#include "AuDecoder.h"
-
+#include "au/AuDecoder.h"
 #include "AuRecordHandler.h"
-
-#include <tclap/CmdLine.h>
+#include "TclapHelper.h"
 
 #include <cmath>
 #include <iostream>
@@ -301,34 +299,6 @@ struct StatsRecordHandler {
   }
 };
 
-void usage() {
-  std::cout
-      << "usage: au stats [options] [--] <path>...\n"
-      << "\n"
-      << "  -h --help        show usage and exit\n"
-      << "  -d --dict        dump full dictionary\n";
-}
-
-struct UsageVisitor : public TCLAP::Visitor {
-  void visit() override {
-    usage();
-    exit(0);
-  };
-};
-
-class StatsOutput : public TCLAP::StdOutput {
-public:
-  void failure(TCLAP::CmdLineInterface &, TCLAP::ArgException &e) override {
-    std::cerr << e.error() << std::endl;
-    ::usage();
-    exit(1);
-  }
-
-  void usage(TCLAP::CmdLineInterface &) override {
-    ::usage();
-  }
-};
-
 class StatsDecoder {
   std::string filename_;
 
@@ -374,37 +344,33 @@ public:
   }
 };
 
+void usage() {
+  std::cout
+      << "usage: au stats [options] [--] <path>...\n"
+      << "\n"
+      << "  -h --help        show usage and exit\n"
+      << "  -d --dict        dump full dictionary\n";
+}
+
 }
 
 int stats(int argc, const char * const *argv) {
-  std::vector<std::string> auFiles;
+  TclapHelper tclap(usage);
 
-  try {
-    UsageVisitor usageVisitor;
-    TCLAP::CmdLine cmd("", ' ', "", false);
-    TCLAP::SwitchArg help("h", "help", "help", cmd, false, &usageVisitor);
+  TCLAP::SwitchArg dictDump("d", "dict", "dict", tclap.cmd(), false);
+  TCLAP::UnlabeledMultiArg<std::string> fileNames(
+      "path", "", false, "path", tclap.cmd());
 
-    TCLAP::SwitchArg dictDump("d", "dict", "Dictionary dump", cmd, false);
-    TCLAP::UnlabeledMultiArg<std::string> fileNames(
-        "fileNames", "", false, "filename", cmd);
+  if (!tclap.parse(argc, argv)) return 1;
 
-    StatsOutput output;
-    cmd.setOutput(&output);
-    cmd.parse(argc-1, argv+1);
-
-    if (fileNames.getValue().empty()) {
+  if (fileNames.getValue().empty()) {
+    StatsRecordHandler handler(dictDump.isSet());
+    StatsDecoder("-").decode(handler);
+  } else {
+    for (auto &f : fileNames.getValue()) {
       StatsRecordHandler handler(dictDump.isSet());
-      StatsDecoder("-").decode(handler);
-    } else {
-      for (auto &f : fileNames.getValue()) {
-        StatsRecordHandler handler(dictDump.isSet());
-        StatsDecoder(f).decode(handler);
-      }
+      StatsDecoder(f).decode(handler);
     }
-  } catch (TCLAP::ArgException &e) {
-    std::cerr << "error: " << e.error() << " for arg " << e.argId()
-              << std::endl;
-    return 1;
   }
 
   return 0;

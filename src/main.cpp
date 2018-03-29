@@ -1,17 +1,9 @@
 #include "main.h"
-#include "au/AuEncoder.h"
-#include "au/AuDecoder.h"
-#include "JsonOutputHandler.h"
 
-#include <cmath>
-#include <cstdio>
 #include <functional>
 #include <iostream>
-#include <sstream>
 #include <string>
-
-using namespace std;
-using namespace rapidjson;
+#include <unordered_map>
 
 namespace {
 
@@ -34,23 +26,6 @@ int help(int, char **) {
     << "   grep     Find records matching pattern\n"
     << "   enc      Encode listed files to stdout (alias json2au)\n"
     << "   stats    Display file statistics\n";
-  return 0;
-}
-
-int cat(int argc, char **argv) {
-  argc -= 2; argv += 2;
-  Dictionary dictionary;
-  JsonOutputHandler valueHandler;
-  AuRecordHandler<JsonOutputHandler> recordHandler(dictionary, valueHandler);
-
-  if (argc == 0) {
-    AuDecoder("-").decode(recordHandler, false);
-  } else {
-    for (int i = 0; i < argc; i++) {
-      std::string filename(argv[i]);
-      AuDecoder(filename).decode(recordHandler, false);
-    }
-  }
   return 0;
 }
 
