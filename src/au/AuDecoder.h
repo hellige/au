@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <iomanip>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,6 +18,7 @@
 #include <unistd.h>
 #include <cstddef>
 #include <chrono>
+#include <variant>
 
 // TODO add position/expectation info to all error messages
 
@@ -324,6 +326,10 @@ protected:
   }
 };
 
+struct TooDeeplyNested : std::runtime_error {
+  TooDeeplyNested() : runtime_error("File too deeply nested") {}
+};
+
 template<typename Handler>
 class ValueParser : BaseParser {
   Handler &handler_;
@@ -331,6 +337,18 @@ class ValueParser : BaseParser {
   number we support (std::numeric_limits<int64_t>::min() * -1). */
   static constexpr uint64_t NEG_INT_LIMIT =
     static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1;
+
+  static inline constexpr size_t MaxDepth = 8192;
+  mutable size_t depth{0};
+  struct DepthRaii {
+    const ValueParser &parent;
+    explicit DepthRaii(const ValueParser &vp) : parent(vp) {
+      parent.depth++;
+      if (parent.depth > MaxDepth)
+        throw TooDeeplyNested();
+    }
+    ~DepthRaii() { parent.depth--; }
+  };
 
 public:
   ValueParser(FileByteSource &source, Handler &handler)
@@ -446,6 +464,7 @@ private:
   }
 
   void parseArray() const {
+    DepthRaii raii(*this);
     handler_.onArrayStart();
     while (source_.peek() != marker::ArrayEnd) value();
     expect(marker::ArrayEnd);
@@ -453,6 +472,7 @@ private:
   }
 
   void parseObject() const {
+    DepthRaii raii(*this);
     handler_.onObjectStart();
     while (source_.peek() != marker::ObjectEnd) {
       key();

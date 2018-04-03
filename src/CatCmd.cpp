@@ -33,8 +33,15 @@ int cat(int argc, const char * const *argv) {
   std::vector<std::string> inputFiles{"-"};
   if (fileNames.isSet()) inputFiles = fileNames.getValue();
 
-  for (const auto &f : inputFiles)
-    AuDecoder(f).decode(recordHandler, false);
+  int result = 0;
+  for (const auto &f : inputFiles) {
+    try {
+      AuDecoder(f).decode(recordHandler, false);
+    } catch (const std::exception &e) {
+      std::cerr << e.what() << " while processing " << f << "\n";
+      result = 1;
+    }
+  }
 
-  return 0;
+  return result;
 }
