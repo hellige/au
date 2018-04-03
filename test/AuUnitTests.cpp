@@ -266,7 +266,6 @@ TEST_F(AuFormatterTest, NestedArray) {
 }
 
 TEST(AuEncoder, creation) {
-  std::ostringstream os;
-  AuEncoder au(os);
+  AuEncoder au();
 }
 
