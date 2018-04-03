@@ -1,6 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="au-test" type="CMakeGoogleTestRunConfigurationType" factoryName="Google Test" PASS_PARENT_ENVS_2="true" PROJECT_NAME="au-cpp" TARGET_NAME="Test" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="au-cpp" RUN_TARGET_NAME="Test" TEST_MODE="SUITE_TEST">
-    <envs />
+  <configuration default="false" name="au-test" type="CMakeGoogleTestRunConfigurationType" factoryName="Google Test" PASS_PARENT_ENVS_2="true" PROJECT_NAME="au-cpp" TARGET_NAME="Test" CONFIG_NAME="Debug-GCC 7.2" RUN_TARGET_PROJECT_NAME="au-cpp" RUN_TARGET_NAME="Test" TEST_MODE="SUITE_TEST">
     <method />
   </configuration>
 </component>

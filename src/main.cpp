@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
   try {
     return it->second(argc, argv);
-  } catch (const std::runtime_error &e) {
+  } catch (const std::exception &e) {
     std::cerr << "Runtime error: " << e.what() << std::endl;
   }
 }

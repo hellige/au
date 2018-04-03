@@ -1,6 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="aubenchmark" type="CMakeRunConfiguration" factoryName="Application" PASS_PARENT_ENVS_2="true" PROJECT_NAME="au-cpp" TARGET_NAME="aubenchmark" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="au-cpp" RUN_TARGET_NAME="aubenchmark">
-    <envs />
+  <configuration default="false" name="aubenchmark" type="CMakeRunConfiguration" factoryName="Application" PASS_PARENT_ENVS_2="true" PROJECT_NAME="au-cpp" TARGET_NAME="aubenchmark" CONFIG_NAME="Debug-GCC 7.2" RUN_TARGET_PROJECT_NAME="au-cpp" RUN_TARGET_NAME="aubenchmark">
     <method />
   </configuration>
 </component>
