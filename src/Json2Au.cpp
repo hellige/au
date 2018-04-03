@@ -155,7 +155,7 @@ ssize_t encodeFile(const std::string &inFName,
   auto metadata = STR("Encoded from json file "
                           << (inFName == "-" ? "<stdin>" : inFName )
                           << " by au");
-  AuEncoder au(out, metadata, 250'000, 100);
+  AuEncoder au(metadata, 250'000, 100);
 
   char readBuffer[65536];
   FileReadStream in(inF, readBuffer, sizeof(readBuffer));
@@ -173,6 +173,9 @@ ssize_t encodeFile(const std::string &inFName,
                                        kParseFullPrecisionFlag +
                                        kParseNanAndInfFlag;
       res = reader.Parse<parseOpt>(in, handler);
+    }, [&](std::string_view dict, std::string_view value) {
+      out << dict << value; // TODO why use iostreams any longer?
+      return dict.size() + value.size();  // TODO need to check whether it was really written?
     });
 
     entriesProcessed++;

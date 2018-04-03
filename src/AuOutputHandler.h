@@ -55,7 +55,7 @@ class AuOutputHandler {
 
 public:
   explicit AuOutputHandler(const std::string &metadata = "")
-  : encoder_(std::cout, metadata) {
+  : encoder_(metadata) {
     str_.reserve(1u << 16);
   }
 
@@ -64,6 +64,9 @@ public:
       ValueHandler handler(writer, str_, dictionary);
       ValueParser parser(source, handler);
       parser.value();
+    }, [] (std::string_view dict, std::string_view value) {
+      std::cout << dict << value; // TODO why use cout any longer?
+      return dict.size() + value.size(); // TODO need to check whether it was really written?
     });
   }
 };

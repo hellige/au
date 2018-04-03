@@ -1,4 +1,3 @@
-  au bisect -k eventId 123412321321
   au slice -k eventId 123412321321 13412312312
   au slice -k estdEventTime 2018-05-16T14:40:00 2018-05-16T15:40:00
 

@@ -5,12 +5,10 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
-#include <iostream>
 #include <list>
 #include <map>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -19,7 +17,6 @@
 class AuEncoder;
 
 class AuStringIntern {
-
   class UsageTracker {
     using InOrder = std::list<std::string>;
     InOrder inOrder_;
@@ -89,7 +86,6 @@ class AuStringIntern {
   UsageTracker internCache_;
 
 public:
-
   explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
                           size_t internCacheSize = 1000)
       : nextEntry_(0), TINY_STR(tinyStr),
@@ -183,20 +179,31 @@ public:
   }
 };
 
-// Mimics std::ostringstream interface (except for str() and clear())
-class AuBuffer {
+class AuVectorBuffer {
+  std::vector<char> v;
 public:
-  virtual ~AuBuffer() = default;
-
-  virtual void put(char c) = 0;
-  virtual void write(const char *data, size_t size) = 0;
-  virtual size_t tellp() = 0;
-  virtual std::string_view str() = 0;
-  virtual void clear() {};
+  AuVectorBuffer(size_t size = 1024) {
+    v.reserve(size);
+  }
+  void put(char c) {
+    v.push_back(c);
+  }
+  void write(const char *data, size_t size) {
+    v.insert(v.end(), data, data + size);
+  }
+  size_t tellp() {
+    return v.size();
+  }
+  std::string_view str() {
+    return std::string_view(v.data(), v.size());
+  }
+  void clear() {
+    v.clear();
+  }
 };
 
 class AuWriter {
-  AuBuffer &msgBuf_;
+  AuVectorBuffer &msgBuf_;
   AuStringIntern &stringIntern_;
 
   void encodeString(const std::string_view sv) {
@@ -206,7 +213,7 @@ class AuWriter {
       msgBuf_.put(marker::String);
       valueInt(sv.length());
     }
-    msgBuf_.write(sv.data(), static_cast<std::streamsize>(sv.length()));
+    msgBuf_.write(sv.data(), sv.length());
   }
 
   void encodeStringIntern(const std::string_view sv,
@@ -249,7 +256,7 @@ class AuWriter {
   };
 
 public:
-  AuWriter(AuBuffer &buf, AuStringIntern &stringIntern)
+  AuWriter(AuVectorBuffer &buf, AuStringIntern &stringIntern)
       : msgBuf_(buf), stringIntern_(stringIntern) {}
   virtual ~AuWriter() = default;
 
@@ -504,96 +511,13 @@ private:
   AuWriter &IntUnsigned(uint64_t i) { return auInt(i); }
 };
 
-
-/// Need to keep track of bytes written to both files and cout
-class OutputTracker : public std::streambuf {
-  std::streambuf *dest_;
-  std::ostream *owner_;
-  size_t count_;
-  using int_type = typename std::streambuf::int_type;
-  using char_type = typename std::streambuf::char_type;
-  using traits_type = typename std::streambuf::traits_type;
-
-public:
-  explicit OutputTracker(std::streambuf *dest)
-      : dest_(dest), owner_(nullptr), count_(0)
-  {}
-
-  explicit OutputTracker(std::ostream &dest)
-      : dest_(dest.rdbuf()), owner_(&dest), count_(0)
-  {
-    owner_->rdbuf(this);
-  }
-
-  ~OutputTracker() override {
-    if (owner_ != nullptr) {
-      owner_->rdbuf(dest_);
-    }
-  }
-
-  size_t count() const {
-    return count_;
-  }
-
-  void reset() {
-    count_ = 0;
-  }
-
-protected:
-  virtual int_type overflow(int_type ch = traits_type::eof()) {
-    count_++;
-    return dest_->sputc(ch);
-  }
-};
-
-class AuStreamBuffer : public AuBuffer {
-  std::ostream &output_;
-  OutputTracker tracker_;
-public:
-  AuStreamBuffer(std::ostream &output) : output_(output), tracker_(output) {}
-  void put(char c) override { output_.put(c); }
-  void write(const char *data, size_t size) override {
-    output_.write(data, size);
-  }
-  size_t tellp() override { return output_.tellp(); }
-  std::string_view str() override { throw std::runtime_error("Not supported"); }
-  void clear() override { throw std::runtime_error("Not supported"); }
-
-  OutputTracker &tracker() { return tracker_; }
-};
-
-class AuVectorBuffer : public AuBuffer {
-  std::vector<char> v;
-public:
-  AuVectorBuffer(size_t size = 1024) {
-    v.reserve(size);
-  }
-  void put(char c) override {
-    v.push_back(c);
-  }
-  void write(const char *data, size_t size) override {
-    v.insert(v.end(), data, data + size);
-  }
-  size_t tellp() override {
-    return v.size();
-  }
-  std::string_view str() override {
-    return std::string_view(v.data(), v.size());
-  }
-  void clear() override {
-    v.clear();
-  }
-};
-
-
 class AuEncoder {
   static constexpr uint32_t AU_FORMAT_VERSION
       = FormatVersion1::AU_FORMAT_VERSION;
-  std::ostream &output_;
   AuStringIntern stringIntern_;
+  AuVectorBuffer dictBuf_;
   AuVectorBuffer buf_;
-  size_t pos_;
-  size_t lastDictLoc_;
+  size_t backref_;
   size_t lastDictSize_;
   size_t records_;
   size_t purgeInterval_;
@@ -604,39 +528,37 @@ class AuEncoder {
   void exportDict() {
     auto dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
-      AuStreamBuffer formatterOutput(output_);
-      AuWriter af(formatterOutput, stringIntern_);
-      auto newDictLoc = pos_;
+      auto sor = dictBuf_.tellp();
+      AuWriter af(dictBuf_, stringIntern_);
       af.raw('A');
-      af.backref(newDictLoc - lastDictLoc_);
-      lastDictLoc_ = newDictLoc;
+      af.backref(backref_);
       for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
         af.value(std::string_view(s.c_str(), s.length()), false);
       }
       af.term();
-      pos_ += formatterOutput.tracker().count();
+      backref_ += dictBuf_.tellp() - sor;
       lastDictSize_ = dict.size();
     }
   }
 
-  ssize_t write(const std::string &msg) {
-    return write(std::string_view(msg.c_str(), msg.size()));
-  }
-
-  ssize_t write(const std::string_view &msg) {
-    auto startPos = pos_;
+  template <typename F>
+  ssize_t finalizeAndWrite(F &&write) {
     exportDict();
-    AuStreamBuffer formatterOutput(output_);
-    AuWriter af(formatterOutput, stringIntern_);
-    auto thisLoc = pos_;
+    auto sor = dictBuf_.tellp();
+    AuWriter af(dictBuf_, stringIntern_);
     af.raw('V');
-    af.backref(thisLoc - lastDictLoc_);
-    af.valueInt(msg.length());
-    output_ << msg;
-    records_++;
+    af.backref(backref_);
+    af.valueInt(buf_.tellp());
+    backref_ += dictBuf_.tellp() - sor;
 
-    pos_ += formatterOutput.tracker().count();
+    auto result = write(dictBuf_.str(), buf_.str());
+
+    records_++;
+    backref_ += buf_.tellp();
+
+    buf_.clear();
+    dictBuf_.clear();
 
     if (reindexInterval_ && (records_ % reindexInterval_ == 0)) {
       reIndexDictionary(purgeThreshold_);
@@ -649,13 +571,13 @@ class AuEncoder {
     if (lastDictSize_ > clearThreshold_) {
       clearDictionary(true);
     }
-    return pos_ - startPos;
+
+    return result;
   }
 
 public:
 
   /**
-   * @param output
    * @param metadata Metadata string to write in the header record. Values
    * longer than 16k will be truncated.
    * @param purgeInterval The dictionary will be purged after this many records.
@@ -667,54 +589,43 @@ public:
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  AuEncoder(std::ostream &output,
-            std::string metadata = "",
+  AuEncoder(std::string metadata = "",
             size_t purgeInterval = 250'000,
             size_t purgeThreshold = 50,
             size_t reindexInterval = 500'000,
             size_t clearThreshold = 1400)
-      : output_(output),
-        pos_(0), lastDictSize_(0), records_(0),
+      : backref_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
     if (metadata.size() > FormatVersion1::MAX_METADATA_SIZE)
       metadata.resize(FormatVersion1::MAX_METADATA_SIZE);
-    AuStreamBuffer formatterOutput(output_);
-    AuWriter af(formatterOutput, stringIntern_);
+    AuWriter af(dictBuf_, stringIntern_);
     af.raw('H');
     af.raw('A');
     af.raw('U');
     af.value(AU_FORMAT_VERSION);
     af.value(metadata, false);
     af.term();
-    pos_ += formatterOutput.tracker().count();
     clearDictionary();
   }
 
-  template<typename F>
-  ssize_t encode(F &&f) {
+  template<typename F, typename W>
+  ssize_t encode(F &&f, W &&write) {
     ssize_t result = 0;
     AuWriter writer(buf_, stringIntern_);
     f(writer);
     if (buf_.tellp() != 0) {
       writer.term();
-      result = write(buf_.str());
+      result = finalizeAndWrite(write);
     }
-    buf_.clear();
     return result;
   }
 
   void clearDictionary(bool clearUsageTracker = false) {
     stringIntern_.clear(clearUsageTracker);
     lastDictSize_ = 0;
-    lastDictLoc_ = pos_;
-    AuStreamBuffer formatterOutput(output_);
-    AuWriter af(formatterOutput, stringIntern_);
-    af.raw('C');
-    af.value(AU_FORMAT_VERSION);
-    af.term();
-    pos_ += formatterOutput.tracker().count();
+    emitDictClear();
   }
 
   /// Removes strings that are used less than "threshold" times from the hash
@@ -722,23 +633,27 @@ public:
     stringIntern_.purge(threshold);
   }
 
-  /// Purges the dictionary and re-idexes the remaining entries so the more
+  /// Purges the dictionary and re-indexes the remaining entries so the more
   /// frequent ones are at the beginning (and have smaller indices).
   void reIndexDictionary(size_t threshold) {
     stringIntern_.reIndex(threshold);
     lastDictSize_ = 0;
-    lastDictLoc_ = pos_;
-    AuStreamBuffer formatterOutput(output_);
-    AuWriter af(formatterOutput, stringIntern_);
-    af.raw('C');
-    af.value(AU_FORMAT_VERSION);
-    af.term();
-    pos_ += formatterOutput.tracker().count();
+    emitDictClear();
   }
 
   auto getStats() const {
     auto stats = stringIntern_.getStats();
     stats["Records"] = static_cast<int>(records_);
     return stats;
+  }
+
+private:
+  void emitDictClear() {
+    auto sor = dictBuf_.tellp();
+    AuWriter af(dictBuf_, stringIntern_);
+    af.raw('C');
+    af.value(AU_FORMAT_VERSION);
+    af.term();
+    backref_ = dictBuf_.tellp() - sor;
   }
 };
