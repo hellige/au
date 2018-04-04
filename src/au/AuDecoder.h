@@ -410,7 +410,7 @@ public:
           THROW("Signed int overflows int64_t: (-)" << val << " 0x"
                 << std::setfill('0') << std::setw(16) << std::hex << val);
         }
-        handler_.onUint(sov, -static_cast<int64_t>(val));
+        handler_.onInt(sov, -static_cast<int64_t>(val));
         break;
       }
       case marker::Double:
