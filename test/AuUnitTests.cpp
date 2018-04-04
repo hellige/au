@@ -1,7 +1,7 @@
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
 
-#include "gtest/gtest.h"
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <iostream>
@@ -129,6 +129,9 @@ TEST_F(AuFormatterTest, Int64) {
   writer.value(-0x1234567890abcdef);
   writer.value(0xf234567890abcdef);
   writer.value(0xffffFFFFffffFFFF);
+  uint64_t val = 9223372036856150856ull;
+  writer.value((int64_t)val);
+  writer.value(val);
   std::vector<char> ints = {
       marker::PosInt64,
       C(0xef), C(0xcd), C(0xab), C(0x90), C(0x78), C(0x56), C(0x34), C(0x12),
@@ -138,8 +141,13 @@ TEST_F(AuFormatterTest, Int64) {
       C(0xef), C(0xcd), C(0xab), C(0x90), C(0x78), C(0x56), C(0x34), C(0xf2),
       marker::PosInt64,
       C(0xff), C(0xff), C(0xff), C(0xff), C(0xff), C(0xff), C(0xff), C(0xff),
+      marker::NegInt64,
+      C(0xb8), C(0x04), C(0xeb), C(0xff), C(0xff), C(0xff), C(0xff), C(0x7f),
+      marker::PosInt64,
+      C(0x48), C(0xfb), C(0x14), C(0x00), C(0x00), C(0x00), C(0x00), C(0x80)
   };
-  EXPECT_EQ(std::string(ints.data(), ints.size()), buf.str());
+  EXPECT_THAT(std::string_view(ints.data(), ints.size()),
+              testing::ContainerEq(buf.str()));
 }
 
 TEST_F(AuFormatterTest, Time) {
