@@ -526,7 +526,7 @@ class AuEncoder {
   size_t clearThreshold_;
 
   void exportDict() {
-    auto dict = stringIntern_.dict();
+    auto &dict = stringIntern_.dict();
     if (dict.size() > lastDictSize_) {
       auto sor = dictBuf_.tellp();
       AuWriter af(dictBuf_, stringIntern_);
