@@ -55,7 +55,7 @@ class AuOutputHandler {
 
 public:
   explicit AuOutputHandler(const std::string &metadata = "")
-  : encoder_(metadata) {
+  : encoder_(metadata, 250'000, 100) {
     str_.reserve(1u << 16);
   }
 

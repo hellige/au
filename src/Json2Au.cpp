@@ -104,6 +104,7 @@ public:
     return true;
   }
 
+  // TODO if this is desired, move it to a configurable map in the auencoder
   bool Key(const char *str, SizeType length, [[maybe_unused]] bool copy) {
     writer_.value(std::string_view(str, length), true);
     if (0 == strncmp(str, "estdEventTime", length) ||
