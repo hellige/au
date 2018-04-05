@@ -14,6 +14,7 @@ public:
 
   bool seekTo(std::string_view needle) {
     while (true) {
+      if (buffAvail() < needle.length()) return false;
       auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
       if (found) {
         size_t offset = static_cast<char *>(found) - cur_;
