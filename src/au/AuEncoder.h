@@ -537,7 +537,7 @@ class AuEncoder {
         af.value(std::string_view(s.c_str(), s.length()), false);
       }
       af.term();
-      backref_ += dictBuf_.tellp() - sor;
+      backref_ = dictBuf_.tellp() - sor;
       lastDictSize_ = dict.size();
     }
   }
@@ -624,7 +624,6 @@ public:
 
   void clearDictionary(bool clearUsageTracker = false) {
     stringIntern_.clear(clearUsageTracker);
-    lastDictSize_ = 0;
     emitDictClear();
   }
 
@@ -637,7 +636,6 @@ public:
   /// frequent ones are at the beginning (and have smaller indices).
   void reIndexDictionary(size_t threshold) {
     stringIntern_.reIndex(threshold);
-    lastDictSize_ = 0;
     emitDictClear();
   }
 
@@ -649,6 +647,7 @@ public:
 
 private:
   void emitDictClear() {
+    lastDictSize_ = 0;
     auto sor = dictBuf_.tellp();
     AuWriter af(dictBuf_, stringIntern_);
     af.raw('C');
