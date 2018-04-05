@@ -81,20 +81,18 @@ class AuStringIntern {
   std::vector<std::string> dictInOrder_;
   /// The string and its intern index
   std::unordered_map<std::string, InternEntry> dictionary_;
-  size_t nextEntry_;
-  const size_t TINY_STR;
+  const size_t tinyStringSize_;
   UsageTracker internCache_;
 
 public:
   explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
                           size_t internCacheSize = 1000)
-      : nextEntry_(0), TINY_STR(tinyStr),
+      : tinyStringSize_(tinyStr),
         internCache_(internThresh, internCacheSize) {}
 
   std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
-    if (s.length() <= TINY_STR) return std::optional < size_t > ();
-    if (intern.has_value() && !intern.value())
-      return std::optional < size_t > ();
+    if (s.length() <= tinyStringSize_) return {};
+    if (intern.has_value() && !intern.value()) return {};
 
     auto it = dictionary_.find(s);
     if (it != dictionary_.end()) {
@@ -104,12 +102,12 @@ public:
 
     bool forceIntern = intern.has_value() && intern.value();
     if (forceIntern || internCache_.shouldIntern(s)) {
-      dictionary_[s] = {nextEntry_, 1};
+      auto nextEntry = dictInOrder_.size();
+      dictionary_[s] = {nextEntry, 1};
       dictInOrder_.emplace_back(s);
-      return nextEntry_++;
-    } else {
-      return std::optional < size_t > ();
+      return nextEntry;
     }
+    return {};
   }
 
   auto idx(std::string_view sv, std::optional<bool> intern) {
@@ -121,7 +119,6 @@ public:
   void clear(bool clearUsageTracker) {
     dictionary_.clear();
     dictInOrder_.clear();
-    nextEntry_ = 0;
     if (clearUsageTracker) internCache_.clear();
   }
 
@@ -162,7 +159,6 @@ public:
       dictionary_[v].internIndex = idx++;
     }
 
-    nextEntry_ = dictInOrder_.size();
     return purged;
   }
 
@@ -207,7 +203,8 @@ class AuWriter {
   AuStringIntern &stringIntern_;
 
   void encodeString(const std::string_view sv) {
-    if (sv.length() < 32) {
+    static constexpr size_t MaxInlineStringSize = 31;
+    if (sv.length() <= MaxInlineStringSize) {
       msgBuf_.put(0x20 | sv.length());
     } else {
       msgBuf_.put(marker::String);
@@ -355,7 +352,7 @@ public:
    * @return
    */
   AuWriter &value(const std::string_view sv,
-                  std::optional<bool> intern = std::optional < bool > ()) {
+                  std::optional<bool> intern = std::nullopt) {
     if (intern.has_value() && !intern.value()) {
       encodeString(sv);
     } else {
