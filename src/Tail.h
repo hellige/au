@@ -21,10 +21,7 @@ public:
         cur_ += offset;
         return true;
       } else {
-        skip(buffAvail());
-        if (!read(needle.length() - 1)) {
-          return false;
-        }
+        skip(buffAvail()-(needle.length()-1));
       }
     }
   }
@@ -229,12 +226,12 @@ public:
     while (true) {
       size_t sor = source_.pos();
       try {
-        const char marker[] = {marker::RecordEnd,  '\n', 'V', 0};
+        const char marker[] = {marker::RecordEnd, '\n', 'V', 0};
         if (!source_.seekTo(marker)) {
           return false;
         }
-        sor = source_.pos() + 2;
         term();
+        sor = source_.pos();
         expect('V');
         auto backDictRef = readBackref();
         if (backDictRef > sor) {
@@ -274,7 +271,8 @@ public:
         source_.seek(sor);
         return true; // Sync was successful
       } catch (std::exception &e) {
-        std::cerr << "Ignoring exception while synchronizing start of tailing: "
+        std::cerr << "Ignoring exception while synchronizing start of tailing "
+                     "(attempted start-of-record: " << sor << "): "
                   << e.what() << "\n";
         source_.seek(sor + 1);
       }
