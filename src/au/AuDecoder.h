@@ -77,9 +77,9 @@ public:
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
       return static_cast<char>(value_);
     }
-    std::byte byteValue() const {
+    uint8_t u8Value() const {
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
-      return static_cast<std::byte>(value_);
+      return static_cast<uint8_t>(value_);
     }
     static Byte Eof() { return Byte(); }
     friend bool operator ==(Byte b, char c) {
@@ -114,7 +114,7 @@ public:
 
   template<typename T>
   void read(T *t, size_t len) {
-    char *buf = static_cast<char *>(static_cast<void *>(t));
+    auto *buf = static_cast<char *>(static_cast<void *>(t));
     read(len, [&](std::string_view fragment) {
       ::memcpy(buf, fragment.data(), fragment.size());
       buf += fragment.size();
@@ -200,7 +200,7 @@ class StringBuilder {
   size_t maxLen_;
 
 public:
-  StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
+  explicit StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
 
   void onStringStart(size_t, size_t len) {
     if (len > maxLen_)
@@ -259,12 +259,10 @@ protected:
       auto next = source_.next();
       if (next.isEof())
         THROW("Unexpected end of file");
-      auto i = next.byteValue();
-      const auto valueMask = std::byte(0x7f);
-      const auto moreMask = std::byte(0x80);
-      result |= static_cast<uint64_t>(i & valueMask) << shift;
+      auto i = next.u8Value();
+      result |= static_cast<uint64_t>(i & 0x7fu) << shift;
       shift += 7;
-      if ((i & moreMask) != moreMask) break;
+      if ((i & 0x80u) != 0x80u) break;
     }
     return result;
   }
@@ -272,8 +270,8 @@ protected:
   uint64_t parseFormatVersion() const {
     uint64_t version;
     auto c = source_.next();
-    if ((c.charValue() & ~0x1f) == marker::SmallInt::Positive) {
-      version = c.charValue() & 0x1f;
+    if ((c.u8Value() & ~0x1fu) == marker::SmallInt::Positive) {
+      version = c.u8Value() & 0x1fu;
     } else if (c == marker::Varint) {
       version = readVarint();
     } else {
@@ -296,8 +294,8 @@ protected:
   void parseFullString(Handler &handler) const {
     size_t sov = source_.pos();
     auto c = source_.next();
-    if (((uint8_t) c.charValue() & ~0x1fu) == 0x20) {
-      parseString(sov, (uint8_t) c.charValue() & 0x1fu, handler);
+    if ((c.u8Value() & ~0x1fu) == 0x20) {
+      parseString(sov, c.u8Value() & 0x1fu, handler);
     } else if (c == marker::String) {
       parseString(sov, handler);
     } else {
@@ -360,20 +358,22 @@ public:
     if (c.isEof())
       THROW("Unexpected EOF at start of value");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      handler_.onDictRef(sov, c.u8Value() & ~0x80u);
       return;
     }
-    int val = (uint8_t)c.charValue() & ~0xe0;
-    if (c.charValue() & marker::SmallInt::Negative) {
-      if (c.charValue() & 0x20)
-        handler_.onUint(sov, val);
-      else
-        handler_.onInt(sov, -val);
-      return;
-    }
-    if (c.charValue() & 0x20) {
-      parseString(sov, val, handler_);
-      return;
+    {
+      auto val = c.u8Value() & ~0xe0u;
+      if (c.charValue() & marker::SmallInt::Negative) {
+        if (c.charValue() & 0x20u)
+          handler_.onUint(sov, val);
+        else
+          handler_.onInt(sov, -val);
+        return;
+      }
+      if (c.charValue() & 0x20u) {
+        parseString(sov, val, handler_);
+        return;
+      }
     }
     switch (c.charValue()) {
       case marker::True:
@@ -443,11 +443,11 @@ private:
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      handler_.onDictRef(sov, c.u8Value() & ~0x80u);
       return;
     }
-    int val = (uint8_t)c.charValue() & ~0xe0;
-    if ((c.charValue() & ~0x1f) == 0x20) {
+    auto val = c.u8Value() & ~0xe0u;
+    if ((c.u8Value() & ~0x1fu) == 0x20u) {
       parseString(sov, val, handler_);
       return;
     }
@@ -557,7 +557,7 @@ struct NoopValueHandler {
   virtual void onArrayEnd() {}
   virtual void onNull([[maybe_unused]] size_t pos) {}
   virtual void onBool([[maybe_unused]] size_t pos, bool) {}
-  virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
+  virtual void onInt([[maybe_unused]] size_I t pos, int64_t) {}
   virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
   virtual void onDouble([[maybe_unused]] size_t pos, double) {}
   virtual void onTime(
@@ -592,8 +592,8 @@ class AuDecoder {
   std::string filename_;
 
 public:
-  AuDecoder(const std::string &filename)
-      : filename_(filename) {}
+  explicit AuDecoder(std::string filename)
+      : filename_(std::move(filename)) {}
 
   template<typename H>
   void decode(H &handler, bool waitForData) const {
