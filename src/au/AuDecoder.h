@@ -557,7 +557,7 @@ struct NoopValueHandler {
   virtual void onArrayEnd() {}
   virtual void onNull([[maybe_unused]] size_t pos) {}
   virtual void onBool([[maybe_unused]] size_t pos, bool) {}
-  virtual void onInt([[maybe_unused]] size_I t pos, int64_t) {}
+  virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
   virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
   virtual void onDouble([[maybe_unused]] size_t pos, double) {}
   virtual void onTime(
