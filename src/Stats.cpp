@@ -307,7 +307,7 @@ public:
       : filename_(filename) {}
 
   void decode(StatsRecordHandler &handler) const {
-    FileByteSource source(filename_, false);
+    FileByteSourceImpl source(filename_, false);
     try {
       RecordParser(source, handler).parseStream();
     } catch (parse_error &e) {

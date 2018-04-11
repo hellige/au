@@ -22,13 +22,13 @@ template<typename H>
 int doCat(const std::string &fileName, H &handler) {
   Dictionary dictionary;
   AuRecordHandler recordHandler(dictionary, handler);
+  FileByteSourceImpl source(fileName, false);
   try {
-    AuDecoder(fileName).decode(recordHandler, false);
+    RecordParser(source, recordHandler).parseStream();
   } catch (const std::exception &e) {
     std::cerr << e.what() << " while processing " << fileName << "\n";
     return 1;
   }
-
   return 0;
 }
 

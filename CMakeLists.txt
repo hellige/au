@@ -28,7 +28,10 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # External libraries/dependencies
-include_directories(SYSTEM external/rapidjson/include external/tclap/include)
+# TODO should this be done only if STATIC?
+SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+find_package(ZLIB REQUIRED)
+include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)
 set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
 add_subdirectory(external/benchmark)

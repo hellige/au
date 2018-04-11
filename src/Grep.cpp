@@ -4,6 +4,7 @@
 #include "GrepHandler.h"
 #include "TclapHelper.h"
 #include "TimestampPattern.h"
+#include "Zindex.h"
 #include "au/AuDecoder.h"
 
 #include <chrono>
@@ -78,21 +79,29 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
 
 void grepFile(Pattern &pattern,
               const std::string &fileName,
-              bool encodeOutput) {
+              bool encodeOutput,
+              bool compressed) {
+  std::unique_ptr<FileByteSource> source;
+  if (compressed) {
+    source.reset(new ZipByteSource(fileName));
+  } else {
+    source.reset(new FileByteSourceImpl(fileName, false));
+  }
+
   if (encodeOutput) {
     AuOutputHandler handler(
         STR("Encoded by au: grep output from json file "
                 << (fileName == "-" ? "<stdin>" : fileName)));
-    doGrep(pattern, fileName, handler);
+    doGrep(pattern, *source, handler);
   } else {
     JsonOutputHandler handler;
-    doGrep(pattern, fileName, handler);
+    doGrep(pattern, *source, handler);
   }
 }
 
-void usage() {
+void usage(const char *cmd) {
   std::cout
-      << "usage: au grep [options] [--] <pattern> <path>...\n"
+      << "usage: au " << cmd << " [options] [--] <pattern> <path>...\n"
       << "\n"
       << "  -h --help           show usage and exit\n"
       << "  -e --encode         output au-encoded records rather than json\n"
@@ -116,10 +125,8 @@ void usage() {
       << "  -c --count          print count of matching records per file\n";
 }
 
-}
-
-int grep(int argc, const char * const *argv) {
-  TclapHelper tclap(usage);
+int grepCmd(int argc, const char * const *argv, bool compressed) {
+  TclapHelper tclap([compressed]() { usage(compressed ? "zgrep" : "grep"); });
 
   TCLAP::ValueArg<std::string> key(
       "k", "key", "key", false, "", "string", tclap.cmd());
@@ -230,13 +237,22 @@ int grep(int argc, const char * const *argv) {
   pattern.count = count.isSet();
 
   if (fileNames.getValue().empty()) {
-    grepFile(pattern, "-", encode.isSet());
+    grepFile(pattern, "-", encode.isSet(), compressed);
   } else {
     for (auto &f : fileNames) {
-      grepFile(pattern, f, encode.isSet());
+      grepFile(pattern, f, encode.isSet(), compressed);
     }
   }
 
   return 0;
 }
 
+}
+
+int grep(int argc, const char * const *argv) {
+  return grepCmd(argc, argv, false);
+}
+
+int zgrep(int argc, const char * const *argv) {
+  return grepCmd(argc, argv, true);
+}

@@ -4,73 +4,17 @@
 #include "Dictionary.h"
 
 #include <list>
-#include <sys/stat.h>
-
-class TailByteSource : public FileByteSource {
-public:
-  explicit TailByteSource(const std::string &fname, bool follow,
-                          size_t bufferSizeInK = 16)
-      : FileByteSource(fname, follow, bufferSizeInK) {}
-
-  bool seekTo(std::string_view needle) {
-    while (true) {
-      if (buffAvail() < needle.length()) return false;
-      auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
-      if (found) {
-        size_t offset = static_cast<char *>(found) - cur_;
-        pos_ += offset;
-        cur_ += offset;
-        return true;
-      } else {
-        skip(buffAvail()-(needle.length()-1));
-      }
-    }
-  }
-
-  size_t endPos() const {
-    struct stat stat;
-    if (auto res = fstat(fd_, &stat); res < 0)
-      THROW_RT("failed to stat file: " << strerror(errno));
-    return stat.st_size;
-  }
-
-  /// Seek to length bytes from the end of the stream
-  void tail(size_t length) {
-    struct stat stat;
-    if (auto res = fstat(fd_, &stat); res < 0) {
-      THROW_RT("failed to stat file: " << strerror(errno));
-    }
-
-    length = std::min<size_t>(length, stat.st_size);
-    auto startPos = stat.st_size - length;
-
-    auto pos = lseek(fd_, static_cast<off_t>(startPos), SEEK_SET);
-    if (pos < 0) {
-      THROW_RT("failed to seek to tail: " << strerror(errno));
-    }
-    cur_ = limit_ = buf_;
-    pos_ = static_cast<size_t>(pos);
-    if (!read(0))
-      THROW_RT("failed to read from start of tail location");
-  }
-
-protected:
-  /// Available to be consumed
-  size_t buffAvail() const {
-    return static_cast<size_t>(limit_ - cur_);
-  }
-};
 
 class DictionaryBuilder : public BaseParser {
   std::list<std::string> newEntries_;
-  TailByteSource &source_;
+  FileByteSource &source_;
   Dictionary &dictionary_;
   /// A valid dictionary must end before this point
   size_t endOfDictAbsPos_;
   size_t lastDictPos_;
 
 public:
-  DictionaryBuilder(TailByteSource &source,
+  DictionaryBuilder(FileByteSource &source,
                     Dictionary &dictionary,
                     size_t endOfDictAbsPos)
       : BaseParser(source),
@@ -202,10 +146,10 @@ private:
 
 class TailHandler : public BaseParser {
   Dictionary &dictionary_;
-  TailByteSource &source_;
+  FileByteSource &source_;
 
 public:
-  TailHandler(Dictionary &dictionary, TailByteSource &source)
+  TailHandler(Dictionary &dictionary, FileByteSource &source)
       : BaseParser(source), dictionary_(dictionary), source_(source) {}
 
   template <typename OutputHandler>

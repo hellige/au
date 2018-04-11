@@ -373,7 +373,6 @@ public:
   AuWriter &value(unsigned int i) { return IntUnsigned(i); }
   AuWriter &value(int64_t i)      { return IntSigned(i); }
   AuWriter &value(uint64_t i)     { return IntUnsigned(i); }
-  AuWriter &value(long long i)    { return IntSigned(i); }
 
   template<class T>
   AuWriter &value(T f,

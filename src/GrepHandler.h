@@ -308,7 +308,7 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
   }
 }
 
-void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
+void seekSync(FileByteSource &source, Dictionary &dictionary, size_t pos) {
   source.seek(pos);
   TailHandler tailHandler(dictionary, source);
   if (!tailHandler.sync()) {
@@ -317,7 +317,7 @@ void seekSync(TailByteSource &source, Dictionary &dictionary, size_t pos) {
 }
 
 template <typename OutputHandler>
-void doBisect(Pattern &pattern, const std::string &filename,
+void doBisect(Pattern &pattern, FileByteSource &source,
               OutputHandler &handler) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
@@ -337,7 +337,6 @@ void doBisect(Pattern &pattern, const std::string &filename,
   Dictionary dictionary(32);
   GrepHandler grepHandler(bisectPattern);
   AuRecordHandler recordHandler(dictionary, grepHandler);
-  TailByteSource source(filename, false);
 
   try {
     size_t start = 0;
@@ -374,16 +373,15 @@ void doBisect(Pattern &pattern, const std::string &filename,
 }
 
 template <typename OutputHandler>
-void doGrep(Pattern &pattern, const std::string &filename,
+void doGrep(Pattern &pattern, FileByteSource &source,
             OutputHandler &handler) {
   if (pattern.bisect) {
-    doBisect(pattern, filename, handler);
+    doBisect(pattern, source, handler);
     return;
   }
 
   Dictionary dictionary;
-  FileByteSource source(filename, false);
-    reallyDoGrep(pattern, dictionary, source, handler);
+  reallyDoGrep(pattern, dictionary, source, handler);
 }
 
 }

@@ -13,57 +13,48 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstddef>
 #include <chrono>
 #include <variant>
+#include <sys/stat.h>
 
 // TODO add position/expectation info to all error messages
 
-class FileByteSource {
+class FileByteSource { // TODO rename this and FileByteSourceImpl
 protected:
   const size_t BUFFER_SIZE;
 
+  std::string name_; // TODO use this in errors, etc...
   char *buf_;   //< Working buffer
   size_t pos_;  //< Current position in the underlying data stream
   char *cur_;   //< Current position in the working buffer
   char *limit_; //< End of the current working buffer
-  int fd_;      //< Underlying data stream
 
   bool waitForData_;
 
 public:
   explicit FileByteSource(const std::string &fname, bool waitForData,
                           size_t bufferSizeInK = 256)
-      : BUFFER_SIZE(bufferSizeInK * 1024), buf_(new char[BUFFER_SIZE]),
-        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData)
-  {
-    if (fname == "-") {
-      fd_ = fileno(stdin);
-    } else {
-      fd_ = ::open(fname.c_str(), O_RDONLY);
-    }
-    if (fd_ == -1)
-      THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
-#ifndef __APPLE__
-    ::posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL);  // TODO report error?
-#endif
-  }
+      : BUFFER_SIZE(bufferSizeInK * 1024),
+        name_(fname == "-" ? "<stdin>" : fname),
+        buf_(new char[BUFFER_SIZE]),
+        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData) {}
 
   FileByteSource(const FileByteSource &) = delete;
   FileByteSource(FileByteSource &&) = delete;
   FileByteSource &operator=(const FileByteSource &) = delete;
   FileByteSource &operator=(FileByteSource &&) = delete;
 
-  ~FileByteSource() {
-    close(fd_); // TODO report error?
+  virtual ~FileByteSource() {
     delete[] buf_;
   }
 
   /// Position in the underlying data stream
   size_t pos() const { return pos_; }
+
+  virtual size_t endPos() const = 0;
 
   class Byte {
     int value_;
@@ -77,9 +68,9 @@ public:
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
       return static_cast<char>(value_);
     }
-    uint8_t u8Value() const {
+    std::byte byteValue() const {
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
-      return static_cast<uint8_t>(value_);
+      return static_cast<std::byte>(value_);
     }
     static Byte Eof() { return Byte(); }
     friend bool operator ==(Byte b, char c) {
@@ -114,7 +105,7 @@ public:
 
   template<typename T>
   void read(T *t, size_t len) {
-    auto *buf = static_cast<char *>(static_cast<void *>(t));
+    char *buf = static_cast<char *>(static_cast<void *>(t));
     read(len, [&](std::string_view fragment) {
       ::memcpy(buf, fragment.data(), fragment.size());
       buf += fragment.size();
@@ -140,33 +131,68 @@ public:
     seek(pos_ + len);
   }
 
+  virtual void doSeek(size_t abspos) = 0;
+  virtual size_t doRead(char *buf, size_t len) = 0;
+
   void seek(size_t abspos) {
     if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
       auto relseek = pos_ - abspos;
       cur_ -= relseek;
       pos_ -= relseek;
     } else {
-      auto pos = lseek(fd_, static_cast<off_t>(abspos), SEEK_SET);
-      if (pos < 0) {
-        THROW_RT("failed to seek to desired location: " << strerror(errno));
-      }
+      doSeek(abspos);
       cur_ = limit_ = buf_;
-      pos_ = static_cast<size_t>(pos);
+      pos_ = abspos;
       if (!read())
         THROW_RT("failed to read from new location");
     }
   }
 
-protected:
+  bool seekTo(std::string_view needle) {
+    while (true) {
+      if (buffAvail() < needle.length()) return false;
+      auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
+      if (found) {
+        size_t offset = static_cast<char *>(found) - cur_;
+        pos_ += offset;
+        cur_ += offset;
+        return true;
+      } else {
+        // TODO for zipped files where seeking may expensive, it'll be better
+        // perhaps to copy the last few bytes to the start of buffer and just
+        // read again, since they're contiguous reads and we're not really seeking.
+        // but the zipped file source may hide that anyway using a context like
+        // zindex does
+        skip(buffAvail()-(needle.length()-1));
+      }
+    }
+  }
+
+  /// Seek to length bytes from the end of the stream
+  void tail(size_t length) {
+    auto end = endPos();
+    length = std::min(length, end);
+    seek(end - length);
+  }
+
+private:
   /// Free space in the buffer
   size_t buffFree() const {
     return BUFFER_SIZE - (limit_ - buf_);
   }
 
+  /// Available to be consumed
+  size_t buffAvail() const {
+    return static_cast<size_t>(limit_ - cur_);
+  }
+
+protected:
   /// @return true if some data was read, false of 0 bytes were read.
   bool read() {
     return read(BUFFER_SIZE / 16);
   }
+
+private:
   bool read(size_t minHistSz) {
     // Keep a minimum amount of consumed data in the buffer so we can seek back
     // even in non-seekable data streams.
@@ -182,7 +208,7 @@ protected:
 
     ssize_t bytesRead = 0;
     do {
-      bytesRead = ::read(fd_, limit_, buffFree());
+      bytesRead = doRead(limit_, buffFree());
       if (bytesRead < 0) // TODO: && errno != EAGAIN ?
         THROW_RT("Error reading file: " << strerror(errno));
       if (bytesRead == 0 && waitForData_)
@@ -195,12 +221,54 @@ protected:
   }
 };
 
+class FileByteSourceImpl : public FileByteSource {
+  int fd_;
+
+public:
+  explicit FileByteSourceImpl(const std::string &fname, bool waitForData,
+                              size_t bufferSizeInK = 256)
+      : FileByteSource(fname, waitForData, bufferSizeInK) {
+    if (fname == "-") {
+      fd_ = fileno(stdin);
+    } else {
+      fd_ = ::open(fname.c_str(), O_RDONLY);
+    }
+    if (fd_ == -1)
+      THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
+#ifndef __APPLE__
+    ::posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL);  // TODO report error?
+#endif
+  }
+
+  ~FileByteSourceImpl() {
+    close(fd_); // TODO report error?
+  }
+
+  size_t doRead(char *buf, size_t len) override {
+    return ::read(fd_, buf, len);
+  }
+
+  size_t endPos() const override {
+    struct stat stat;
+    if (auto res = fstat(fd_, &stat); res < 0)
+      THROW_RT("failed to stat file: " << strerror(errno));
+    return stat.st_size;
+  }
+
+  void doSeek(size_t abspos) override {
+    auto pos = lseek(fd_, static_cast<off_t>(abspos), SEEK_SET);
+    if (pos < 0) {
+      THROW_RT("failed to seek to desired location: " << strerror(errno));
+    }
+  }
+};
+
 class StringBuilder {
   std::string str_;
   size_t maxLen_;
 
 public:
-  explicit StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
+  StringBuilder(size_t maxLen) : maxLen_(maxLen) {}
 
   void onStringStart(size_t, size_t len) {
     if (len > maxLen_)
@@ -259,10 +327,12 @@ protected:
       auto next = source_.next();
       if (next.isEof())
         THROW("Unexpected end of file");
-      auto i = next.u8Value();
-      result |= static_cast<uint64_t>(i & 0x7fu) << shift;
+      auto i = next.byteValue();
+      const auto valueMask = std::byte(0x7f);
+      const auto moreMask = std::byte(0x80);
+      result |= static_cast<uint64_t>(i & valueMask) << shift;
       shift += 7;
-      if ((i & 0x80u) != 0x80u) break;
+      if ((i & moreMask) != moreMask) break;
     }
     return result;
   }
@@ -270,8 +340,8 @@ protected:
   uint64_t parseFormatVersion() const {
     uint64_t version;
     auto c = source_.next();
-    if ((c.u8Value() & ~0x1fu) == marker::SmallInt::Positive) {
-      version = c.u8Value() & 0x1fu;
+    if ((c.charValue() & ~0x1f) == marker::SmallInt::Positive) {
+      version = c.charValue() & 0x1f;
     } else if (c == marker::Varint) {
       version = readVarint();
     } else {
@@ -294,8 +364,8 @@ protected:
   void parseFullString(Handler &handler) const {
     size_t sov = source_.pos();
     auto c = source_.next();
-    if ((c.u8Value() & ~0x1fu) == 0x20) {
-      parseString(sov, c.u8Value() & 0x1fu, handler);
+    if (((uint8_t) c.charValue() & ~0x1fu) == 0x20) {
+      parseString(sov, (uint8_t) c.charValue() & 0x1fu, handler);
     } else if (c == marker::String) {
       parseString(sov, handler);
     } else {
@@ -358,22 +428,20 @@ public:
     if (c.isEof())
       THROW("Unexpected EOF at start of value");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, c.u8Value() & ~0x80u);
+      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
     }
-    {
-      auto val = c.u8Value() & ~0xe0u;
-      if (c.charValue() & marker::SmallInt::Negative) {
-        if (c.charValue() & 0x20u)
-          handler_.onUint(sov, val);
-        else
-          handler_.onInt(sov, -val);
-        return;
-      }
-      if (c.charValue() & 0x20u) {
-        parseString(sov, val, handler_);
-        return;
-      }
+    int val = (uint8_t)c.charValue() & ~0xe0;
+    if (c.charValue() & marker::SmallInt::Negative) {
+      if (c.charValue() & 0x20)
+        handler_.onUint(sov, val);
+      else
+        handler_.onInt(sov, -val);
+      return;
+    }
+    if (c.charValue() & 0x20) {
+      parseString(sov, val, handler_);
+      return;
     }
     switch (c.charValue()) {
       case marker::True:
@@ -443,11 +511,11 @@ private:
     if (c.isEof())
       THROW("Unexpected EOF at start of key");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, c.u8Value() & ~0x80u);
+      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
     }
-    auto val = c.u8Value() & ~0xe0u;
-    if ((c.u8Value() & ~0x1fu) == 0x20u) {
+    int val = (uint8_t)c.charValue() & ~0xe0;
+    if ((c.charValue() & ~0x1f) == 0x20) {
       parseString(sov, val, handler_);
       return;
     }
@@ -592,12 +660,12 @@ class AuDecoder {
   std::string filename_;
 
 public:
-  explicit AuDecoder(std::string filename)
-      : filename_(std::move(filename)) {}
+  AuDecoder(const std::string &filename)
+      : filename_(filename) {}
 
   template<typename H>
   void decode(H &handler, bool waitForData) const {
-    FileByteSource source(filename_, waitForData);
+    FileByteSourceImpl source(filename_, waitForData);
     try {
       RecordParser<H>(source, handler).parseStream();
     } catch (parse_error &e) {

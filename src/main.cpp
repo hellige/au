@@ -27,8 +27,10 @@ int help(int, char **) {
     << "   cat      Decode listed files to stdout (alias au2json)\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
+    << "   zgrep    grep in gzipped file\n"
     << "   enc      Encode listed files to stdout (alias json2au)\n"
-    << "   stats    Display file statistics\n";
+    << "   stats    Display file statistics\n"
+    << "   zindex   Build an index of a gzipped au file\n";
   return 0;
 }
 
@@ -50,6 +52,8 @@ int main(int argc, char **argv) {
   commands["enc"] = json2au;
   commands["json2au"] = json2au;
   commands["stats"] = stats;
+  commands["zindex"] = zindex;
+  commands["zgrep"] = zgrep;
 
   std::string cmd(argv[1]);
   auto it = commands.find(cmd);

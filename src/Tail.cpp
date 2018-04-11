@@ -35,7 +35,7 @@ int tail(int argc, const char *const *argv) {
   if (fileName.getValue().empty() || fileName.getValue() == "-") {
     std::cerr << "Tailing stdin not supported\n";
   } else {
-    TailByteSource source(fileName, follow);
+    FileByteSourceImpl source(fileName, follow);
     source.tail(startOffset);
     TailHandler tailHandler(dictionary, source);
     tailHandler.parseStream(jsonHandler);

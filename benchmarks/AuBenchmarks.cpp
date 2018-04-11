@@ -8,7 +8,7 @@
 
 static void BM_FileByteSource(benchmark::State &state) {
   size_t buffSz = state.range(0);
-  FileByteSource src("/dev/urandom", false, buffSz);
+  FileByteSourceImpl src("/dev/urandom", false, buffSz);
   size_t sum = 0;
 
   for (auto _ : state) {

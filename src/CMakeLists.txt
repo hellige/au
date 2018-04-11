@@ -47,8 +47,8 @@ target_sources(au-cpp INTERFACE
 target_include_directories(au-cpp INTERFACE .)
 install(DIRECTORY au DESTINATION include)
 
-add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp)
-target_link_libraries(au au-cpp)
+add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp ZindexCmd.cpp Zindex.cpp)
+target_link_libraries(au au-cpp ${ZLIB_LIBRARIES})
 install(TARGETS au
         RUNTIME DESTINATION bin)
 
