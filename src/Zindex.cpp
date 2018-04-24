@@ -7,6 +7,7 @@
 
 #include <zlib.h>
 
+#include <cassert>
 #include <cstring>
 #include <fstream>
 #include <sys/stat.h>
@@ -84,30 +85,18 @@ struct Closer {
 using File = std::unique_ptr<FILE, Closer>;
 
 struct CachedContext {
-  size_t uncompressedOffset_;
-  size_t blockSize_;
   ZStream zs_;
-  size_t pos_ = 0;
-  size_t cur_ = 0;
-  size_t limit_ = 0;
+  size_t pos_ = 0; // current absolute position in stream
+  size_t cur_ = 0; // current offset into ZipByteSource::output_
+  size_t limit_ = 0; // number of valid bytes in ZipByteSource::output_
   bool eof_ = false;
 
-  explicit CachedContext(size_t blockSize)
-      : uncompressedOffset_(0),
-        blockSize_(blockSize),
-        zs_(ZStream::Type::ZlibOrGzip) {}
+  explicit CachedContext()
+      : zs_(ZStream::Type::ZlibOrGzip) {}
 
-  explicit CachedContext(size_t uncompressedOffset, size_t blockSize)
-      : uncompressedOffset_(uncompressedOffset),
-        blockSize_(blockSize),
-        zs_(ZStream::Type::Raw),
+  explicit CachedContext(size_t uncompressedOffset)
+      : zs_(ZStream::Type::Raw),
         pos_(uncompressedOffset) {}
-
-  bool offsetWithinRange(size_t offset) const {
-    if (offset < uncompressedOffset_) return false; // can't seek backwards
-    size_t jumpAhead = offset - uncompressedOffset_;
-    return jumpAhead < blockSize_;
-  }
 };
 
 std::string indexFilename(const std::string &filename) {
@@ -350,6 +339,7 @@ struct Zindex {
   size_t numEntries() const { return index_.size(); }
 
   size_t uncompressedSize() const {
+    // total stream size is "start" of dummy final entry
     return index_.back().uncompressedOffset;
   }
 
@@ -360,7 +350,7 @@ struct Zindex {
           return abspos < entry.uncompressedOffset;
         });
     if (it == index_.begin())
-      THROW_RT("Couldn't find index entry containning " << abspos);
+      THROW_RT("Couldn't find index entry containing " << abspos);
     --it;
     return *it;
   }
@@ -369,8 +359,8 @@ struct Zindex {
 struct ZipByteSource::Impl {
   File compressed_;
   Zindex index_;
-  // average block size, used to determine whether to seek forward by
-  // decompressing or seeking to a new block. also used to determine the size
+  // based on the average block size, used to determine whether to seek forward
+  // by decompressing or seeking to a new block. also used to determine the size
   // of the decompression lookback buffer to use after each seek
   size_t blockSize_;
   std::unique_ptr<CachedContext> context_;
@@ -381,7 +371,7 @@ struct ZipByteSource::Impl {
       : compressed_(fopen(fname.c_str(), "rb")),
         index_(indexFilename(fname)),
         blockSize_(2 * index_.uncompressedSize() / index_.numEntries()),
-        context_(new CachedContext(blockSize_)),
+        context_(new CachedContext()),
         output_(new uint8_t[blockSize_]) {
     if (compressed_.get() == nullptr)
       THROW_RT("Could not open " << fname << " for reading");
@@ -417,23 +407,35 @@ struct ZipByteSource::Impl {
 
   void doSeek(size_t abspos) {
     auto &c = *context_;
-    // TODO this should work if abspos > pos_ and < cur_ but currently might not.
-    if (abspos < c.pos_ && c.pos_ - abspos <= static_cast<size_t>(c.cur_)) {
+
+    if (abspos < c.pos_ && c.pos_ - abspos <= c.cur_) {
+      // we're seeking backward within current buffer
       auto relseek = c.pos_ - abspos;
       c.cur_ -= relseek;
       c.pos_ -= relseek;
       return;
     }
 
-    if (!context_->offsetWithinRange(abspos)) {
-      // we're either seeking backward, or far enough forward that it's better
-      // to jump instead of scan.
+    size_t bufRemaining = c.limit_ - c.cur_;
+    if (abspos > c.pos_ && abspos - c.pos_ <= bufRemaining) {
+      // we're seeking forward within current buffer
+      auto relseek = abspos - c.pos_;
+      c.cur_ += relseek;
+      c.pos_ += relseek;
+      return;
+    }
+
+    // now we're either seeking backward, or else forward beyond end of
+    // buffer. do we really need to seek? or can we just skip ahead some?
+    if (abspos < c.pos_ || abspos > blockSize_ + bufRemaining) {
+      // we're either seeking backward beyond the start of output_,
+      // or far enough forward that it's better to jump instead of scan.
       Zindex::IndexEntry &indexEntry = index_.find(abspos);
       auto compressedOffset = indexEntry.compressedOffset;
       auto uncompressedOffset = indexEntry.uncompressedOffset;
       auto bitOffset = indexEntry.bitOffset;
       //log_.debug("Creating new context at offset ", compressedOffset); TODO
-      context_.reset(new CachedContext(uncompressedOffset, blockSize_));
+      context_.reset(new CachedContext(uncompressedOffset));
       uint8_t window[WindowSize];
       uncompressWindow(indexEntry.window, window, WindowSize);
 
@@ -452,8 +454,11 @@ struct ZipByteSource::Impl {
       X(inflateSetDictionary(&context_->zs_.stream, &window[0], WindowSize));
     }
 
+    if (abspos < context_->pos_)
+      THROW_RT("Invariant abspos >= context_->pos_ doesn't hold: abspos = "
+                   << abspos << ", context_->pos_ = " << context_->pos_);
     char discardBuffer[WindowSize];
-    auto numToSkip = abspos - context_->uncompressedOffset_;
+    auto numToSkip = abspos - context_->pos_;
     while (numToSkip) {
       auto skipNow = std::min(WindowSize, (uInt)numToSkip);
       auto numRead = doRead(discardBuffer, skipNow);
@@ -468,17 +473,16 @@ struct ZipByteSource::Impl {
     if (context_->cur_ != context_->limit_)
       THROW_RT("Shouldn't call gzread() unless cur_ == limit_!");
 
-    if (context_->cur_ == context_->blockSize_) {
+    if (context_->cur_ == blockSize_) {
       // buffer is full. we're only called when we're supposed to read
       // something, so just clear it and continue...
       context_->cur_ = context_->limit_ = 0;
     }
 
     auto &zs = context_->zs_;
-    zs.stream.next_out = output_+context_->cur_;
+    zs.stream.next_out = output_+context_->limit_;
     zs.stream.avail_out =
-        std::min((unsigned int)(context_->blockSize_ - context_->limit_),
-                 ChunkSize); // TODO ChunkSize or whatever...
+        std::min((unsigned int)(blockSize_ - context_->limit_), ChunkSize); // TODO ChunkSize or whatever...
     size_t total = 0;
     do {
       if (zs.stream.avail_in == 0) {
@@ -493,7 +497,6 @@ struct ZipByteSource::Impl {
       if (ret == Z_MEM_ERROR || ret == Z_DATA_ERROR)
         throw ZlibError(ret);
       auto numUncompressed = availBefore - zs.stream.avail_out;
-      context_->uncompressedOffset_ += numUncompressed;
       context_->limit_ += numUncompressed;
       total += numUncompressed;
       if (ret == Z_STREAM_END) {
@@ -502,7 +505,7 @@ struct ZipByteSource::Impl {
         // there are multiple blocks or not, because in the presence of the
         // gzip framing data, the underlying file might not actually be at
         // eof. so we don't bother to detect or warn. they will have gotten
-        // the warning when the built th index, at least.
+        // the warning when the built the index, at least.
         context_->eof_ = true;
         break;
       }
