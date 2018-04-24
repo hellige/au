@@ -5,3 +5,5 @@
   - add checks to emit empty dict-add record if backref approaches max?
 
   - the json parser in the encoder chokes on nan rather than NaN, but there isn't any kind of error. why?
+
+  - teach zgrep to grep a non-indexed gzip file, and fail only if/when seeking is actually required
