@@ -1,15 +1,15 @@
-#include "au/AuDecoder.h"
 #include "au/AuEncoder.h"
 #include "au/ParseError.h"
-#include "AuRecordHandler.h"
-#include "Dictionary.h"
+#include "DocumentParser.h"
 #include "Zindex.h"
 
 #include <zlib.h>
 
-#include <cassert>
 #include <cstring>
 #include <fstream>
+#include <libgen.h>
+#include <limits.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 
 // this file contains code adapted from https://github.com/mattgodbolt/zindex
@@ -20,6 +20,19 @@ constexpr auto DefaultIndexEvery = 8 * 1024 * 1024u;
 constexpr auto WindowSize = 32768u;
 constexpr auto ChunkSize = 16384u;
 constexpr auto Version = 1u;
+
+std::string getRealPath(const std::string &relPath) {
+  char realPathBuf[PATH_MAX];
+  auto result = realpath(relPath.c_str(), realPathBuf);
+  if (result == nullptr) return relPath;
+  return std::string(relPath);
+}
+
+std::string getBaseName(const std::string &path) {
+  std::vector<char> chars(path.begin(), path.end());
+  chars.push_back(0);
+  return std::string(basename(&chars[0]));
+}
 
 struct ZlibError : std::runtime_error {
   ZlibError(int result)
@@ -99,17 +112,19 @@ struct CachedContext {
         pos_(uncompressedOffset) {}
 };
 
-std::string indexFilename(const std::string &filename) {
-  return filename + ".auzx"; // TODO add command line arg, realpath stuff?
+std::string getIndexFilename(const std::string &filename,
+                          const std::optional<std::string> &indexFilename) {
+  if (indexFilename) return *indexFilename;
+  return getRealPath(filename) + ".auzx";
 }
 
 }
 
-int zindexFile(const std::string &fileName) {
+int zindexFile(const std::string &fileName,
+               const std::optional<std::string> &indexFilename) {
   size_t indexEvery = DefaultIndexEvery; // TODO extract
 
-  auto ifn = indexFilename(fileName);
-
+  auto ifn = getIndexFilename(fileName, indexFilename);
   std::cout << "Indexing " << fileName << " to " << ifn << "...\n";
 
   // open gzipped file, or fail...
@@ -141,19 +156,15 @@ int zindexFile(const std::string &fileName) {
     });
   };
 
-  /*
-   * TODO this would be much cleaner...
   emit([&](AuWriter &au) {
     au.map(
       "fileType", "zindex",
-      "version", Version, // TODO what else?
-      "compressedFile", fileName // TODO just filename rather than possibly full path?
+      "version", Version,
+      "compressedFile", getBaseName(fileName),
+      "compressedSize", compressedStat.st_size,
+      "compressedModTime", compressedStat.st_mtime
     );
   });
-  */
-  emit([&](AuWriter &au) { au.value(Version); });
-  emit([&](AuWriter &au) { au.value(compressedStat.st_size); });
-  emit([&](AuWriter &au) { au.value((uint64_t)compressedStat.st_mtime); }); // TODO what cast here?
 
   // actually build the index...
   ZStream zs(ZStream::Type::ZlibOrGzip);
@@ -204,7 +215,6 @@ int zindexFile(const std::string &fileName) {
             zs.stream.avail_out);
         auto window =
             std::string_view((char *)apWindow, size); // TODO what's the right way to cast this?
-          /* TODO fix this...
         emit([&](AuWriter &au) {
           au.map(
             "uncompressedOffset", totalOut,
@@ -213,11 +223,6 @@ int zindexFile(const std::string &fileName) {
             "window", window
           );
         });
-           */
-        emit([&](AuWriter &au) { au.value(totalIn); });
-        emit([&](AuWriter &au) { au.value(totalOut); });
-        emit([&](AuWriter &au) { au.value(zs.stream.data_type & 0x7); });
-        emit([&](AuWriter &au) { au.value(window); });
 
         last = totalOut;
         emitInitialAccessPoint = false;
@@ -235,65 +240,18 @@ int zindexFile(const std::string &fileName) {
 
   // TODO find a better way to record the total uncompressed size...
   std::cout << "Writing final entry...\n";
-  emit([&](AuWriter &au) { au.value(totalIn); });
-  emit([&](AuWriter &au) { au.value(totalOut); });
-  emit([&](AuWriter &au) { au.value(zs.stream.data_type & 0x7); });
-  emit([&](AuWriter &au) { au.value(""); });
+  emit([&](AuWriter &au) {
+    au.map(
+        "uncompressedOffset", totalOut,
+        "compressedOffset", totalIn,
+        "bitOffset", zs.stream.data_type & 0x7,
+        "window", ""
+    );
+  });
 
   std::cout << "Index complete.\n";
   return 0;
 }
-
-template <typename Base>
-struct SingleValueParser : Base {
-  typename Base::type parse(FileByteSource &source, Dictionary &dictionary) {
-    AuRecordHandler rh(dictionary, *this);
-    if (!RecordParser(source, rh).parseUntilValue())
-      THROW_RT("SingleValueParser failed to parse value record!");
-    auto &v = static_cast<Base*>(this)->value;
-    if (v) return *v;
-    THROW_RT("SingleValueParser failed to parse value!");
-  }
-
-  void onValue(FileByteSource &source, const Dictionary::Dict &) {
-    ValueParser<Base> vp(source, *this);
-    vp.value();
-  }
-};
-
-struct ThrowParser {
-  void onObjectStart() { THROW_RT("Bad value."); }
-  void onObjectEnd() {}
-  void onArrayStart() { THROW_RT("Bad value."); }
-  void onArrayEnd() {}
-  void onNull(size_t) { THROW_RT("Bad value."); }
-  void onBool(size_t, bool) { THROW_RT("Bad value."); }
-  void onInt(size_t, int64_t) { THROW_RT("Bad value."); }
-  void onUint(size_t, uint64_t) { THROW_RT("Bad value."); }
-  void onDouble(size_t, double) { THROW_RT("Bad value."); }
-  void onTime(size_t, std::chrono::system_clock::time_point) { THROW_RT("Bad value."); }
-  void onDictRef(size_t, size_t) { THROW_RT("Bad value."); }
-  void onStringStart(size_t, size_t) { THROW_RT("Bad value."); }
-  void onStringEnd() {}
-  void onStringFragment(std::string_view) {}
-};
-
-struct IntParser : ThrowParser {
-  using type = uint64_t;
-  std::optional<type> value;
-  void onUint(size_t, uint64_t val) { value = val; }
-};
-
-struct StringParser : ThrowParser {
-  using type = std::string;
-  std::vector<char> str;
-  std::optional<type> value;
-  void onStringStart(size_t, size_t len) { str.clear(); str.reserve(len); }
-  void onStringEnd() { value = std::string_view(str.data(), str.size()); }
-  void onStringFragment(std::string_view frag) {
-    str.insert(str.end(), frag.data(), frag.data() + frag.size());
-  }
-};
 
 struct Zindex {
   struct IndexEntry {
@@ -304,30 +262,44 @@ struct Zindex {
   };
 
   std::vector<IndexEntry> index_;
+  std::string compressedFilename;
   size_t compressedSize = 0;
   size_t compressedModTime = 0;
 
   Zindex(const std::string &filename) {
     FileByteSourceImpl source(filename, false);
     Dictionary dictionary;
-    auto version = SingleValueParser<IntParser>().parse(source, dictionary);
-    if (version != 1)
-      THROW_RT("Wrong version index " << version << ", expected version 1");
-    compressedSize = SingleValueParser<IntParser>().parse(source, dictionary);
-    compressedModTime
-        = SingleValueParser<IntParser>().parse(source, dictionary);
+
+    DocumentParser metadataParser;
+    metadataParser.parse(source, dictionary);
+    auto &meta = metadataParser.document();
+    if (!meta.IsObject())
+      THROW_RT("First record in index file is not a json object!");
+    auto fileType = std::string_view(meta["fileType"].GetString(),
+                                     meta["fileType"].GetStringLength());
+    if (fileType != "zindex")
+      THROW_RT("Wrong fileType in index, expected 'zindex'");
+    if (!meta["version"].IsInt() || meta["version"].GetInt() != 1)
+      THROW_RT("Wrong version index, expected version 1");
+    compressedFilename =
+        std::string_view(meta["compressedFile"].GetString(),
+                         meta["compressedFile"].GetStringLength());
+    compressedSize = meta["compressedSize"].GetUint64();
+    compressedModTime = meta["compressedModTime"].GetUint64();
 
     while (source.peek() != FileByteSource::Byte::Eof()) {
-      auto compressedOffset =
-          SingleValueParser<IntParser>().parse(source, dictionary);
-      auto uncompressedStartOffset =
-          SingleValueParser<IntParser>().parse(source, dictionary);
-      auto bitOffset = SingleValueParser<IntParser>().parse(source, dictionary);
-      auto window = SingleValueParser<StringParser>().parse(source, dictionary);
+      DocumentParser entryParser;
+      entryParser.parse(source, dictionary);
+      auto &entry = entryParser.document();
+      auto compressedOffset = entry["compressedOffset"].GetUint64();
+      auto uncompressedStartOffset = entry["uncompressedOffset"].GetUint64();
+      auto bitOffset = entry["bitOffset"].GetInt();
+      auto window = std::string_view(entry["window"].GetString(),
+          entry["window"].GetStringLength());
       index_.emplace_back(IndexEntry {
         compressedOffset,
         uncompressedStartOffset,
-        (int)bitOffset, // TODO cast?
+        bitOffset,
         std::vector<uint8_t>(window.begin(), window.end())
       });
     }
@@ -367,14 +339,20 @@ struct ZipByteSource::Impl {
   uint8_t input_[ChunkSize];
   uint8_t *output_;
 
-  Impl(const std::string &fname) 
+  Impl(const std::string &fname,
+       const std::optional<std::string> &indexFname)
       : compressed_(fopen(fname.c_str(), "rb")),
-        index_(indexFilename(fname)),
+        index_(getIndexFilename(fname, indexFname)),
         blockSize_(2 * index_.uncompressedSize() / index_.numEntries()),
         context_(new CachedContext()),
         output_(new uint8_t[blockSize_]) {
     if (compressed_.get() == nullptr)
       THROW_RT("Could not open " << fname << " for reading");
+
+    if (index_.compressedFilename != getBaseName(fname))
+      THROW_RT("Wrong compressed filename in index: '"
+                   << index_.compressedFilename << "', expected '"
+                   << getBaseName(fname) << "'");
 
     struct stat stats;
     if (fstat(fileno(compressed_.get()), &stats) != 0)
@@ -514,8 +492,10 @@ struct ZipByteSource::Impl {
   }
 };
 
-ZipByteSource::ZipByteSource(const std::string &fname)
-: FileByteSource(fname, false), impl_(std::make_unique<Impl>(fname)) {}
+ZipByteSource::ZipByteSource(const std::string &fname,
+                             const std::optional<std::string> &indexFilename)
+: FileByteSource(fname, false),
+  impl_(std::make_unique<Impl>(fname, indexFilename)) {}
 
 ZipByteSource::~ZipByteSource() {}
 

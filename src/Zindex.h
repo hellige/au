@@ -3,14 +3,17 @@
 #include "au/AuDecoder.h"
 
 #include <memory>
+#include <optional>
 
-int zindexFile(const std::string &fileName);
+int zindexFile(const std::string &fileName,
+               const std::optional<std::string> &indexFilename);
 
 class ZipByteSource : public FileByteSource {
   class Impl;
   std::unique_ptr<Impl> impl_;
 public:
-  explicit ZipByteSource(const std::string &fname);
+  explicit ZipByteSource(const std::string &fname,
+                         const std::optional<std::string> &indexFname);
   ~ZipByteSource();
 
   size_t doRead(char *buf, size_t len) override;

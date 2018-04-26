@@ -80,10 +80,11 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
 void grepFile(Pattern &pattern,
               const std::string &fileName,
               bool encodeOutput,
-              bool compressed) {
+              bool compressed,
+              const std::optional<std::string> &indexFile) {
   std::unique_ptr<FileByteSource> source;
   if (compressed) {
-    source.reset(new ZipByteSource(fileName));
+    source.reset(new ZipByteSource(fileName, indexFile));
   } else {
     source.reset(new FileByteSourceImpl(fileName, false));
   }
@@ -122,7 +123,8 @@ void usage(const char *cmd) {
       << "  -B --before <n>     show <n> records of context before each match\n"
       << "  -A --after <n>      show <n> records of context after each match\n"
       << "  -C --context <n>    equivalent to -A n -B n\n"
-      << "  -c --count          print count of matching records per file\n";
+      << "  -c --count          print count of matching records per file\n"
+      << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n";
 }
 
 int grepCmd(int argc, const char * const *argv, bool compressed) {
@@ -140,6 +142,8 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
       "A", "after", "after", false, 0, "uint32_t", tclap.cmd());
   TCLAP::ValueArg<uint32_t> matches(
       "m", "matches", "matches", false, 0, "uint32_t", tclap.cmd());
+  TCLAP::ValueArg<std::string> index(
+      "x", "index", "index", false, "", "string", tclap.cmd());
   TCLAP::SwitchArg encode("e", "encode", "encode", tclap.cmd());
   TCLAP::SwitchArg count("c", "count", "count", tclap.cmd());
   TCLAP::SwitchArg matchAtom("a", "atom", "atom", tclap.cmd());
@@ -236,11 +240,14 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
 
   pattern.count = count.isSet();
 
+  std::optional<std::string> indexFile;
+  if (compressed && index.isSet()) indexFile = index.getValue();
+
   if (fileNames.getValue().empty()) {
-    grepFile(pattern, "-", encode.isSet(), compressed);
+    grepFile(pattern, "-", encode.isSet(), compressed, indexFile);
   } else {
     for (auto &f : fileNames) {
-      grepFile(pattern, f, encode.isSet(), compressed);
+      grepFile(pattern, f, encode.isSet(), compressed, indexFile);
     }
   }
 
