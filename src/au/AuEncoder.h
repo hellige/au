@@ -91,8 +91,8 @@ public:
         internCache_(internThresh, internCacheSize) {}
 
   std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
-    if (s.length() <= tinyStringSize_) return {};
-    if (intern.has_value() && !intern.value()) return {};
+    if (s.length() <= tinyStringSize_) return {std::nullopt};
+    if (intern.has_value() && !intern.value()) return {std::nullopt};
 
     auto it = dictionary_.find(s);
     if (it != dictionary_.end()) {
@@ -107,7 +107,7 @@ public:
       dictInOrder_.emplace_back(s);
       return nextEntry;
     }
-    return {};
+    return {std::nullopt};
   }
 
   auto idx(std::string_view sv, std::optional<bool> intern) {
