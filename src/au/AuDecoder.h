@@ -164,6 +164,20 @@ public:
         // but the zipped file source may hide that anyway using a context like
         // zindex does
         skip(buffAvail()-(needle.length()-1));
+        // we might have attempted to find 'needle' and failed. then we seek to
+        // very near the end of the buffer, leaving just len(needle)-1 bytes.
+        // the seek automatically clears the buffer and re-reads, but the
+        // UNDERLYING source might just return the same few bytes again, in
+        // which case we'll fail on the next iteration. the contract is that
+        // the underlying source can return any non-zero number of bytes on a
+        // read(), but it won't return 0 unless it really actually has no more
+        // bytes to give us. therefore...
+
+        // make one last desperate attempt to refill the buffer before going
+        // around again. this is a crappy way of doing this, but given the
+        // current design, it's the simplest solution. this whole thing should
+        // be refactored...
+        read();
       }
     }
   }
