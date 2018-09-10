@@ -33,6 +33,7 @@ public:
 
   void onDictAddStart(size_t relDictPos) {
     auto &dictionary = dictionary_.findDictionary(sor_, relDictPos);
+    dict_ = nullptr;
     if (!dictionary.includes(sor_))
       dict_ = &dictionary;
   }
