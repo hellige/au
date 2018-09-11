@@ -306,6 +306,18 @@ struct Zindex {
 
     if (index_.empty())
       THROW_RT("Index should contain at least one entry!");
+
+    const auto &last = index_.back();
+    if (!last.window.empty()) {
+      THROW_RT("Index appears to be incomplete: Final entry has"
+               " non-empty compression window data.");
+    }
+
+    if (last.compressedOffset != compressedSize) {
+      THROW_RT("Index appears to be incomplete: Final entry has"
+               " compressed offset " << last.compressedOffset
+               << " but metadata shows compressed size " << compressedSize);
+    }
   }
 
   size_t numEntries() const { return index_.size(); }
