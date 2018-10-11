@@ -3,9 +3,11 @@
 #include "au/ParseError.h"
 #include "au/AuCommon.h"
 
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <iomanip>
 #include <stdexcept>
@@ -22,40 +24,8 @@
 
 // TODO add position/expectation info to all error messages
 
-class FileByteSource { // TODO rename this and FileByteSourceImpl
-protected:
-  const size_t BUFFER_SIZE;
-
-  std::string name_; // TODO use this in errors, etc...
-  char *buf_;   //< Working buffer
-  size_t pos_;  //< Current position in the underlying data stream
-  char *cur_;   //< Current position in the working buffer
-  char *limit_; //< End of the current working buffer
-
-  bool waitForData_;
-
+class AuByteSource {
 public:
-  explicit FileByteSource(const std::string &fname, bool waitForData,
-                          size_t bufferSizeInK = 256)
-      : BUFFER_SIZE(bufferSizeInK * 1024),
-        name_(fname == "-" ? "<stdin>" : fname),
-        buf_(new char[BUFFER_SIZE]),
-        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData) {}
-
-  FileByteSource(const FileByteSource &) = delete;
-  FileByteSource(FileByteSource &&) = delete;
-  FileByteSource &operator=(const FileByteSource &) = delete;
-  FileByteSource &operator=(FileByteSource &&) = delete;
-
-  virtual ~FileByteSource() {
-    delete[] buf_;
-  }
-
-  /// Position in the underlying data stream
-  size_t pos() const { return pos_; }
-
-  virtual size_t endPos() const = 0;
-
   class Byte {
     int value_;
   public:
@@ -92,16 +62,17 @@ public:
     }
   };
 
-  Byte next() {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    pos_++;
-    return Byte(*cur_++);
-  }
-
-  Byte peek() {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    return Byte(*cur_);
-  }
+  /// The current position of the byte source. [0..sourceLen] (i.e. up to 1 past
+  /// the end of the source - when at EOF).
+  virtual size_t pos() const = 0;
+  /// The length of the byte source (the position of the EOF)
+  virtual size_t endPos() const = 0;
+  /// The current byte
+  virtual Byte peek() = 0;
+  /// The next byte. Calling this on a newly created source should return the
+  /// very first char in the source the 1st time it is called and then
+  /// subsequent characters on each invocation.
+  virtual Byte next() = 0;
 
   template<typename T>
   void read(T *t, size_t len) {
@@ -112,12 +83,143 @@ public:
     });
   }
 
-  template<typename F>
-  void read(size_t len, F func) {
+  using Fn = std::function<void(std::string_view)>;
+  /// Call func with the next len bytes from the underlying byte source.
+  virtual void read(size_t len, Fn &&func) = 0;
+  virtual size_t doRead(char *buf, size_t len) = 0;
+
+  virtual void seek(size_t abspos) = 0;
+  virtual void doSeek(size_t abspos) = 0;
+
+  virtual bool seekTo(std::string_view needle) = 0;
+
+  virtual void skip(size_t len) = 0;
+
+  /// Seek to length bytes from the end of the stream
+  void tail(size_t length) {
+    auto end = endPos();
+    length = std::min(length, end);
+    seek(end - length);
+  }
+};
+
+class BufferByteSource : public AuByteSource {
+  const char *buf_; //< Underlying source buffer
+  size_t bufLen_;   //< Underlying source buffer length
+
+  size_t pos_ = 0;  //< Current position (this may be 1 past the end of buf_)
+
+public:
+  BufferByteSource(const char *buf, size_t len) : buf_(buf), bufLen_(len) {}
+
+  BufferByteSource(std::string_view buf)
+  : buf_(buf.data()), bufLen_(buf.length())
+  {}
+
+  size_t pos() const override {
+    assert(pos_ <= bufLen_);
+    return pos_;
+  }
+
+  size_t endPos() const override { return bufLen_; }
+
+  Byte peek() override {
+    return pos_ < bufLen_ ? Byte(buf_[pos_]) : Byte::Eof();
+  }
+
+  Byte next() override {
+    return pos_ < bufLen_ ? Byte(buf_[pos_++]) : Byte::Eof();
+  }
+
+  void read(size_t len, Fn &&func) override {
+    size_t sz = std::min(len, bufLen_ - pos_);
+    func(std::string_view(buf_ + pos_, sz));
+    pos_ += sz;
+  }
+
+  size_t doRead(char *buf, size_t len) override {
+    if (pos_ < bufLen_) {
+      size_t sz = std::min(bufLen_ - pos_, len);
+      ::memcpy(buf, buf_ + pos_, sz);
+      return sz;
+    }
+    return 0;
+  }
+
+  void seek(size_t abspos) override {
+    doSeek(abspos);
+  }
+  void doSeek(size_t abspos) override {
+    if (abspos >= bufLen_) { // TODO: Should we allow seek to EOF?
+      THROW_RT("failed to seek to desired location: " << abspos);
+    }
+    pos_ = abspos;
+  }
+
+  void skip(size_t len) override { seek(pos_ + len); }
+
+  bool seekTo(std::string_view needle) override {
+    auto found = memmem(buf_ + pos_, bufLen_ - pos_,
+                        needle.data(), needle.length());
+    if (found) {
+      pos_ = static_cast<char *>(found) - buf_;
+      return true;
+    }
+    return false;
+  }
+};
+
+class FileByteSource : public AuByteSource { // TODO rename this and FileByteSourceImpl
+protected:
+  const size_t BUFFER_SIZE;
+
+  std::string name_; // TODO use this in errors, etc...
+  char *buf_;   //< Working buffer
+  size_t pos_;  //< Current position in the underlying data stream
+  char *cur_;   //< Current position in the working buffer
+  char *limit_; //< End of the current working buffer
+
+  bool waitForData_;
+
+public:
+  explicit FileByteSource(const std::string &fname, bool waitForData,
+                          size_t bufferSizeInK = 256)
+      : BUFFER_SIZE(bufferSizeInK * 1024),
+        name_(fname == "-" ? "<stdin>" : fname),
+        buf_(new char[BUFFER_SIZE]),
+        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData) {}
+
+  FileByteSource(const FileByteSource &) = delete;
+  FileByteSource(FileByteSource &&) = delete;
+  FileByteSource &operator=(const FileByteSource &) = delete;
+  FileByteSource &operator=(FileByteSource &&) = delete;
+
+  virtual ~FileByteSource() {
+    delete[] buf_;
+  }
+
+  /// Position in the underlying data stream
+  size_t pos() const override { return pos_; }
+
+  Byte next() override {
+    while (cur_ == limit_) if (!read()) return Byte::Eof();
+    pos_++;
+    return Byte(*cur_++);
+  }
+
+  Byte peek() override {
+    while (cur_ == limit_) if (!read()) return Byte::Eof();
+    return Byte(*cur_);
+  }
+
+  // Add the base class's read() to the overload resolution list of this class.
+  using AuByteSource::read;
+
+  void read(size_t len, Fn &&func) override {
     while (len) {
       while (cur_ == limit_)
         if (!read())
-          THROW("reached eof while trying to read " << len << " bytes");
+          AU_THROW("reached eof while trying to read " << len << " bytes");
       // limit_ > cur_, so cast to size_t is fine...
       auto first = std::min(len, static_cast<size_t>(limit_ - cur_));
       func(std::string_view(cur_, first));
@@ -127,14 +229,11 @@ public:
     }
   }
 
-  void skip(size_t len) {
+  void skip(size_t len) override {
     seek(pos_ + len);
   }
 
-  virtual void doSeek(size_t abspos) = 0;
-  virtual size_t doRead(char *buf, size_t len) = 0;
-
-  void seek(size_t abspos) {
+  void seek(size_t abspos) override {
     if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
       auto relseek = pos_ - abspos;
       cur_ -= relseek;
@@ -148,7 +247,7 @@ public:
     }
   }
 
-  bool seekTo(std::string_view needle) {
+  bool seekTo(std::string_view needle) override {
     while (true) {
       if (buffAvail() < needle.length()) return false;
       auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
@@ -180,13 +279,6 @@ public:
         read();
       }
     }
-  }
-
-  /// Seek to length bytes from the end of the stream
-  void tail(size_t length) {
-    auto end = endPos();
-    length = std::min(length, end);
-    seek(end - length);
   }
 
 private:
@@ -301,20 +393,20 @@ class BaseParser {
 protected:
   static constexpr int AU_FORMAT_VERSION = FormatVersion1::AU_FORMAT_VERSION;
 
-  FileByteSource &source_;
+  AuByteSource &source_;
 
-  explicit BaseParser(FileByteSource &source)
+  explicit BaseParser(AuByteSource &source)
       : source_(source) {}
 
   void expect(char e) const {
     auto c = source_.next();
     if (c == e) return;
-    THROW("Unexpected character: " << c);
+    AU_THROW("Unexpected character: " << c);
   }
 
   uint32_t readBackref() const {
     uint32_t val;
-    source_.read(&val, sizeof(val));
+    source_.read<uint32_t>(&val, sizeof(val));
     return val;
   }
 
@@ -337,10 +429,10 @@ protected:
     uint64_t result = 0;
     while (true) {
       if (shift >= 64u)
-        THROW("Bad varint encoding");
+        AU_THROW("Bad varint encoding");
       auto next = source_.next();
       if (next.isEof())
-        THROW("Unexpected end of file");
+        AU_THROW("Unexpected end of file");
       auto i = next.byteValue();
       const auto valueMask = std::byte(0x7f);
       const auto moreMask = std::byte(0x80);
@@ -359,7 +451,7 @@ protected:
     } else if (c == marker::Varint) {
       version = readVarint();
     } else {
-      THROW("Expected version number");
+      AU_THROW("Expected version number");
     }
 
     // note: this would be one possible place to check that the format is one
@@ -368,7 +460,7 @@ protected:
     // do the right thing for tail as well as for other use sites.
 
     if (version != AU_FORMAT_VERSION) {
-      THROW("Bad format version: expected " << AU_FORMAT_VERSION
+      AU_THROW("Bad format version: expected " << AU_FORMAT_VERSION
                                             << ", got " << version);
     }
     return version;
@@ -383,7 +475,7 @@ protected:
     } else if (c == marker::String) {
       parseString(sov, handler);
     } else {
-      THROW("Expected a string");
+      AU_THROW("Expected a string");
     }
   }
 
@@ -433,14 +525,14 @@ class ValueParser : BaseParser {
   };
 
 public:
-  ValueParser(FileByteSource &source, Handler &handler)
+  ValueParser(AuByteSource &source, Handler &handler)
       : BaseParser(source), handler_(handler) {}
 
   void value() const {
     size_t sov = source_.pos();
     auto c = source_.next();
     if (c.isEof())
-      THROW("Unexpected EOF at start of value");
+      AU_THROW("Unexpected EOF at start of value");
     if (c.charValue() & 0x80) {
       handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
@@ -473,7 +565,7 @@ public:
       case marker::NegVarint: {
         auto i = readVarint();
         if (i > NEG_INT_LIMIT) {
-          THROW("Signed int overflows int64_t: (-)" << i << " 0x"
+          AU_THROW("Signed int overflows int64_t: (-)" << i << " 0x"
                 << std::setfill('0') << std::setw(16) << std::hex << i);
         }
         handler_.onInt(sov, -static_cast<int64_t>(i));
@@ -489,7 +581,7 @@ public:
         uint64_t val;
         source_.read(&val, sizeof(val));
         if (val > NEG_INT_LIMIT) {
-          THROW("Signed int overflows int64_t: (-)" << val << " 0x"
+          AU_THROW("Signed int overflows int64_t: (-)" << val << " 0x"
                 << std::setfill('0') << std::setw(16) << std::hex << val);
         }
         handler_.onInt(sov, -static_cast<int64_t>(val));
@@ -514,7 +606,7 @@ public:
         parseObject();
         break;
       default:
-        THROW("Unexpected character at start of value: " << c);
+        AU_THROW("Unexpected character at start of value: " << c);
     }
   }
 
@@ -523,7 +615,7 @@ private:
     size_t sov = source_.pos();
     auto c = source_.next();
     if (c.isEof())
-      THROW("Unexpected EOF at start of key");
+      AU_THROW("Unexpected EOF at start of key");
     if (c.charValue() & 0x80) {
       handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
       return;
@@ -541,7 +633,7 @@ private:
         parseString(sov, handler_);
         break;
       default:
-        THROW("Unexpected character at start of key: " << c);
+        AU_THROW("Unexpected character at start of key: " << c);
     }
   }
 
@@ -570,7 +662,7 @@ class RecordParser : BaseParser {
   Handler &handler_;
 
 public:
-  RecordParser(FileByteSource &source, Handler &handler)
+  RecordParser(AuByteSource &source, Handler &handler)
       : BaseParser(source), handler_(handler) {}
 
   void parseStream() const {
@@ -586,10 +678,10 @@ public:
 private:
   bool record() const {
     auto c = source_.next();
-    if (c.isEof()) THROW("Unexpected EOF at start of record");
+    if (c.isEof()) AU_THROW("Unexpected EOF at start of record");
     handler_.onRecordStart(source_.pos() - 1);
     switch (c.charValue()) {
-      case 'H': {
+      case 'H': {   // Header / metadata
         expect('A');
         expect('U');
         auto version = parseFormatVersion();
@@ -599,12 +691,12 @@ private:
         term();
         break;
       }
-      case 'C':
+      case 'C':     // Clear dictionary
         parseFormatVersion();
         term();
         handler_.onDictClear();
         break;
-      case 'A': {
+      case 'A': {   // Add dictionary entry
         auto backref = readBackref();
         handler_.onDictAddStart(backref);
         while (source_.peek() != marker::RecordEnd)
@@ -612,19 +704,19 @@ private:
         term();
         break;
       }
-      case 'V': {
+      case 'V': {   // Add value
         auto backref = readBackref();
         auto len = readVarint();
         auto startOfValue = source_.pos();
         handler_.onValue(backref, len - 2, source_);
         term();
         if (source_.pos() - startOfValue != len)
-          THROW(
-              "could be a parse error, or internal error: value handler didn't skip value!");
+          AU_THROW("could be a parse error, or internal error: value handler "
+                "didn't skip value!");
         return true;
       }
       default:
-        THROW("Unexpected character at start of record: " << c);
+        AU_THROW("Unexpected character at start of record: " << c);
     }
     return false;
   }
@@ -658,7 +750,7 @@ struct NoopRecordHandler {
 
   virtual void onRecordStart([[maybe_unused]] size_t absPos) {}
   virtual void onValue([[maybe_unused]]size_t relDictPos, size_t len,
-                       FileByteSource &source) {
+                       AuByteSource &source) {
     source.skip(len);
   }
   virtual void onHeader([[maybe_unused]] uint64_t version,

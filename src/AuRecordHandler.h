@@ -5,14 +5,14 @@
 
 #include <vector>
 
-class FileByteSource;
+class AuByteSource;
 
 template<typename ValueHandler>
 class AuRecordHandler {
   Dictionary &dictionary_;
   ValueHandler &valueHandler_;
   std::vector<char> str_;
-  size_t sor_ = 0;
+  size_t sor_ = 0; //< StartOfRecord
   Dictionary::Dict *dict_ = nullptr;
 
 public:
@@ -38,7 +38,7 @@ public:
       dict_ = &dictionary;
   }
 
-  void onValue(size_t relDictPos, size_t, FileByteSource &source) {
+  void onValue(size_t relDictPos, size_t, AuByteSource &source) {
     auto &dictionary = dictionary_.findDictionary(sor_, relDictPos);
     valueHandler_.onValue(source, dictionary);
   }

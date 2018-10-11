@@ -136,7 +136,7 @@ public:
     context_.back().counter++;
   }
 
-  void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
+  void onValue(AuByteSource &source, const Dictionary::Dict &dict) {
     dictionary_ = &dict;
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
@@ -253,7 +253,7 @@ namespace {
 
 template <typename OutputHandler>
 void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
-                  FileByteSource &source, OutputHandler &handler) {
+                  AuByteSource &source, OutputHandler &handler) {
   if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
 
   GrepHandler grepHandler(pattern);
@@ -308,16 +308,16 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
   }
 }
 
-void seekSync(FileByteSource &source, Dictionary &dictionary, size_t pos) {
+void seekSync(AuByteSource &source, Dictionary &dictionary, size_t pos) {
   source.seek(pos);
   TailHandler tailHandler(dictionary, source);
   if (!tailHandler.sync()) {
-    THROW("Failed to find record at position " << pos);
+    AU_THROW("Failed to find record at position " << pos);
   }
 }
 
 template <typename OutputHandler>
-void doBisect(Pattern &pattern, FileByteSource &source,
+void doBisect(Pattern &pattern, AuByteSource &source,
               OutputHandler &handler) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
@@ -373,7 +373,7 @@ void doBisect(Pattern &pattern, FileByteSource &source,
 }
 
 template <typename OutputHandler>
-void doGrep(Pattern &pattern, FileByteSource &source,
+void doGrep(Pattern &pattern, AuByteSource &source,
             OutputHandler &handler) {
   if (pattern.bisect) {
     doBisect(pattern, source, handler);

@@ -35,7 +35,7 @@ int doCat(const std::string &fileName, H &handler) {
 int catFile(const std::string &fileName, bool encodeOutput) {
   if (encodeOutput) {
     AuOutputHandler handler(
-        STR("Re-encoded by au from original au file "
+        AU_STR("Re-encoded by au from original au file "
                 << (fileName == "-" ? "<stdin>" : fileName)));
     return doCat(fileName, handler);
   } else {

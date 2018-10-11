@@ -13,12 +13,12 @@ class DocumentParser {
 
   struct ValueHandler {
     rapidjson::Document *doc;
-    FileByteSource &source;
+    AuByteSource &source;
     const Dictionary::Dict &dict;
     std::vector<char> str;
     std::vector<size_t> count;
 
-    ValueHandler(FileByteSource &source,
+    ValueHandler(AuByteSource &source,
                  const Dictionary::Dict &dict)
         : doc(nullptr), source(source), dict(dict) {
       count.reserve(8);
@@ -68,13 +68,13 @@ class DocumentParser {
 public:
   const rapidjson::Document &document() const { return document_; }
 
-  void parse(FileByteSource &source, Dictionary &dictionary) {
+  void parse(AuByteSource &source, Dictionary &dictionary) {
     AuRecordHandler rh(dictionary, *this);
     if (!RecordParser(source, rh).parseUntilValue())
       THROW_RT("DocumentParser failed to parse value record!");
   }
 
-  void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
+  void onValue(AuByteSource &source, const Dictionary::Dict &dict) {
     ValueHandler handler(source, dict);
     document_.Populate(handler);
   }

@@ -82,7 +82,7 @@ void grepFile(Pattern &pattern,
               bool encodeOutput,
               bool compressed,
               const std::optional<std::string> &indexFile) {
-  std::unique_ptr<FileByteSource> source;
+  std::unique_ptr<AuByteSource> source;
   if (compressed) {
     source.reset(new ZipByteSource(fileName, indexFile));
   } else {
@@ -91,7 +91,7 @@ void grepFile(Pattern &pattern,
 
   if (encodeOutput) {
     AuOutputHandler handler(
-        STR("Encoded by au: grep output from json file "
+        AU_STR("Encoded by au: grep output from json file "
                 << (fileName == "-" ? "<stdin>" : fileName)));
     doGrep(pattern, *source, handler);
   } else {

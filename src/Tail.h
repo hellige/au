@@ -7,14 +7,14 @@
 
 class DictionaryBuilder : public BaseParser {
   std::list<std::string> newEntries_;
-  FileByteSource &source_;
+  AuByteSource &source_;
   Dictionary &dictionary_;
   /// A valid dictionary must end before this point
   size_t endOfDictAbsPos_;
   size_t lastDictPos_;
 
 public:
-  DictionaryBuilder(FileByteSource &source,
+  DictionaryBuilder(AuByteSource &source,
                     Dictionary &dictionary,
                     size_t endOfDictAbsPos)
       : BaseParser(source),
@@ -97,12 +97,12 @@ private:
  * before coming up for air and validating the length. */
 class ValidatingHandler : public NoopValueHandler {
   const Dictionary::Dict &dictionary_;
-  FileByteSource &source_;
+  AuByteSource &source_;
   size_t absEndOfValue_;
 
 public:
   ValidatingHandler(const Dictionary::Dict &dictionary,
-                    FileByteSource &source,
+                    AuByteSource &source,
                     size_t absEndOfValue)
       : dictionary_(dictionary), source_(source), absEndOfValue_(absEndOfValue)
   {}
@@ -146,10 +146,10 @@ private:
 
 class TailHandler : public BaseParser {
   Dictionary &dictionary_;
-  FileByteSource &source_;
+  AuByteSource &source_;
 
 public:
-  TailHandler(Dictionary &dictionary, FileByteSource &source)
+  TailHandler(Dictionary &dictionary, AuByteSource &source)
       : BaseParser(source), dictionary_(dictionary), source_(source) {}
 
   template <typename OutputHandler>

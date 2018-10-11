@@ -155,12 +155,12 @@ struct StatsValueHandler : public NoopValueHandler {
   VarintHistogram intValues {"Integer values"};
   VarintHistogram dictRefs {"Dictionary references"};
   VarintHistogram stringLengths {"String length encodings"};
-  FileByteSource *source_;
+  AuByteSource *source_;
 
   StatsValueHandler(std::vector<size_t> &dictFrequency)
       : dictFrequency(dictFrequency) {}
 
-  void onValue(FileByteSource &source, const Dictionary::Dict &dict) {
+  void onValue(AuByteSource &source, const Dictionary::Dict &dict) {
     dictionary = &dict;
     source_ = &source;
     ValueParser<StatsValueHandler> parser(source, *this);
@@ -280,7 +280,7 @@ struct StatsRecordHandler {
     next.onDictAddStart(relDictPos);
   }
 
-  void onValue(size_t relDictPos, size_t len, FileByteSource &source) {
+  void onValue(size_t relDictPos, size_t len, AuByteSource &source) {
     valueHist.add(len);
     next.onValue(relDictPos, len, source);
   }

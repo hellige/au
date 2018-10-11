@@ -148,7 +148,7 @@ int zindexFile(const std::string &fileName,
     return 1;
   }
 
-  AuEncoder idx(STR("Index of " << fileName << ", written by au"));
+  AuEncoder idx(AU_STR("Index of " << fileName << ", written by au"));
   auto emit = [&](auto &&f) {
     idx.encode(f, [&](std::string_view dict, std::string_view val) {
       out << dict << val; // TODO error if write fails
@@ -287,7 +287,7 @@ struct Zindex {
     compressedSize = meta["compressedSize"].GetUint64();
     compressedModTime = meta["compressedModTime"].GetUint64();
 
-    while (source.peek() != FileByteSource::Byte::Eof()) {
+    while (source.peek() != AuByteSource::Byte::Eof()) {
       DocumentParser entryParser;
       entryParser.parse(source, dictionary);
       auto &entry = entryParser.document();

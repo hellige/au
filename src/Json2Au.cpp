@@ -153,7 +153,7 @@ ssize_t encodeFile(const std::string &inFName,
     return 1;
   }
 
-  auto metadata = STR("Encoded from json file "
+  auto metadata = AU_STR("Encoded from json file "
                           << (inFName == "-" ? "<stdin>" : inFName )
                           << " by au");
   AuEncoder au(metadata, 250'000, 100);

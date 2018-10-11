@@ -20,6 +20,7 @@
 #include <vector>
 
 class JsonOutputHandler {
+  std::ostream &out;
   rapidjson::StringBuffer buffer_;
   std::vector<char> str_;
   struct RawDecode {
@@ -48,24 +49,25 @@ class JsonOutputHandler {
   Dictionary::Dict *dictionary_ = nullptr;
 
 public:
-  explicit JsonOutputHandler()
-      : buffer_(nullptr, 1u << 16),
+  explicit JsonOutputHandler(std::ostream &out = std::cout)
+      : out(out),
+        buffer_(nullptr, 1u << 16),
         writer_(buffer_) {
     str_.reserve(1u << 16);
   }
 
-  void onValue(FileByteSource &source, Dictionary::Dict &dictionary) {
+  void onValue(AuByteSource &source, Dictionary::Dict &dictionary) {
     buffer_.Clear();
     writer_.Reset(buffer_);
     dictionary_ = &dictionary;
     ValueParser<JsonOutputHandler> parser(source, *this);
     parser.value();
     if (!writer_.IsComplete()) {
-      THROW("rapidjson writer does not report a complete value after parse of"
+      AU_THROW("rapidjson writer does not report a complete value after parse of"
             " au value!");
     }
     if (buffer_.GetSize()) {
-      std::cout
+      out
           << std::string_view(buffer_.GetString(), buffer_.GetSize())
           << std::endl;
     }

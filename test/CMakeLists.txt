@@ -1,5 +1,5 @@
 add_executable(Test
-        AuUnitTests.cpp
+        AuUnitTests.cpp AuEncoderTests.cpp
         AuDecoderTests.cpp AuDecoderTestCases.cpp)
 target_link_libraries(Test au-cpp gtest gtest_main gmock stdc++fs)
 add_test(NAME Tests

@@ -17,10 +17,23 @@
 class AuEncoder;
 
 class AuStringIntern {
+  /** Frequently encountered strings should be interned. The UsageTracker keeps
+   * track of how many times we've seen a string. The INTERN_CACHE_SIZE most
+   * recent unique strings are cached and once one of those strings has been
+   * seen INTERN_THRESH times, it is removed from the tracker and reported as
+   * internable.
+   */
   class UsageTracker {
+    /** Keeps track of strings encountered. Most recent string is at the end of
+     * the list. Once this list reaches INTERN_CACHE_SIZE, we start discarding
+     * the oldest entry from the front before adding a new one at the end.
+     */
     using InOrder = std::list<std::string>;
     InOrder inOrder_;
 
+    /** DictVal.first == How many times the string pointed to by DictVal.second
+     * has been seen.
+     */
     using DictVal = std::pair<size_t, InOrder::iterator>;
     using Dict = std::unordered_map<std::string_view, DictVal>;
     Dict dict_;
@@ -34,7 +47,9 @@ class AuStringIntern {
     }
 
   public:
+    /// Strings that have been encountered this many times will be interned.
     const size_t INTERN_THRESH;
+    /// We track this many unique most recent strings.
     const size_t INTERN_CACHE_SIZE;
 
     UsageTracker(size_t internThresh, size_t internCacheSize)
@@ -187,10 +202,10 @@ public:
   void write(const char *data, size_t size) {
     v.insert(v.end(), data, data + size);
   }
-  size_t tellp() {
+  size_t tellp() const {
     return v.size();
   }
-  std::string_view str() {
+  const std::string_view str() const {
     return std::string_view(v.data(), v.size());
   }
   void clear() {
@@ -268,6 +283,21 @@ public:
     }
   };
 
+  /**
+   * <code>
+   * writer.map(
+   *     "key1", "string value",
+   *     "key2", 123,
+   *     "key3", writer.arrayVals([&]() {
+   *        writer.val("a");
+   *        writer.val("b");
+   *     })
+   * );
+   * </code>
+   * @tparam Args
+   * @param args
+   * @return
+   */
   template<typename... Args>
   AuWriter &map(Args &&... args) {
     msgBuf_.put(marker::ObjectStart);
@@ -606,6 +636,23 @@ public:
     clearDictionary();
   }
 
+  /**
+   * Encodes a single JSON object-like record (scalar, string, vector, or
+   * map/object). Call this function multiple times to encode more than one
+   * record.
+   *
+   *
+   * @tparam F A function that takes a AuWriter reference
+   * @tparam W A function that takes 2 string_view args
+   * @param f This function should use the AuWriter to write/encode a record.
+   * This is the main interface for writing Au data. You are given an AuWriter
+   * that you can use as needed to create a (single) record. In other words, you
+   * must only call one of the writer's functions at the top level of this
+   * function.
+   * @param write This function should persist the 2 string_view's provided (in
+   * order).
+   * @return
+   */
   template<typename F, typename W>
   ssize_t encode(F &&f, W &&write) {
     ssize_t result = 0;

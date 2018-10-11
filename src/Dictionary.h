@@ -35,7 +35,7 @@ public:
 
     const std::string &at(size_t idx) const {
       if (idx >= dictionary_.size()) {
-        THROW("Dictionary reference index "
+        AU_THROW("Dictionary reference index "
                   << idx << " out of range. Dictionary started at position "
                   << startPos_ << ", last add occurred at position "
                   << lastDictPos_ << ", and currently has "
@@ -62,7 +62,7 @@ public:
 
     if (dict) {
       if (dict->startPos_ == sor) return *dict;
-      THROW("dictionary mismatch. dict-clear at "
+      AU_THROW("dictionary mismatch. dict-clear at "
                 << sor << " appears to be within valid range of dictionary "
                           "starting at " << dict->startPos_
                 << ", last dict pos " << dict->lastDictPos_);
@@ -84,7 +84,7 @@ public:
     Dict *dict = search(pos);
 
     if (!dict)
-      THROW("wrong backref: no dictionary includes absolute position = "
+      AU_THROW("wrong backref: no dictionary includes absolute position = "
                 << pos << ": start-of-record = " << sor
                 << " relDictPos = " << relDictPos);
 

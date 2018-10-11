@@ -59,7 +59,7 @@ public:
     str_.reserve(1u << 16);
   }
 
-  void onValue(FileByteSource &source, Dictionary::Dict &dictionary) {
+  void onValue(AuByteSource &source, Dictionary::Dict &dictionary) {
     encoder_.encode([&] (AuWriter &writer) {
       ValueHandler handler(writer, str_, dictionary);
       ValueParser parser(source, handler);
