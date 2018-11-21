@@ -306,12 +306,13 @@ public:
   StatsDecoder(const std::string &filename)
       : filename_(filename) {}
 
-  void decode(StatsRecordHandler &handler) const {
+  int decode(StatsRecordHandler &handler) const {
     FileByteSourceImpl source(filename_, false);
     try {
       RecordParser(source, handler).parseStream();
     } catch (parse_error &e) {
       std::cout << e.what() << std::endl;
+      return 1;
     }
 
     auto *dict = handler.dictionary.latest();
@@ -341,6 +342,8 @@ public:
         << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n';
     handler.valueHist.dumpStats(source.pos());
     handler.vh.dumpStats(source.pos());
+
+    return 0;
   }
 };
 
@@ -365,11 +368,12 @@ int stats(int argc, const char * const *argv) {
 
   if (fileNames.getValue().empty()) {
     StatsRecordHandler handler(dictDump.isSet());
-    StatsDecoder("-").decode(handler);
+    return StatsDecoder("-").decode(handler);
   } else {
     for (auto &f : fileNames.getValue()) {
       StatsRecordHandler handler(dictDump.isSet());
-      StatsDecoder(f).decode(handler);
+      auto result = StatsDecoder(f).decode(handler);
+      if (result) return result;
     }
   }
 
