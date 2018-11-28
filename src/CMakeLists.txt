@@ -37,17 +37,17 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 endif ()
 
 
-add_library(au-cpp INTERFACE)
+add_library(libau INTERFACE)
 include_directories(SYSTEM ../external/rapidjson/include ../external/tclap/include)
 include_directories(au)
-target_sources(au-cpp INTERFACE
+target_sources(libau INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuEncoder.h
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuDecoder.h)
-target_include_directories(au-cpp INTERFACE .)
+target_include_directories(libau INTERFACE .)
 install(DIRECTORY au DESTINATION include)
 
 add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp ZindexCmd.cpp Zindex.cpp)
-target_link_libraries(au au-cpp ${ZLIB_LIBRARIES})
+target_link_libraries(au libau ${ZLIB_LIBRARIES})
 install(TARGETS au
         RUNTIME DESTINATION bin)
 

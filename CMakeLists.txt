@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9.1)
 
-project(au-cpp)
+project(au)
 
 option(STATIC "Build statically linked binary" OFF)
 
@@ -14,7 +14,6 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=address")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=undefined")
 else ()
-
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libasan -fsanitize=address")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libubsan")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=signed-integer-overflow")
