@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+namespace au {
+
 namespace {
 
 constexpr size_t DEFAULT_DICT_ENTRIES = 25;
@@ -378,4 +380,6 @@ int stats(int argc, const char * const *argv) {
   }
 
   return 0;
+}
+
 }

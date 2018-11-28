@@ -4,6 +4,8 @@
 
 #include <functional>
 
+namespace au {
+
 class TclapHelper {
   struct UsageVisitor : public TCLAP::Visitor {
     std::function<void()> usage;
@@ -53,3 +55,5 @@ public:
     }
   }
 };
+
+}

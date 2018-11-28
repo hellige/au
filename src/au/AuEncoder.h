@@ -14,6 +14,8 @@
 #include <vector>
 #include <stdio.h>
 
+namespace au {
+
 class AuEncoder;
 
 class AuStringIntern {
@@ -699,3 +701,5 @@ private:
     backref_ = dictBuf_.tellp() - sor;
   }
 };
+
+}

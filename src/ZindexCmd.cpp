@@ -1,6 +1,8 @@
 #include "TclapHelper.h"
 #include "Zindex.h"
 
+namespace au {
+
 namespace {
 
 void usage() {
@@ -32,4 +34,6 @@ int zindex(int argc, const char * const *argv) {
 
   // TODO support stdin
   return zindexFile(path.getValue(), indexFile);
+}
+
 }

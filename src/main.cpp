@@ -10,9 +10,9 @@
 namespace {
 
 int version(int, char **) {
-  std::cout << "au version " << AU_VERSION
+  std::cout << "au version " << au::AU_VERSION
             << " (encodes/decodes format version "
-            << FormatVersion1::AU_FORMAT_VERSION << ")" << std::endl;
+            << au::FormatVersion1::AU_FORMAT_VERSION << ")" << std::endl;
   return 0;
 }
 
@@ -45,15 +45,15 @@ int main(int argc, char **argv) {
   std::unordered_map<std::string, std::function<int(int, char **)>> commands;
   commands["--version"] = version;
   commands["--help"] = help;
-  commands["cat"] = cat;
-  commands["au2json"] = cat;
-  commands["tail"] = tail;
-  commands["grep"] = grep;
-  commands["enc"] = json2au;
-  commands["json2au"] = json2au;
-  commands["stats"] = stats;
-  commands["zindex"] = zindex;
-  commands["zgrep"] = zgrep;
+  commands["cat"] = au::cat;
+  commands["au2json"] = au::cat;
+  commands["tail"] = au::tail;
+  commands["grep"] = au::grep;
+  commands["enc"] = au::json2au;
+  commands["json2au"] = au::json2au;
+  commands["stats"] = au::stats;
+  commands["zindex"] = au::zindex;
+  commands["zgrep"] = au::zgrep;
 
   std::string cmd(argv[1]);
   auto it = commands.find(cmd);

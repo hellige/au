@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace au {
+
 struct AuEncoderTest : public ::testing::Test {
   AuEncoder au;
   std::vector<char> storage;
@@ -145,4 +147,6 @@ TEST_F(AuEncoderTest, MultiRecord) {
   }, AuEncoderTest::write);
   ASSERT_EQ(R"_({"1st":"record","key":3.141})_" "\n"
             R"_({"2nd":"record","transcends":2.71828})_", getJson());
+}
+
 }

@@ -24,6 +24,8 @@
 
 // TODO add position/expectation info to all error messages
 
+namespace au {
+
 class AuByteSource {
 public:
   class Byte {
@@ -779,3 +781,5 @@ public:
     }
   }
 };
+
+}

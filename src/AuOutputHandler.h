@@ -11,6 +11,8 @@
 #include <string_view>
 #include <vector>
 
+namespace au {
+
 class AuOutputHandler {
   AuEncoder encoder_;
   std::vector<char> str_;
@@ -70,3 +72,5 @@ public:
     });
   }
 };
+
+}

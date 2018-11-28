@@ -12,6 +12,8 @@
 #include <optional>
 #include <regex>
 
+namespace au {
+
 namespace {
 
 bool setSignedPattern(Pattern &pattern, std::string &intPat) {
@@ -262,4 +264,6 @@ int grep(int argc, const char * const *argv) {
 
 int zgrep(int argc, const char * const *argv) {
   return grepCmd(argc, argv, true);
+}
+
 }

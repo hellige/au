@@ -6,6 +6,8 @@
 #include <cstring>
 #include <utility>
 
+namespace au {
+
 namespace {
 
 bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
@@ -86,6 +88,8 @@ parseTimestampPattern(std::string_view sv) {
 
   if (startInt == endInt) endInt += nanoseconds(1);
   return std::make_pair(startInt, endInt);
+}
+
 }
 
 }

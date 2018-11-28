@@ -5,6 +5,8 @@
 #include "AuRecordHandler.h"
 #include "TclapHelper.h"
 
+namespace au {
+
 namespace {
 
 void usage() {
@@ -65,4 +67,6 @@ int cat(int argc, const char * const *argv) {
   }
 
   return 0;
+}
+
 }

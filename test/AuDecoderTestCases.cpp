@@ -9,6 +9,8 @@
 
 namespace fs = std::experimental::filesystem;
 
+namespace au {
+
 TEST(AuDecoderTestCases, doesntCrashOnCases) {
   for (auto &p: fs::directory_iterator("cases")) {
     SCOPED_TRACE(std::string("Processing ") + p.path().c_str());
@@ -21,4 +23,6 @@ TEST(AuDecoderTestCases, doesntCrashOnCases) {
       auDecoder.decode(recordHandler, false);
     } catch (const std::exception &) {}
   }
+}
+
 }

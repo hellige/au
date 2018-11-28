@@ -17,6 +17,8 @@
 
 using namespace rapidjson;
 
+namespace au {
+
 namespace {
 
 class JsonSaxHandler
@@ -277,3 +279,4 @@ int json2au(int argc, const char * const *argv) {
   return 0;
 }
 
+}

@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+namespace au {
+
 class Dictionary {
 public:
   struct Dict {
@@ -106,3 +108,5 @@ public:
     return nullptr;
   }
 };
+
+}

@@ -8,6 +8,8 @@
 
 #include <vector>
 
+namespace au {
+
 class DocumentParser {
   rapidjson::Document document_;
 
@@ -80,3 +82,4 @@ public:
   }
 };
 
+}

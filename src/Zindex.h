@@ -5,6 +5,8 @@
 #include <memory>
 #include <optional>
 
+namespace au {
+
 int zindexFile(const std::string &fileName,
                const std::optional<std::string> &indexFilename);
 
@@ -20,3 +22,5 @@ public:
   size_t endPos() const override;
   void doSeek(size_t abspos) override;
 };
+
+}

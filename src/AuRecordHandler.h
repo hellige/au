@@ -5,6 +5,8 @@
 
 #include <vector>
 
+namespace au {
+
 class AuByteSource;
 
 template<typename ValueHandler>
@@ -56,3 +58,5 @@ public:
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
 };
+
+}

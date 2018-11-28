@@ -8,7 +8,7 @@
 
 static void BM_FileByteSource(benchmark::State &state) {
   size_t buffSz = state.range(0);
-  FileByteSourceImpl src("/dev/urandom", false, buffSz);
+  au::FileByteSourceImpl src("/dev/urandom", false, buffSz);
   size_t sum = 0;
 
   for (auto _ : state) {
@@ -78,7 +78,7 @@ BENCHMARK(BM_CharBufCreateAndCopy)->Range(1, 1<<8);
 
 static void BM_StringInternInsert(benchmark::State &state, bool force, size_t cnt = 1) {
   size_t elems = state.range(0);
-  AuStringIntern stringIntern;
+  au::AuStringIntern stringIntern;
 
   for (auto _ : state) {
     for (size_t elem = 0; elem < elems; ++elem) {
@@ -103,7 +103,7 @@ BENCHMARK_CAPTURE(BM_StringInternInsert, Unforced_Long,  false, 25)->Range(1, 1<
 
 static void BM_StringInternLookup(benchmark::State &state, bool force, size_t cnt = 1) {
   size_t elems = state.range(0);
-  AuStringIntern stringIntern;
+  au::AuStringIntern stringIntern;
   for (size_t i = 0; i < elems; ++i) {
     std::ostringstream os;
     for (unsigned i = 0; i < cnt; ++i) {

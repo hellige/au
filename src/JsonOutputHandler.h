@@ -19,6 +19,8 @@
 #include <string_view>
 #include <vector>
 
+namespace au {
+
 class JsonOutputHandler {
   std::ostream &out;
   rapidjson::StringBuffer buffer_;
@@ -132,3 +134,5 @@ public:
     return std::string(buffer_.GetString(), buffer_.GetSize());
   }
 };
+
+}

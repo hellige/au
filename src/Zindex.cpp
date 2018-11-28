@@ -14,6 +14,8 @@
 
 // this file contains code adapted from https://github.com/mattgodbolt/zindex
 
+namespace au {
+
 namespace {
 
 constexpr auto DefaultIndexEvery = 8 * 1024 * 1024u;
@@ -521,4 +523,6 @@ size_t ZipByteSource::endPos() const {
 
 void ZipByteSource::doSeek(size_t abspos) {
   return impl_->doSeek(abspos);
+}
+
 }

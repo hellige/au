@@ -10,6 +10,8 @@
 #include <optional>
 #include <variant>
 
+namespace au {
+
 struct Pattern {
   struct StrPattern {
     std::string pattern;
@@ -382,6 +384,8 @@ void doGrep(Pattern &pattern, AuByteSource &source,
 
   Dictionary dictionary;
   reallyDoGrep(pattern, dictionary, source, handler);
+}
+
 }
 
 }

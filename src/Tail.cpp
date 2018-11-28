@@ -3,6 +3,7 @@
 #include "Tail.h"
 #include "TclapHelper.h"
 
+namespace au {
 
 namespace {
 
@@ -42,4 +43,6 @@ int tail(int argc, const char *const *argv) {
   }
 
   return 0;
+}
+
 }

@@ -5,6 +5,8 @@
 
 #include <list>
 
+namespace au {
+
 class DictionaryBuilder : public BaseParser {
   std::list<std::string> newEntries_;
   AuByteSource &source_;
@@ -224,3 +226,5 @@ public:
     };
   }
 };
+
+}

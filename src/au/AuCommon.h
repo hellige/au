@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cstdlib>
 
+namespace au {
+
 namespace FormatVersion1 {
 
 constexpr uint32_t AU_FORMAT_VERSION = 1;
@@ -35,5 +37,7 @@ enum SmallInt : uint8_t {
   Positive = 0x60,
   Negative = 0x40
 };
+
+}
 
 }

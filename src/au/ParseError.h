@@ -14,12 +14,16 @@
   do { \
     std::ostringstream _message; \
     _message << stuff; \
-    throw parse_error(_message.str()); \
+    throw au::parse_error(_message.str()); \
   } while (0)
 
 #define THROW_RT(stuff) throw std::runtime_error(AU_STR(stuff))
+
+namespace au {
 
 struct parse_error : std::runtime_error {
   explicit parse_error(const std::string &what)
       : std::runtime_error(what) {}
 };
+
+}
