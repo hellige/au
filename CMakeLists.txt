@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.9.1)
 
 project(au-cpp)
 
+option(STATIC "Build statically linked binary" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -12,6 +14,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=address")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=undefined")
 else ()
+
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libasan -fsanitize=address")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libubsan")
     set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=signed-integer-overflow")
@@ -28,8 +31,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # External libraries/dependencies
-# TODO should this be done only if STATIC?
-SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+if (STATIC)
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif ()
 find_package(ZLIB REQUIRED)
 include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)

@@ -1,4 +1,3 @@
-option(STATIC "Build statically linked binary" OFF)
 option(LTO "Use link-time optimization" OFF)
 option(GeneratePGO "Generate PGO information" OFF)
 option(UsePGO "User previously-generated PGO information" OFF)
