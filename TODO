@@ -1,9 +1,0 @@
-  au slice -k eventId 123412321321 13412312312
-  au slice -k estdEventTime 2018-05-16T14:40:00 2018-05-16T15:40:00
-
-  - combine small-int and varint encoding? burns another bit in the marker (or at least one value)
-  - add checks to emit empty dict-add record if backref approaches max?
-
-  - the json parser in the encoder chokes on nan rather than NaN, but there isn't any kind of error. why?
-
-  - teach zgrep to grep a non-indexed gzip file, and fail only if/when seeking is actually required
