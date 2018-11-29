@@ -1,7 +1,9 @@
 #pragma once
 
-#include "au/ParseError.h"
 #include "au/AuCommon.h"
+#include "au/AuByteSource.h"
+#include "au/Handlers.h"
+#include "au/ParseError.h"
 
 #include <cassert>
 #include <cstdint>
@@ -25,90 +27,6 @@
 // TODO add position/expectation info to all error messages
 
 namespace au {
-
-class AuByteSource {
-public:
-  class Byte {
-    int value_;
-  public:
-    explicit Byte(char c) : value_(static_cast<uint8_t >(c)) {}
-  private:
-    Byte() : value_(-1) {}
-  public:
-    bool isEof() const { return value_ == -1; }
-    char charValue() const {
-      if (isEof()) throw std::runtime_error("Tried to get value of eof");
-      return static_cast<char>(value_);
-    }
-    std::byte byteValue() const {
-      if (isEof()) throw std::runtime_error("Tried to get value of eof");
-      return static_cast<std::byte>(value_);
-    }
-    static Byte Eof() { return Byte(); }
-    friend bool operator ==(Byte b, char c) {
-      return b.value_ == c;
-    }
-    friend bool operator ==(Byte b, Byte c) {
-      return b.value_ == c.value_;
-    }
-    friend bool operator !=(Byte b, char c) {
-      return b.value_ != c;
-    }
-    friend bool operator !=(Byte b, Byte c) {
-      return b.value_ != c.value_;
-    }
-    friend std::ostream &operator<<(std::ostream &o, Byte b) {
-      if (b.isEof()) return o << "EOF";
-      return o << '\'' << static_cast<char>(b.value_)
-               << "' (0x" << std::hex << b.value_ << ")";
-    }
-  };
-
-  virtual ~AuByteSource() {}
-
-  virtual std::string name() const = 0;
-
-  /// The current position of the byte source. [0..sourceLen] (i.e. up to 1 past
-  /// the end of the source - when at EOF).
-  virtual size_t pos() const = 0;
-  /// The length of the byte source (the position of the EOF)
-  virtual size_t endPos() const = 0;
-  /// The current byte
-  virtual Byte peek() = 0;
-  /// The next byte. Calling this on a newly created source should return the
-  /// very first char in the source the 1st time it is called and then
-  /// subsequent characters on each invocation.
-  virtual Byte next() = 0;
-
-  template<typename T>
-  void read(T *t, size_t len) {
-    char *buf = static_cast<char *>(static_cast<void *>(t));
-    read(len, [&](std::string_view fragment) {
-      ::memcpy(buf, fragment.data(), fragment.size());
-      buf += fragment.size();
-    });
-  }
-
-  using Fn = std::function<void(std::string_view)>;
-  /// Call func with the next len bytes from the underlying byte source.
-  virtual void read(size_t len, Fn &&func) = 0;
-  virtual size_t doRead(char *buf, size_t len) = 0;
-
-  virtual bool isSeekable() const = 0;
-  virtual void seek(size_t abspos) = 0;
-  virtual void doSeek(size_t abspos) = 0;
-
-  virtual bool seekTo(std::string_view needle) = 0;
-
-  virtual void skip(size_t len) = 0;
-
-  /// Seek to length bytes from the end of the stream
-  void tail(size_t length) {
-    auto end = endPos();
-    length = std::min(length, end);
-    seek(end - length);
-  }
-};
 
 class BufferByteSource : public AuByteSource {
   const char *buf_; //< Underlying source buffer
@@ -687,6 +605,7 @@ public:
       : BaseParser(source), handler_(handler) {}
 
   void parseStream() const {
+    checkHeader();
     while (source_.peek() != EOF) record();
   }
 
@@ -696,7 +615,6 @@ public:
     return false;
   }
 
-private:
   bool record() const {
     auto c = source_.next();
     if (c.isEof()) AU_THROW("Unexpected EOF at start of record");
@@ -741,46 +659,28 @@ private:
     }
     return false;
   }
-};
 
-struct NoopValueHandler {
-  virtual ~NoopValueHandler() = default;
+private:
+  struct HeaderHandler : NoopRecordHandler {
+    bool headerSeen = false;
+    void onHeader(uint64_t, const std::string &) override {
+      headerSeen = true;
+    }
+  };
 
-  virtual void onObjectStart() {}
-  virtual void onObjectEnd() {}
-  virtual void onArrayStart() {}
-  virtual void onArrayEnd() {}
-  virtual void onNull([[maybe_unused]] size_t pos) {}
-  virtual void onBool([[maybe_unused]] size_t pos, bool) {}
-  virtual void onInt([[maybe_unused]] size_t pos, int64_t) {}
-  virtual void onUint([[maybe_unused]] size_t pos, uint64_t) {}
-  virtual void onDouble([[maybe_unused]] size_t pos, double) {}
-  virtual void onTime(
-      [[maybe_unused]] size_t pos,
-      [[maybe_unused]] std::chrono::system_clock::time_point nanos) {}
-  virtual void onDictRef([[maybe_unused]] size_t pos,
-                         [[maybe_unused]] size_t dictIdx) {}
-  virtual void onStringStart([[maybe_unused]] size_t sov,
-                             [[maybe_unused]] size_t length) {}
-  virtual void onStringEnd() {}
-  virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
-};
-
-struct NoopRecordHandler {
-  virtual ~NoopRecordHandler() = default;
-
-  virtual void onRecordStart([[maybe_unused]] size_t absPos) {}
-  virtual void onValue([[maybe_unused]]size_t relDictPos, size_t len,
-                       AuByteSource &source) {
-    source.skip(len);
+  void checkHeader() const {
+    // this is a special case. empty files should be considered ok, even 
+    // though they don't have a header/magic bytes, etc...
+    if (source_.peek() == EOF) return;
+    HeaderHandler hh;
+    try {
+      RecordParser<HeaderHandler>(source_, hh).record();
+    } catch (const au::parse_error &e) {
+      // don't care what it was...
+    }
+    if (!hh.headerSeen)
+      AU_THROW("This file doesn't appear to start with an au header record");
   }
-  virtual void onHeader([[maybe_unused]] uint64_t version,
-                        [[maybe_unused]] const std::string &metadata) {}
-  virtual void onDictClear() {}
-  virtual void onDictAddStart([[maybe_unused]] size_t relDictPos) {}
-  virtual void onStringStart([[maybe_unused]] size_t strLen) {}
-  virtual void onStringEnd() {}
-  virtual void onStringFragment([[maybe_unused]] std::string_view fragment) {}
 };
 
 class AuDecoder {
