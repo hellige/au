@@ -254,7 +254,7 @@ private:
 namespace {
 
 template <typename OutputHandler>
-void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
+int reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
                   AuByteSource &source, OutputHandler &handler) {
   if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
 
@@ -307,7 +307,10 @@ void reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
     }
   } catch (parse_error &e) {
     std::cerr << e.what() << std::endl;
+    return -1;
   }
+
+  return 0;
 }
 
 void seekSync(AuByteSource &source, Dictionary &dictionary, size_t pos) {
@@ -319,7 +322,7 @@ void seekSync(AuByteSource &source, Dictionary &dictionary, size_t pos) {
 }
 
 template <typename OutputHandler>
-void doBisect(Pattern &pattern, AuByteSource &source,
+int doBisect(Pattern &pattern, AuByteSource &source,
               OutputHandler &handler) {
   constexpr size_t SCAN_THRESHOLD = 256 * 1024;
   constexpr size_t PREFIX_AMOUNT = 512 * 1024;
@@ -332,6 +335,12 @@ void doBisect(Pattern &pattern, AuByteSource &source,
   // (and a bit beyond).
   constexpr size_t SUFFIX_AMOUNT = SCAN_THRESHOLD + PREFIX_AMOUNT + 266 * 1024;
   static_assert(SUFFIX_AMOUNT > PREFIX_AMOUNT + SCAN_THRESHOLD);
+
+  if (!source.isSeekable()) {
+    std::cerr << "Cannot binary search in non-seekable file '" << source.name()
+      << "'" << std::endl;
+    return -1;
+  }
 
   Pattern bisectPattern(pattern);
   bisectPattern.matchOrGreater = true;
@@ -348,8 +357,7 @@ void doBisect(Pattern &pattern, AuByteSource &source,
         seekSync(source, dictionary,
                  start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
         pattern.scanSuffixAmount = SUFFIX_AMOUNT;
-        reallyDoGrep(pattern, dictionary, source, handler);
-        return;
+        return reallyDoGrep(pattern, dictionary, source, handler);
       }
 
       size_t next = start + (end-start)/2;
@@ -371,19 +379,21 @@ void doBisect(Pattern &pattern, AuByteSource &source,
     }
   } catch (parse_error &e) {
     std::cerr << e.what() << std::endl;
+    return -1;
   }
+
+  return 0;
 }
 
 template <typename OutputHandler>
-void doGrep(Pattern &pattern, AuByteSource &source,
+int doGrep(Pattern &pattern, AuByteSource &source,
             OutputHandler &handler) {
   if (pattern.bisect) {
-    doBisect(pattern, source, handler);
-    return;
+    return doBisect(pattern, source, handler);
   }
 
   Dictionary dictionary;
-  reallyDoGrep(pattern, dictionary, source, handler);
+  return reallyDoGrep(pattern, dictionary, source, handler);
 }
 
 }

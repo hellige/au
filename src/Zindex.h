@@ -18,6 +18,7 @@ public:
                          const std::optional<std::string> &indexFname);
   ~ZipByteSource();
 
+  bool isSeekable() const override;
   size_t doRead(char *buf, size_t len) override;
   size_t endPos() const override;
   void doSeek(size_t abspos) override;

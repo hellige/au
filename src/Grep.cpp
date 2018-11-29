@@ -79,11 +79,11 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
   return true;
 }
 
-void grepFile(Pattern &pattern,
-              const std::string &fileName,
-              bool encodeOutput,
-              bool compressed,
-              const std::optional<std::string> &indexFile) {
+int grepFile(Pattern &pattern,
+             const std::string &fileName,
+             bool encodeOutput,
+             bool compressed,
+             const std::optional<std::string> &indexFile) {
   std::unique_ptr<AuByteSource> source;
   if (compressed) {
     source.reset(new ZipByteSource(fileName, indexFile));
@@ -95,10 +95,10 @@ void grepFile(Pattern &pattern,
     AuOutputHandler handler(
         AU_STR("Encoded by au: grep output from json file "
                 << (fileName == "-" ? "<stdin>" : fileName)));
-    doGrep(pattern, *source, handler);
+    return doGrep(pattern, *source, handler);
   } else {
     JsonOutputHandler handler;
-    doGrep(pattern, *source, handler);
+    return doGrep(pattern, *source, handler);
   }
 }
 
@@ -246,10 +246,12 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
   if (compressed && index.isSet()) indexFile = index.getValue();
 
   if (fileNames.getValue().empty()) {
-    grepFile(pattern, "-", encode.isSet(), compressed, indexFile);
+    return grepFile(pattern, "-", encode.isSet(), compressed, indexFile);
   } else {
     for (auto &f : fileNames) {
-      grepFile(pattern, f, encode.isSet(), compressed, indexFile);
+      auto result =
+        grepFile(pattern, f, encode.isSet(), compressed, indexFile);
+      if (result) return result;
     }
   }
 

@@ -64,6 +64,10 @@ public:
     }
   };
 
+  virtual ~AuByteSource() {}
+
+  virtual std::string name() const = 0;
+
   /// The current position of the byte source. [0..sourceLen] (i.e. up to 1 past
   /// the end of the source - when at EOF).
   virtual size_t pos() const = 0;
@@ -90,6 +94,7 @@ public:
   virtual void read(size_t len, Fn &&func) = 0;
   virtual size_t doRead(char *buf, size_t len) = 0;
 
+  virtual bool isSeekable() const = 0;
   virtual void seek(size_t abspos) = 0;
   virtual void doSeek(size_t abspos) = 0;
 
@@ -117,6 +122,10 @@ public:
   BufferByteSource(std::string_view buf)
   : buf_(buf.data()), bufLen_(buf.length())
   {}
+
+  std::string name() const override {
+    return "<buffer>";
+  }
 
   size_t pos() const override {
     assert(pos_ <= bufLen_);
@@ -147,6 +156,8 @@ public:
     }
     return 0;
   }
+
+  bool isSeekable() const override { return true; }
 
   void seek(size_t abspos) override {
     doSeek(abspos);
@@ -198,6 +209,10 @@ public:
 
   virtual ~FileByteSource() {
     delete[] buf_;
+  }
+
+  std::string name() const override {
+    return name_;
   }
 
   /// Position in the underlying data stream
@@ -361,6 +376,10 @@ public:
     if (auto res = fstat(fd_, &stat); res < 0)
       THROW_RT("failed to stat file: " << strerror(errno));
     return stat.st_size;
+  }
+
+  bool isSeekable() const override {
+    return lseek(fd_, 0, SEEK_CUR) == 0;
   }
 
   void doSeek(size_t abspos) override {

@@ -397,6 +397,13 @@ struct ZipByteSource::Impl {
     return index_.uncompressedSize();
   }
 
+  bool isSeekable() const {
+    // for now, all ZipByteSources are indexed and thus should be seekable.
+    // this may not be true forever, if we add support for sequential reading
+    // of non-indexed gz files...
+    return true;
+  }
+
   void doSeek(size_t abspos) {
     auto &c = *context_;
 
@@ -512,6 +519,10 @@ ZipByteSource::ZipByteSource(const std::string &fname,
   impl_(std::make_unique<Impl>(fname, indexFilename)) {}
 
 ZipByteSource::~ZipByteSource() {}
+
+bool ZipByteSource::isSeekable() const {
+  return impl_->isSeekable();
+}
 
 size_t ZipByteSource::doRead(char *buf, size_t len) {
   return impl_->doRead(buf, len);
