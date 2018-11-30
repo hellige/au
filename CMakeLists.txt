@@ -26,6 +26,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g")
 # Debug flags
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
 
+include(CTest)
+
 # Enable libtooling support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
