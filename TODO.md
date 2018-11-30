@@ -1,6 +1,6 @@
 ### TODO
 
- - Create a CI build
+ - Fix up the CI build
  - Determine version number from git tag, etc.
  - Make the header-check at start of stream apply to all commands, including
    bisecting `grep` and `zgrep`. Consider adding a flag to disable this check.
@@ -28,12 +28,16 @@
 
 ### Bugs
 
- - `grep` can choke on very large records, I believe it's when we seek back to
-   the start of the record to re-decode in order to output it.
-   Something like that...
+ - bisecting `grep` can choke on very large records, I believe it's when we
+   jump back to bisect the previous half of the file and end up in the middle of
+   a huge record such that the next separator we find causes us to be in the
+   same place we started. Something like that...
 
 ### Consider
 
+ - It would be nice if `grep` were able to binary search json as well as au.
+   It's a very handy feature, particularly coupled with the gzip support.
+ - Might be nice for `au` to auto-detect compressed files, json, and au files.
  - Might be nice to have a slice command:
 
        au slice -k eventId 123412321321 13412312312

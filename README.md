@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/hellige/au.svg?branch=master)](https://travis-ci.org/hellige/au)
+
+
 `au` is a file format, header-only C++ library and command-line tool for
 working with sequential record-oriented data, primarily log files.
 
