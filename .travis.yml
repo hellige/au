@@ -1,0 +1,26 @@
+sudo: false
+language: cpp
+compiler:
+  - gcc
+  - clang
+env:
+  - BUILD_TYPE=Debug 
+  - BUILD_TYPE=Release STATIC=On
+install:
+  - if [ "$CXX" = "g++" ]; then export CXX="g++-8" CC="gcc-8"; fi
+script:
+  - mkdir out
+  - cd out
+  - cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ..
+  - cmake --build . -- -j2
+  - ctest -D ExperimentalBuild -j2
+  - ctest -D ExperimentalTest -j2
+addons:
+    apt:
+        sources:
+            - ubuntu-toolchain-r-test
+            - kalakris-cmake
+        packages:
+            - gcc-8
+            - g++-8
+            - cmake
