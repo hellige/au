@@ -236,7 +236,7 @@ class AuWriter {
     if (!idx) {
       encodeString(sv);
     } else if (*idx < 0x80) {
-      msgBuf_.put(0x80 | static_cast<char>(*idx));
+      msgBuf_.put(static_cast<char>(0x80 | *idx));
     } else {
       msgBuf_.put(marker::DictRef);
       valueInt(*idx);
