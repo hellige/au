@@ -1,4 +1,4 @@
-sudo: false
+sudo: true # currently required on travis for lsan/asan
 language: cpp
 compiler:
   - gcc
