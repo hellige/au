@@ -222,7 +222,7 @@ class AuWriter {
   void encodeString(const std::string_view sv) {
     static constexpr size_t MaxInlineStringSize = 31;
     if (sv.length() <= MaxInlineStringSize) {
-      msgBuf_.put(0x20 | static_cast<uint8_t>(sv.length()));
+      msgBuf_.put(0x20u | static_cast<uint8_t>(sv.length()));
     } else {
       msgBuf_.put(marker::String);
       valueInt(sv.length());
@@ -236,7 +236,7 @@ class AuWriter {
     if (!idx) {
       encodeString(sv);
     } else if (*idx < 0x80) {
-      msgBuf_.put(0x80 | static_cast<uint8_t>(*idx));
+      msgBuf_.put(0x80u | static_cast<uint8_t>(*idx));
     } else {
       msgBuf_.put(marker::DictRef);
       valueInt(*idx);
@@ -500,11 +500,11 @@ private:
   auInt(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
     if constexpr (std::is_signed_v<T>) {
       if (i >= 0 && i < 32) {
-        msgBuf_.put(marker::SmallInt::Positive | static_cast<uint8_t>(i));
+        msgBuf_.put(static_cast<uint8_t>(marker::SmallInt::Positive | i));
         return *this;
       }
       if (i < 0 && i > -32) {
-        msgBuf_.put(marker::SmallInt::Negative | static_cast<uint8_t>(-i));
+        msgBuf_.put(static_cast<uint8_t>(marker::SmallInt::Negative | -i));
         return *this;
       }
       bool neg = false;
@@ -522,7 +522,7 @@ private:
       valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
     } else {
       if (i < 32) {
-        msgBuf_.put(marker::SmallInt::Positive | static_cast<uint8_t>(i));
+        msgBuf_.put(static_cast<uint8_t>(marker::SmallInt::Positive | i));
       } else if (i >= 1ull << 48) {
         msgBuf_.put(marker::PosInt64);
         uint64_t val = i;

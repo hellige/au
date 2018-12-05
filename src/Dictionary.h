@@ -20,6 +20,9 @@ public:
       dictionary_.reserve(1u << 16u);
     }
 
+    Dict(const Dict &) = delete;
+    Dict &operator=(const Dict &) = delete;
+
     void reset(size_t sor) {
       dictionary_.clear();
       startPos_ = sor;
@@ -50,7 +53,8 @@ public:
   };
 
 private:
-  std::vector<Dict> dictionaries_; // used as sort of a really dumb lru-cache
+  // used as sort of a really dumb lru-cache
+  std::vector<std::unique_ptr<Dict>> dictionaries_;
   uint32_t maxDicts_;
 
 public:
@@ -60,25 +64,29 @@ public:
   }
 
   Dict &clear(size_t sor) {
-    Dict *dict = search(sor);
+    {
+      Dict *dict = search(sor);
 
-    if (dict) {
-      if (dict->startPos_ == sor) return *dict;
-      AU_THROW("dictionary mismatch. dict-clear at "
-                << sor << " appears to be within valid range of dictionary "
-                          "starting at " << dict->startPos_
-                << ", last dict pos " << dict->lastDictPos_);
+      if (dict)
+      {
+        if (dict->startPos_ == sor)
+          return *dict;
+        AU_THROW("dictionary mismatch. dict-clear at "
+                 << sor << " appears to be within valid range of dictionary "
+                 "starting at " << dict->startPos_
+                 << ", last dict pos " << dict->lastDictPos_);
+      }
     }
 
     if (dictionaries_.size() == maxDicts_) {
-      Dict dict(dictionaries_.front());
+      std::unique_ptr<Dict> recycle(std::move(dictionaries_.front()));
       dictionaries_.erase(dictionaries_.begin());
-      dict.reset(sor);
-      dictionaries_.push_back(dict);
+      recycle->reset(sor);
+      dictionaries_.emplace_back(std::move(recycle));
     } else {
-      dictionaries_.emplace_back(sor);
+      dictionaries_.emplace_back(new Dict(sor));
     }
-    return dictionaries_.back();
+    return *dictionaries_.back();
   }
 
   Dict &findDictionary(size_t sor, size_t relDictPos) {
@@ -95,15 +103,15 @@ public:
 
   Dict *latest() {
     if (dictionaries_.empty()) return nullptr;
-    return &dictionaries_.back();
+    return dictionaries_.back().get();
   }
 
   Dict *search(size_t pos) {
     // usually the one we want is the most recently added one... the other
     // case is something like a bisect, in which case we don't mind scanning.
     for (auto i = dictionaries_.size(); i-- > 0;) {
-      if (dictionaries_[i].includes(pos))
-        return &dictionaries_[i];
+      if (dictionaries_[i]->includes(pos))
+        return dictionaries_[i].get();
     }
     return nullptr;
   }

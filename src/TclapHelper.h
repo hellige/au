@@ -13,7 +13,7 @@ class TclapHelper {
     void visit() override {
       usage();
       exit(0);
-    };
+    }
   };
 
   struct UsageOutput : public TCLAP::StdOutput {
