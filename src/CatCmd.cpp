@@ -26,7 +26,7 @@ int doCat(const std::string &fileName, H &handler) {
   AuRecordHandler recordHandler(dictionary, handler);
   FileByteSourceImpl source(fileName, false);
   try {
-    RecordParser(source, recordHandler).parseStream();
+    RecordParser<AuRecordHandler<H>>(source, recordHandler).parseStream();
   } catch (const std::exception &e) {
     std::cerr << e.what() << " while processing " << fileName << "\n";
     return 1;
