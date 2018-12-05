@@ -9,7 +9,6 @@ namespace au {
 
 class DictionaryBuilder : public BaseParser {
   std::list<std::string> newEntries_;
-  AuByteSource &source_;
   Dictionary &dictionary_;
   /// A valid dictionary must end before this point
   size_t endOfDictAbsPos_;
@@ -20,7 +19,6 @@ public:
                     Dictionary &dictionary,
                     size_t endOfDictAbsPos)
       : BaseParser(source),
-        source_(source),
         dictionary_(dictionary),
         endOfDictAbsPos_(endOfDictAbsPos),
         lastDictPos_(source.pos())
@@ -148,11 +146,10 @@ private:
 
 class TailHandler : public BaseParser {
   Dictionary &dictionary_;
-  AuByteSource &source_;
 
 public:
   TailHandler(Dictionary &dictionary, AuByteSource &source)
-      : BaseParser(source), dictionary_(dictionary), source_(source) {}
+      : BaseParser(source), dictionary_(dictionary) {}
 
   template <typename OutputHandler>
   void parseStream(OutputHandler &handler) {

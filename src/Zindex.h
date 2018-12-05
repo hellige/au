@@ -14,9 +14,9 @@ class ZipByteSource : public FileByteSource {
   class Impl;
   std::unique_ptr<Impl> impl_;
 public:
-  explicit ZipByteSource(const std::string &fname,
-                         const std::optional<std::string> &indexFname);
-  ~ZipByteSource();
+  ZipByteSource(const std::string &fname,
+                const std::optional<std::string> &indexFname);
+  ~ZipByteSource() override;
 
   bool isSeekable() const override;
   ssize_t doRead(char *buf, size_t len) override;
