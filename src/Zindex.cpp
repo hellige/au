@@ -181,7 +181,8 @@ int zindexFile(const std::string &fileName,
 
   do {
     if (zs.stream.avail_in == 0) {
-      zs.stream.avail_in = fread(input, 1, ChunkSize, from.get());
+      zs.stream.avail_in =
+        static_cast<uInt>(fread(input, 1, ChunkSize, from.get()));
       if (ferror(from.get()))
         throw ZlibError(Z_ERRNO);
       if (zs.stream.avail_in == 0)
@@ -438,7 +439,7 @@ struct ZipByteSource::Impl {
       uint8_t window[WindowSize];
       uncompressWindow(indexEntry.window, window, WindowSize);
 
-      int seekPos = bitOffset ? compressedOffset - 1 : compressedOffset;
+      size_t seekPos = bitOffset ? compressedOffset - 1 : compressedOffset;
       auto err = ::fseek(compressed_.get(), seekPos, SEEK_SET);
       if (err != 0)
         THROW_RT("Error seeking in file"); // todo errno
@@ -480,13 +481,13 @@ struct ZipByteSource::Impl {
 
     auto &zs = context_->zs_;
     zs.stream.next_out = output_+context_->limit_;
-    zs.stream.avail_out =
-        std::min(blockSize_ - context_->limit_, ChunkSize); // TODO ChunkSize or whatever...
+    zs.stream.avail_out = static_cast<uInt>(
+        std::min(blockSize_ - context_->limit_, ChunkSize)); // TODO ChunkSize or whatever...
     size_t total = 0;
     do {
       if (zs.stream.avail_in == 0) {
-        zs.stream.avail_in = ::fread(input_, 1, sizeof(input_),
-                                     compressed_.get());
+        zs.stream.avail_in = static_cast<uInt>(
+          ::fread(input_, 1, sizeof(input_), compressed_.get()));
         if (ferror(compressed_.get())) throw ZlibError(Z_ERRNO);
         zs.stream.next_in = input_;
       }

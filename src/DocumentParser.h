@@ -18,7 +18,7 @@ class DocumentParser {
     AuByteSource &source;
     const Dictionary::Dict &dict;
     std::vector<char> str;
-    std::vector<size_t> count;
+    std::vector<uint32_t> count;
 
     ValueHandler(AuByteSource &source,
                  const Dictionary::Dict &dict)

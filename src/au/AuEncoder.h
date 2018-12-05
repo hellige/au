@@ -222,7 +222,7 @@ class AuWriter {
   void encodeString(const std::string_view sv) {
     static constexpr size_t MaxInlineStringSize = 31;
     if (sv.length() <= MaxInlineStringSize) {
-      msgBuf_.put(0x20 | sv.length());
+      msgBuf_.put(0x20 | static_cast<uint8_t>(sv.length()));
     } else {
       msgBuf_.put(marker::String);
       valueInt(sv.length());
@@ -236,7 +236,7 @@ class AuWriter {
     if (!idx) {
       encodeString(sv);
     } else if (*idx < 0x80) {
-      msgBuf_.put(0x80 | *idx);
+      msgBuf_.put(0x80 | static_cast<uint8_t>(*idx));
     } else {
       msgBuf_.put(marker::DictRef);
       valueInt(*idx);
@@ -500,11 +500,11 @@ private:
   auInt(T i, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
     if constexpr (std::is_signed_v<T>) {
       if (i >= 0 && i < 32) {
-        msgBuf_.put(marker::SmallInt::Positive | i);
+        msgBuf_.put(marker::SmallInt::Positive | static_cast<uint8_t>(i));
         return *this;
       }
       if (i < 0 && i > -32) {
-        msgBuf_.put(marker::SmallInt::Negative | -i);
+        msgBuf_.put(marker::SmallInt::Negative | static_cast<uint8_t>(-i));
         return *this;
       }
       bool neg = false;
@@ -522,7 +522,7 @@ private:
       valueInt(static_cast<typename std::make_unsigned<T>::type>(val));
     } else {
       if (i < 32) {
-        msgBuf_.put(marker::SmallInt::Positive | i);
+        msgBuf_.put(marker::SmallInt::Positive | static_cast<uint8_t>(i));
       } else if (i >= 1ull << 48) {
         msgBuf_.put(marker::PosInt64);
         uint64_t val = i;
@@ -559,7 +559,7 @@ class AuEncoder {
       auto sor = dictBuf_.tellp();
       AuWriter af(dictBuf_, stringIntern_);
       af.raw('A');
-      af.backref(backref_);
+      af.backref(static_cast<uint32_t>(backref_)); // TODO do we guarantee elsewhere that this is never allowed to exceed 32 bits?
       for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
         af.value(std::string_view(s.c_str(), s.length()), false);
@@ -576,7 +576,7 @@ class AuEncoder {
     auto sor = dictBuf_.tellp();
     AuWriter af(dictBuf_, stringIntern_);
     af.raw('V');
-    af.backref(backref_);
+    af.backref(static_cast<uint32_t>(backref_));  // TODO as above, do we guarantee elsewhere that this is never allowed to exceed 32 bits?
     af.valueInt(buf_.tellp());
     backref_ += dictBuf_.tellp() - sor;
 

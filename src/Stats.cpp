@@ -20,7 +20,7 @@ std::string commafy(uint64_t val) {
   int i = 0, j = 0;
   while (val) {
     if (i++ % 3 == 0 && j) buf[j++] = ',';
-    buf[j++] = '0' + static_cast<char>(val % 10);
+    buf[j++] = static_cast<char>('0' + val % 10);
     val /= 10;
   }
   buf[j] = 0;
@@ -33,7 +33,8 @@ std::string prettyBytes(size_t bytes) {
   std::array<const char *, 5> suffixes {"B", "K", "M", "G", "T"};
   char buf[32];
   auto s = 0u; // which suffix to use
-  double count = bytes;
+   // we know we don't support enormous numbers... the cast avoids a warning.
+  double count = static_cast<double>(bytes);
   while (count >= 1024 && s < suffixes.size()) {
     s++;
     count /= 1024;
