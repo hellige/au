@@ -58,7 +58,7 @@ struct AuEncoderTest : public ::testing::Test {
 AuEncoderTest *AuEncoderTest::test;
 
 TEST_F(AuEncoderTest, creation) {
-  AuEncoder au();
+  AuEncoder au;
 }
 
 TEST_F(AuEncoderTest, smallInt) {
