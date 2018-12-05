@@ -66,11 +66,11 @@ public:
     pos_ += sz;
   }
 
-  size_t doRead(char *buf, size_t len) override {
+  ssize_t doRead(char *buf, size_t len) override {
     if (pos_ < bufLen_) {
       size_t sz = std::min(bufLen_ - pos_, len);
       ::memcpy(buf, buf_ + pos_, sz);
-      return sz;
+      return static_cast<ssize_t>(sz);
     }
     return 0;
   }
@@ -90,10 +90,11 @@ public:
   void skip(size_t len) override { seek(pos_ + len); }
 
   bool seekTo(std::string_view needle) override {
-    auto found = memmem(buf_ + pos_, bufLen_ - pos_,
-                        needle.data(), needle.length());
+    char *found = static_cast<char *>(memmem(buf_ + pos_, bufLen_ - pos_,
+                        needle.data(), needle.length()));
     if (found) {
-      pos_ = static_cast<char *>(found) - buf_;
+      assert(found >= buf_);
+      pos_ = static_cast<size_t>(found - buf_);
       return true;
     }
     return false;
@@ -125,7 +126,7 @@ public:
   FileByteSource &operator=(const FileByteSource &) = delete;
   FileByteSource &operator=(FileByteSource &&) = delete;
 
-  virtual ~FileByteSource() {
+  ~FileByteSource() override {
     delete[] buf_;
   }
 
@@ -185,9 +186,11 @@ public:
   bool seekTo(std::string_view needle) override {
     while (true) {
       if (buffAvail() < needle.length()) return false;
-      auto found = memmem(cur_, buffAvail(), needle.data(), needle.length());
+      auto found = static_cast<char *>(memmem(cur_, buffAvail(), needle.data(),
+        needle.length()));
       if (found) {
-        size_t offset = static_cast<char *>(found) - cur_;
+        assert(found >= cur_);
+        size_t offset = static_cast<size_t>(found - cur_);
         pos_ += offset;
         cur_ += offset;
         return true;
@@ -219,7 +222,7 @@ public:
 private:
   /// Free space in the buffer
   size_t buffFree() const {
-    return BUFFER_SIZE - (limit_ - buf_);
+    return BUFFER_SIZE - static_cast<size_t>(limit_ - buf_);
   }
 
   /// Available to be consumed
@@ -281,11 +284,11 @@ public:
 #endif
   }
 
-  ~FileByteSourceImpl() {
+  ~FileByteSourceImpl() override {
     close(fd_); // TODO report error?
   }
 
-  size_t doRead(char *buf, size_t len) override {
+  ssize_t doRead(char *buf, size_t len) override {
     return ::read(fd_, buf, len);
   }
 
@@ -293,7 +296,9 @@ public:
     struct stat stat;
     if (auto res = fstat(fd_, &stat); res < 0)
       THROW_RT("failed to stat file: " << strerror(errno));
-    return stat.st_size;
+    if (stat.st_size < 0)
+      THROW_RT("file size was negative!");
+    return static_cast<size_t>(stat.st_size);
   }
 
   bool isSeekable() const override {
@@ -409,8 +414,8 @@ protected:
   void parseFullString(Handler &handler) const {
     size_t sov = source_.pos();
     auto c = source_.next();
-    if (((uint8_t) c.charValue() & ~0x1fu) == 0x20) {
-      parseString(sov, (uint8_t) c.charValue() & 0x1fu, handler);
+    if ((c.uint8Value() & ~0x1fu) == 0x20) {
+      parseString(sov, c.uint8Value() & 0x1fu, handler);
     } else if (c == marker::String) {
       parseString(sov, handler);
     } else {
@@ -473,20 +478,22 @@ public:
     if (c.isEof())
       AU_THROW("Unexpected EOF at start of value");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      handler_.onDictRef(sov, c.uint8Value() & ~0x80u);
       return;
     }
-    int val = (uint8_t)c.charValue() & ~0xe0;
-    if (c.charValue() & marker::SmallInt::Negative) {
-      if (c.charValue() & 0x20)
-        handler_.onUint(sov, val);
-      else
-        handler_.onInt(sov, -val);
-      return;
-    }
-    if (c.charValue() & 0x20) {
-      parseString(sov, val, handler_);
-      return;
+    {
+      auto val = c.uint8Value() & ~0xe0u;
+      if (c.charValue() & marker::SmallInt::Negative) {
+        if (c.charValue() & 0x20)
+          handler_.onUint(sov, val);
+        else
+          handler_.onInt(sov, -val);
+        return;
+      }
+      if (c.uint8Value() & 0x20) {
+        parseString(sov, val, handler_);
+        return;
+      }
     }
     switch (c.charValue()) {
       case marker::True:
@@ -556,11 +563,11 @@ private:
     if (c.isEof())
       AU_THROW("Unexpected EOF at start of key");
     if (c.charValue() & 0x80) {
-      handler_.onDictRef(sov, (uint8_t)c.charValue() & ~0x80);
+      handler_.onDictRef(sov, c.uint8Value() & ~0x80u);
       return;
     }
-    int val = (uint8_t)c.charValue() & ~0xe0;
-    if ((c.charValue() & ~0x1f) == 0x20) {
+    auto val = c.uint8Value() & ~0xe0u;
+    if ((c.uint8Value() & ~0x1f) == 0x20) {
       parseString(sov, val, handler_);
       return;
     }
@@ -669,13 +676,13 @@ private:
   };
 
   void checkHeader() const {
-    // this is a special case. empty files should be considered ok, even 
+    // this is a special case. empty files should be considered ok, even
     // though they don't have a header/magic bytes, etc...
     if (source_.peek() == EOF) return;
     HeaderHandler hh;
     try {
       RecordParser<HeaderHandler>(source_, hh).record();
-    } catch (const au::parse_error &e) {
+    } catch (const au::parse_error &) {
       // don't care what it was...
     }
     if (!hh.headerSeen)

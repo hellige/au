@@ -39,7 +39,7 @@ std::string prettyBytes(size_t bytes) {
     count /= 1024;
   }
   if (count - floor(count) == 0.0)
-    snprintf(buf, sizeof(buf), "%d%s", (int)count, suffixes[s]);
+    snprintf(buf, sizeof(buf), "%d%s", static_cast<int>(count), suffixes[s]);
   else
     snprintf(buf, sizeof(buf), "%.1f%s", count, suffixes[s]);
   buf[31] = 0;
@@ -55,7 +55,10 @@ struct SizeHistogram {
 
   void add(size_t size) {
     totalValBytes += size;
-    auto bucket = size ? 8*sizeof(size_t) - __builtin_clzll(size) : 0;
+    size_t bucket = 0;
+    if (size)
+      bucket = 8*sizeof(size_t)
+        - static_cast<unsigned>(__builtin_clzll(size));
     if (bucket+1 > buckets.size()) buckets.resize(bucket+1);
     buckets[bucket]++;
   }
@@ -67,7 +70,7 @@ struct SizeHistogram {
               << "       By length, less than:\n";
     for (auto i = 0u; i < buckets.size(); i++) {
       auto bytes = buckets[i] * (i+1);
-      printf("        %10s: %s (%zu%%) %s\n", prettyBytes(1 << i).c_str(),
+      printf("        %10s: %s (%zu%%) %s\n", prettyBytes(1u << i).c_str(),
              commafy(buckets[i]).c_str(),
              100*buckets[i]/totalStrings,
              prettyBytes(bytes).c_str());

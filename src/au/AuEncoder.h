@@ -508,9 +508,9 @@ private:
         return *this;
       }
       bool neg = false;
-      uint64_t val = i;
+      uint64_t val = static_cast<uint64_t>(i);
       if (i < 0) {
-        val = -i;
+        val = static_cast<uint64_t>(-i);
         neg = true;
       }
       if (val >= 1ull << 48) {
@@ -600,7 +600,7 @@ class AuEncoder {
       clearDictionary(true);
     }
 
-    return result;
+    return static_cast<ssize_t>(result);
   }
 
 public:

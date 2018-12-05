@@ -209,7 +209,7 @@ ssize_t encodeFile(const std::string &inFName,
   fclose(inF);
 
   if (res.Code() == kParseErrorNone || res.Code() == kParseErrorDocumentEmpty) {
-    return entriesProcessed;
+    return static_cast<ssize_t>(entriesProcessed);
   } else {
     std::cerr << "json parse error at "
               << (inFName == "-" ? "stdin" : inFName)
@@ -271,8 +271,8 @@ int json2au(int argc, const char * const *argv) {
 
   for (const auto &f : inputFiles) {
     auto result = encodeFile(f, out, maxEntries, quiet.isSet());
-    if (result == -1) break;
-    maxEntries -= result;
+    if (result < 0) break;
+    maxEntries -= static_cast<size_t>(result);
   }
 
   // no need to explicitly close outFileStream

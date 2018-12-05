@@ -79,7 +79,7 @@ public:
         default:
           THROW_RT("Failed to build full dictionary. Found 0x"
                        << std::hex
-                       << (int)marker.charValue() << " at 0x"
+                       << marker.uint8Value() << " at 0x"
                        << sor
                        << std::dec << ". Expected 'A' (0x41) or 'C' (0x43).");
       }

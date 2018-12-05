@@ -18,9 +18,9 @@ namespace au {
 
 namespace {
 
-constexpr auto DefaultIndexEvery = 8 * 1024 * 1024u;
-constexpr auto WindowSize = 32768u;
-constexpr auto ChunkSize = 16384u;
+constexpr size_t DefaultIndexEvery = 8 * 1024 * 1024u;
+constexpr size_t WindowSize = 32768u;
+constexpr size_t ChunkSize = 16384u;
 constexpr auto Version = 1u;
 
 std::string getRealPath(const std::string &relPath) {
@@ -75,7 +75,7 @@ struct ZStream {
 
   explicit ZStream(Type type) : type(type) {
     memset(&stream, 0, sizeof(stream));
-    X(inflateInit2(&stream, (int)type));
+    X(inflateInit2(&stream, static_cast<int>(type)));
   }
 
   void reset() {
@@ -216,7 +216,7 @@ int zindexFile(const std::string &fileName,
         auto size = makeWindow(apWindow, sizeof(apWindow), window,
             zs.stream.avail_out);
         auto window =
-            std::string_view((char *)apWindow, size); // TODO what's the right way to cast this?
+            std::string_view(reinterpret_cast<char *>(apWindow), size);
         emit([&](AuWriter &au) {
           au.map(
             "uncompressedOffset", totalOut,
@@ -383,14 +383,14 @@ struct ZipByteSource::Impl {
     delete[] output_;
   }
 
-  size_t doRead(char *buf, size_t len) {
+  ssize_t doRead(char *buf, size_t len) {
     auto &c = *context_;
     if (c.cur_ == c.limit_) gzread();
     auto n = std::min(c.limit_ - c.cur_, len);
     ::memcpy(buf, output_+c.cur_, n);
     c.cur_ += n;
     c.pos_ += n;
-    return n;
+    return static_cast<ssize_t>(n);
   }
 
   size_t endPos() const {
@@ -438,7 +438,7 @@ struct ZipByteSource::Impl {
       uint8_t window[WindowSize];
       uncompressWindow(indexEntry.window, window, WindowSize);
 
-      auto seekPos = bitOffset ? compressedOffset - 1 : compressedOffset;
+      int seekPos = bitOffset ? compressedOffset - 1 : compressedOffset;
       auto err = ::fseek(compressed_.get(), seekPos, SEEK_SET);
       if (err != 0)
         THROW_RT("Error seeking in file"); // todo errno
@@ -459,10 +459,10 @@ struct ZipByteSource::Impl {
     char discardBuffer[WindowSize];
     auto numToSkip = abspos - context_->pos_;
     while (numToSkip) {
-      auto skipNow = std::min(WindowSize, (uInt)numToSkip);
+      auto skipNow = std::min(WindowSize, numToSkip);
       auto numRead = doRead(discardBuffer, skipNow);
-      if (!numRead) THROW_RT("Unable to skip any bytes!");
-      numToSkip -= numRead;
+      if (numRead <= 0) THROW_RT("Unable to skip any bytes!");
+      numToSkip -= static_cast<size_t>(numRead);
     }
   }
 
@@ -481,7 +481,7 @@ struct ZipByteSource::Impl {
     auto &zs = context_->zs_;
     zs.stream.next_out = output_+context_->limit_;
     zs.stream.avail_out =
-        std::min((unsigned int)(blockSize_ - context_->limit_), ChunkSize); // TODO ChunkSize or whatever...
+        std::min(blockSize_ - context_->limit_, ChunkSize); // TODO ChunkSize or whatever...
     size_t total = 0;
     do {
       if (zs.stream.avail_in == 0) {
@@ -524,7 +524,7 @@ bool ZipByteSource::isSeekable() const {
   return impl_->isSeekable();
 }
 
-size_t ZipByteSource::doRead(char *buf, size_t len) {
+ssize_t ZipByteSource::doRead(char *buf, size_t len) {
   return impl_->doRead(buf, len);
 }
 

@@ -29,6 +29,10 @@ public:
       if (isEof()) throw std::runtime_error("Tried to get value of eof");
       return static_cast<std::byte>(value_);
     }
+    uint8_t uint8Value() const {
+      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+      return static_cast<uint8_t>(value_);
+    }
     static Byte Eof() { return Byte(); }
     friend bool operator ==(Byte b, char c) {
       return b.value_ == c;
@@ -77,7 +81,7 @@ public:
   using Fn = std::function<void(std::string_view)>;
   /// Call func with the next len bytes from the underlying byte source.
   virtual void read(size_t len, Fn &&func) = 0;
-  virtual size_t doRead(char *buf, size_t len) = 0;
+  virtual ssize_t doRead(char *buf, size_t len) = 0;
 
   virtual bool isSeekable() const = 0;
   virtual void seek(size_t abspos) = 0;
