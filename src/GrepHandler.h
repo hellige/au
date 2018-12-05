@@ -291,13 +291,15 @@ int reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
         if (pattern.count) continue;
         source.seek(posBuffer.front());
         while (!posBuffer.empty()) {
-          RecordParser(source, outputRecordHandler).parseUntilValue();
+          RecordParser<AuRecordHandler<OutputHandler>>(
+            source, outputRecordHandler).parseUntilValue();
           posBuffer.pop_back();
         }
         force = pattern.afterContext;
       } else if (force) {
         source.seek(posBuffer.back());
-        RecordParser(source, outputRecordHandler).parseUntilValue();
+        RecordParser<AuRecordHandler<OutputHandler>>(
+          source, outputRecordHandler).parseUntilValue();
         force--;
       }
     }
