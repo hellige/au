@@ -13,8 +13,8 @@ script:
   - cd out
   - cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ..
   - cmake --build . -- -j2
-  - ctest -D ExperimentalBuild -j2
-  - ctest -D ExperimentalTest -j2
+  - ctest --output-on-failure -D ExperimentalBuild -j2
+  - ctest --output-on-failure -D ExperimentalTest -j2
 addons:
     apt:
         sources:
