@@ -11,7 +11,7 @@ int zindexFile(const std::string &fileName,
                const std::optional<std::string> &indexFilename);
 
 class ZipByteSource : public FileByteSource {
-  class Impl;
+  struct Impl;
   std::unique_ptr<Impl> impl_;
 public:
   ZipByteSource(const std::string &fname,

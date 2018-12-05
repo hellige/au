@@ -216,14 +216,14 @@ int zindexFile(const std::string &fileName,
         uint8_t apWindow[compressBound(WindowSize)];
         auto size = makeWindow(apWindow, sizeof(apWindow), window,
             zs.stream.avail_out);
-        auto window =
+        auto windowStr =
             std::string_view(reinterpret_cast<char *>(apWindow), size);
         emit([&](AuWriter &au) {
           au.map(
             "uncompressedOffset", totalOut,
             "compressedOffset", totalIn,
             "bitOffset", zs.stream.data_type & 0x7,
-            "window", window
+            "window", windowStr
           );
         });
 
@@ -333,8 +333,8 @@ struct Zindex {
   IndexEntry &find(size_t abspos) {
     auto it = std::upper_bound(
         index_.begin(), index_.end(), abspos,
-        [](size_t abspos, const IndexEntry &entry) {
-          return abspos < entry.uncompressedOffset;
+        [](size_t pos, const IndexEntry &entry) {
+          return pos < entry.uncompressedOffset;
         });
     if (it == index_.begin())
       THROW_RT("Couldn't find index entry containing " << abspos);
@@ -374,7 +374,7 @@ struct ZipByteSource::Impl {
       THROW_RT("Unable to get file stats"); // TODO errno
     if (stats.st_size != static_cast<int64_t>(index_.compressedSize))
       THROW_RT("Compressed size changed since index was built");
-    if (index_.compressedModTime != (uint64_t)stats.st_mtime) // TODO what cast here?
+    if (index_.compressedModTime != static_cast<uint64_t>(stats.st_mtime))
       THROW_RT("Compressed file has been modified since index was built");
 
     context_->zs_.stream.avail_in = 0;
@@ -440,16 +440,18 @@ struct ZipByteSource::Impl {
       uncompressWindow(indexEntry.window, window, WindowSize);
 
       size_t seekPos = bitOffset ? compressedOffset - 1 : compressedOffset;
-      auto err = ::fseek(compressed_.get(), seekPos, SEEK_SET);
+      auto err = ::fseek(compressed_.get(), static_cast<long>(seekPos),
+        SEEK_SET);
       if (err != 0)
         THROW_RT("Error seeking in file"); // todo errno
       context_->zs_.stream.avail_in = 0;
       if (bitOffset) {
-        auto c = fgetc(compressed_.get());
-        if (c == -1)
+        auto ch = fgetc(compressed_.get());
+        if (ch == -1)
           throw ZlibError(ferror(compressed_.get()) ?
               Z_ERRNO : Z_DATA_ERROR);
-        X(inflatePrime(&context_->zs_.stream, bitOffset, c >> (8 - bitOffset)));
+        X(inflatePrime(&context_->zs_.stream, bitOffset,
+          ch >> (8 - bitOffset)));
       }
       X(inflateSetDictionary(&context_->zs_.stream, &window[0], WindowSize));
     }
