@@ -459,7 +459,7 @@ class ValueParser : BaseParser {
   // TODO was 8192, reduced to avoid stack overflow with clang asan. it's known
   // that clang asan has ~3x stack overhead, so if this is ok, probably best
   // to put it back to 8192 by default and reduce it only for asan builds...
-  static inline constexpr size_t MaxDepth = 4096;
+  static inline constexpr size_t MaxDepth = 2048;
   mutable size_t depth{0};
   struct DepthRaii {
     const ValueParser &parent;
