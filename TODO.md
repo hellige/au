@@ -1,6 +1,7 @@
 ### TODO
 
- - Fix up the CI build
+ - Add osx debug CI build
+ - Add osx clang CI builds, verify osx clang build is ok with newer clang!
  - Determine version number from git tag, etc.
  - Make the header-check at start of stream apply to all commands, including
    bisecting `grep` and `zgrep`. Consider adding a flag to disable this check.
