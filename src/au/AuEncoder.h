@@ -401,10 +401,12 @@ public:
     return *this;
   }
 
-  AuWriter &value(int i)          { return IntSigned(i); }
-  AuWriter &value(unsigned int i) { return IntUnsigned(i); }
-  AuWriter &value(int64_t i)      { return IntSigned(i); }
-  AuWriter &value(uint64_t i)     { return IntUnsigned(i); }
+  AuWriter &value(int i)                { return IntSigned(i); }
+  AuWriter &value(unsigned int i)       { return IntUnsigned(i); }
+  AuWriter &value(long int i)           { return IntSigned(i); }
+  AuWriter &value(long unsigned i)      { return IntUnsigned(i); }
+  AuWriter &value(long long int i)      { return IntSigned(i); }
+  AuWriter &value(long long unsigned i) { return IntUnsigned(i); }
 
   template<class T>
   AuWriter &value(T f,

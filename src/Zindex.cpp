@@ -163,8 +163,8 @@ int zindexFile(const std::string &fileName,
       "fileType", "zindex",
       "version", Version,
       "compressedFile", getBaseName(fileName),
-      "compressedSize", compressedStat.st_size,
-      "compressedModTime", compressedStat.st_mtime
+      "compressedSize", static_cast<uint64_t>(compressedStat.st_size),
+      "compressedModTime", static_cast<uint64_t>(compressedStat.st_mtime)
     );
   });
 
