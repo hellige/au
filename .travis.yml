@@ -11,12 +11,25 @@ matrix:
             - g++-8
       env:
         - BUILD_TYPE=Debug MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+    - os: linux
+      dist: xenial
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+      env:
         - BUILD_TYPE=Release STATIC=On MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
     - os: linux
       dist: xenial
       compiler: clang
       env:
         - BUILD_TYPE=Debug
+    - os: linux
+      dist: xenial
+      compiler: clang
+      env:
         - BUILD_TYPE=Release STATIC=On
     - os: osx
       osx_image: xcode10
