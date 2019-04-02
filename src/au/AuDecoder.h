@@ -62,6 +62,7 @@ public:
     }
   };
 
+  virtual ~AuByteSource() = default;
   /// The current position of the byte source. [0..sourceLen] (i.e. up to 1 past
   /// the end of the source - when at EOF).
   virtual size_t pos() const = 0;
