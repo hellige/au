@@ -53,7 +53,7 @@ public:
     }
   };
 
-  virtual ~AuByteSource() {}
+  virtual ~AuByteSource() = default;
 
   virtual std::string name() const = 0;
 
