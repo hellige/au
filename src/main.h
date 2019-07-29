@@ -2,7 +2,7 @@
 
 namespace au {
 
-constexpr const char *AU_VERSION = "0.2.2";
+constexpr const char *AU_VERSION = "0.2.3";
 
 int json2au(int argc, const char * const *argv);
 int stats(int argc, const char * const *argv);
