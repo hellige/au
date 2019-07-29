@@ -374,7 +374,18 @@ int doBisect(Pattern &pattern, AuByteSource &source,
       // which is greater than or equal to the pattern). so we should eventually
       // find the approximate location of the first such record.
       if (grepHandler.matched()) {
-        end = sor;
+        if (sor < end) {
+          end = sor;
+        } else {
+          // this is an indication that we've jumped back to bisect the range
+          // (start, end) but that in scanning forward to find the first record,
+          // we ended up at or even past the end of the range. (basically, this
+          // means the file contains a huge record.) if we update end
+          // and bisect again, the same thing will happen again and we'll end
+          // up doing this forever. in this case, we'll just set start and end
+          // in such a way as to force a scan on the next iteration.
+          end = start + 1;
+        }
       } else {
         start = sor;
       }

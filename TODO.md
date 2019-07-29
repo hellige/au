@@ -27,13 +27,6 @@
  - seek-buf-size arg to `grep` (for record lookback)
  - Add grepping of content of keys. (This is just a bit different from `-k`...)
 
-### Bugs
-
- - bisecting `grep` can choke on very large records, I believe it's when we
-   jump back to bisect the previous half of the file and end up in the middle of
-   a huge record such that the next separator we find causes us to be in the
-   same place we started. Something like that...
-
 ### Consider
 
  - It would be nice if `grep` were able to binary search json as well as au.
