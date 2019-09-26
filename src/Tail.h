@@ -163,7 +163,8 @@ public:
     // At this point we should have a full/valid dictionary and be positioned
     // at the start of a value record.
     AuRecordHandler<OutputHandler> recordHandler(dictionary_, handler);
-    RecordParser<decltype(recordHandler)>(source_, recordHandler).parseStream();
+    RecordParser<decltype(recordHandler)>(source_, recordHandler)
+      .parseStream(false);
   }
 
   bool sync() {

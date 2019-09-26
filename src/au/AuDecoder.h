@@ -619,8 +619,8 @@ public:
   RecordParser(AuByteSource &source, Handler &handler)
       : BaseParser(source), handler_(handler) {}
 
-  void parseStream() const {
-    checkHeader();
+  void parseStream(bool expectHeader = true) const {
+    if (expectHeader) checkHeader();
     while (source_.peek() != EOF) record();
   }
 
