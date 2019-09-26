@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Wrangling Log Files with au</title>
+
+    <meta name="description" content="Wrangling annoyingly-sized log files with au">
+    <meta name="author" content="Matt Hellige">
+
+    <link rel="stylesheet" href="css/reset.css">
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/white.css">
+
+    <!-- Theme used for syntax highlighting of code -->
+    <link rel="stylesheet" href="lib/css/monokai.css">
+
+    <!-- Printing and PDF exports -->
+    <script>
+      var link = document.createElement( 'link' );
+      link.rel = 'stylesheet';
+      link.type = 'text/css';
+      link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+      document.getElementsByTagName( 'head' )[0].appendChild( link );
+    </script>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section><h1>au</h1></section>
+        <section>
+          <h3>we like json log files. why?</h3>
+          <ul>
+          <p class="fragment">structured</p>
+          <p class="fragment">no schema</p>
+          <p class="fragment">you can use <code>tail -f</code></p>
+          <p class="fragment">good tool support (e.g., <code><a href="https://github.com/stedolan/jq">jq</a></code>)</p>
+          </ul>
+        </section>
+        <section>
+          <h3>problem</h3>
+          <h4>they get <font size="32pt" color="pink">really</font> big</h4>
+          <ul>
+          <p class="fragment">lots of overhead</p>
+          <p class="fragment">lots of redundancy</p>
+          <p class="fragment">"annoyingly-sized data"</p>
+          </ul>
+        </section>
+        <section>
+          <h3>non-solution</h3>
+          <h4>gzip them on the fly</h4>
+          <ul>
+          <p class="fragment">slow</p>
+          <p class="fragment">opaque</p>
+          <p class="fragment">not tailable</p>
+          </ul>
+        </section>
+        <section>
+           <section>
+          <h3>solution<h3>
+          <h4>design a binary format</h4>
+            <ul>
+            <p class="fragment">greppable</p>
+            <p class="fragment">tailable</p>
+            <p class="fragment">much faster even than ASCII</p>
+            <p class="fragment">on-the-fly redundancy detection</p>
+            </ul>
+          </section>
+          <section>
+            <p>There's a "SAX-style" C++ API, and some convenient wrappers for
+            nesting calls. It almost exactly matches the old JSON API that we
+            replaced.</p>
+            <p>The command line tool can also encode JSON.</p>
+          </section>
+        </section>
+        <section>
+          <h3>super bonus<h3>
+          <h4>once you have a tool, you can teach it new tricks</h4>
+          <ul>
+          <p class="fragment">binary search</p>
+          <p class="fragment">zindex</p>
+          <p class="fragment">timestamp wildcards</p>
+          </ul>
+        </section>
+
+        <section>
+          <h3>future work</h3>
+          <ul>
+          <p class="fragment">file output API for other languages</p>
+          <p class="fragment">teach the tool to grep JSON</p>
+          <p class="fragment">improve encoding of doubles</p>
+          <p class="fragment">teach grep new tricks?</p>
+          </ul>
+        </section>
+      </div>
+    </div>
+
+    <script src="js/reveal.js"></script>
+
+    <script>
+      // More info about config & dependencies:
+      // - https://github.com/hakimel/reveal.js#configuration
+      // - https://github.com/hakimel/reveal.js#dependencies
+      Reveal.initialize({
+        controls: true,
+        progress: true,
+        history: true,
+        dependencies: [
+          { src: 'plugin/markdown/marked.js' },
+          { src: 'plugin/markdown/markdown.js' },
+          { src: 'plugin/notes/notes.js', async: true },
+          { src: 'plugin/highlight/highlight.js', async: true }
+        ]
+      });
+    </script>
+  </body>
+</html>
