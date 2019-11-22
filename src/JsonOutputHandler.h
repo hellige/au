@@ -19,6 +19,10 @@
 #include <string_view>
 #include <vector>
 
+#ifndef PRIu64
+#define PRIu64 "ull"
+#endif
+
 namespace au {
 
 class JsonOutputHandler {

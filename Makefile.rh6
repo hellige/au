@@ -1,11 +1,6 @@
 .DEFAULT_GOAL := all
 .PHONY: all clean
 
-# Flags passed to the preprocessor.
-# Set Google Test's header directory as a system directory, such that
-# the compiler doesn't generate warnings in Google Test headers.
-CPPFLAGS += -isystem $(GTEST_DIR)/include
-
 # Flags passed to the C++ compiler.
 CXXFLAGS += -ggdb3 -Wall -Wextra -pthread -std=c++17 -O3
 
