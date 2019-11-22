@@ -110,7 +110,8 @@ public:
     strftime(strTime, 21, "%FT%T.", tm);
 
     // Isolate the sub-second (fractional portion)
-    uint64_t fraction = duration_cast<nanoseconds>(nanos - s).count();
+    uint64_t fraction = static_cast<uint64_t>(
+            duration_cast<nanoseconds>(nanos - s).count());
     snprintf(strTime + 20, 10, "%09" PRIu64, fraction);
     writer_.String(strTime,
                    static_cast<rapidjson::SizeType>(sizeof(strTime) - 1));
