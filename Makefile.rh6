@@ -13,4 +13,4 @@ clean:
 SRCS = src/CatCmd.cpp  src/Grep.cpp  src/Json2Au.cpp  src/Stats.cpp  src/Tail.cpp  src/Zindex.cpp  src/ZindexCmd.cpp  src/main.cpp
 
 au: $(SRCS)
-	$(CXX) $(CXXFLAGS) -Isrc -Iexternal/rapidjson/include -Iexternal/tclap/include -static $^ -lz -o $@
+	$(CXX) $(CXXFLAGS) -Isrc -Iexternal/rapidjson/include -Iexternal/tclap/include -fuse-ld=gold -static $^ -lz -o $@
