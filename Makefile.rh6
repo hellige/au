@@ -13,4 +13,9 @@ clean:
 SRCS = src/CatCmd.cpp  src/Grep.cpp  src/Json2Au.cpp  src/Stats.cpp  src/Tail.cpp  src/Zindex.cpp  src/ZindexCmd.cpp  src/main.cpp
 
 au: $(SRCS)
-	$(CXX) $(CXXFLAGS) -L/usr/lib/x86_64-redhat-linux5E/lib64 -Isrc -Iexternal/rapidjson/include -Iexternal/tclap/include -fuse-ld=gold -static $^ -lz -o $@
+	fig --no-file --log-level=warn \
+	  --suppress-cleanup-of-retrieves \
+	  --update-if-missing \
+	  --suppress-retrieves \
+	  zlib/cf-f04f4ed-1-gcc9.1.0-1
+	$(CXX) $(CXXFLAGS) -L/usr/lib/x86_64-redhat-linux5E/lib64 -L~/.fighome/runtime/zlib/cf-f04f4ed-1-gcc9.1.0-1/package/lib -Isrc -Iexternal/rapidjson/include -Iexternal/tclap/include -fuse-ld=gold -static $^ -lz -o $@
