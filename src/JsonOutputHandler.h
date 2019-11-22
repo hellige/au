@@ -20,7 +20,7 @@
 #include <vector>
 
 #ifndef PRIu64
-#define PRIu64 "ull"
+#define PRIu64 "ll"
 #endif
 
 namespace au {
