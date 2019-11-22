@@ -17,5 +17,5 @@ au: $(SRCS)
 	  --suppress-cleanup-of-retrieves \
 	  --update-if-missing \
 	  --suppress-retrieves \
-	  zlib/cf-f04f4ed-1-gcc9.1.0-1
+	  zlib/cf-f04f4ed-1-gcc9.1.0-1 --get BLAH
 	$(CXX) $(CXXFLAGS) -L/usr/lib/x86_64-redhat-linux5E/lib64 -L~/.fighome/runtime/zlib/cf-f04f4ed-1-gcc9.1.0-1/package/lib -Isrc -Iexternal/rapidjson/include -Iexternal/tclap/include -fuse-ld=gold -static $^ -lz -o $@
