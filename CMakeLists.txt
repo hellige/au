@@ -22,7 +22,7 @@ else ()
 endif ()
 
 # Common flags shared across all builds
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g -lz")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g")
 
 # Debug flags
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
@@ -36,9 +36,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (STATIC)
     SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif ()
-#find_package(ZLIB 1.2.3 EXACT)
-#include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
-include_directories(SYSTEM external/rapidjson/include external/tclap/include)
+find_package(ZLIB REQUIRED)
+include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)
 set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
 add_subdirectory(external/benchmark)
