@@ -155,10 +155,12 @@ public:
     size_t purged = purge(threshold);
 
     std::deque<std::pair<std::size_t,std::string>> tmpDict;
-    for (auto &[_, entry] : dictionary_)
+    for (auto &[_, entry] : dictionary_) {
+      (void) _;
       tmpDict.emplace_back(
           entry.occurences,
           std::move(dictInOrder_[entry.internIndex]));
+    }
 
     std::sort(tmpDict.begin(), tmpDict.end(),
               [] (const auto &a, const auto &b) { return a > b; });
