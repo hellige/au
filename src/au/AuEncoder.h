@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 #include <stdio.h>
+#include <queue>
 
 namespace au {
 
@@ -57,8 +58,8 @@ class AuStringIntern {
     UsageTracker(size_t internThresh, size_t internCacheSize)
         : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize) {}
 
-    bool shouldIntern(const std::string &str) {
-      auto it = dict_.find(std::string_view(str.c_str(), str.length()));
+    bool shouldIntern(std::string_view sv) {
+      auto it = dict_.find(sv);
       if (it != dict_.end()) {
         if (it->second.first >= INTERN_THRESH) {
           pop(it);
@@ -69,13 +70,10 @@ class AuStringIntern {
         }
       } else {
         if (inOrder_.size() >= INTERN_CACHE_SIZE) {
-          const auto &s = inOrder_.front();
-          pop(dict_.find(std::string_view(s.c_str(), s.length())));
+          pop(dict_.find(inOrder_.front()));
         }
-        inOrder_.emplace_back(str);
-        const auto &s = inOrder_.back();
-        std::string_view sv(s.c_str(), s.length());
-        dict_[sv] = {size_t(1), --(inOrder_.end())};
+        const auto &s = inOrder_.emplace_back(std::string(sv));
+        dict_.emplace(s, DictVal{size_t(1), --(inOrder_.end())});
         return false;
       }
     }
@@ -95,9 +93,9 @@ class AuStringIntern {
     size_t occurences;
   };
 
-  std::vector<std::string> dictInOrder_;
+  std::deque<std::string> dictInOrder_;
   /// The string and its intern index
-  std::unordered_map<std::string, InternEntry> dictionary_;
+  std::unordered_map<std::string_view, InternEntry> dictionary_;
   const size_t tinyStringSize_;
   UsageTracker internCache_;
 
@@ -107,31 +105,27 @@ public:
       : tinyStringSize_(tinyStr),
         internCache_(internThresh, internCacheSize) {}
 
-  std::optional<size_t> idx(std::string s, std::optional<bool> intern) {
-    if (s.length() <= tinyStringSize_) return {std::nullopt};
+  std::optional<size_t> idx(std::string_view sv, std::optional<bool> intern) {
+    if (sv.length() <= tinyStringSize_) return {std::nullopt};
     if (intern.has_value() && !intern.value()) return {std::nullopt};
 
-    auto it = dictionary_.find(s);
+    auto it = dictionary_.find(sv);
     if (it != dictionary_.end()) {
       it->second.occurences++;
       return it->second.internIndex;
     }
 
     bool forceIntern = intern.has_value() && intern.value();
-    if (forceIntern || internCache_.shouldIntern(s)) {
+    if (forceIntern || internCache_.shouldIntern(sv)) {
       auto nextEntry = dictInOrder_.size();
-      dictionary_[s] = {nextEntry, 1};
-      dictInOrder_.emplace_back(s);
+      const auto &s = dictInOrder_.emplace_back(std::string(sv));
+      dictionary_.emplace(s, InternEntry{nextEntry, 1});
       return nextEntry;
     }
     return {std::nullopt};
   }
 
-  auto idx(std::string_view sv, std::optional<bool> intern) {
-    return idx(std::string(sv), intern);
-  }
-
-  const std::vector<std::string> &dict() const { return dictInOrder_; }
+  const std::deque<std::string> &dict() const { return dictInOrder_; }
 
   void clear(bool clearUsageTracker) {
     dictionary_.clear();
@@ -155,25 +149,28 @@ public:
     return purged;
   }
 
-  /// Purges the dictionary and re-idexes the remaining entries so the more
+  /// Purges the dictionary and re-indexes the remaining entries so the more
   /// frequent ones are at the beginning (and have smaller indices).
   size_t reIndex(size_t threshold) {
     size_t purged = purge(threshold);
 
-    dictInOrder_.clear();
-    dictInOrder_.reserve(dictionary_.size());
-    for (auto &pr : dictionary_) {
-      dictInOrder_.emplace_back(pr.first);
+    std::deque<std::pair<std::size_t,std::string>> tmpDict;
+    for (auto &[_, entry] : dictionary_) {
+      (void) _;
+      tmpDict.emplace_back(
+          entry.occurences,
+          std::move(dictInOrder_[entry.internIndex]));
     }
 
-    std::sort(dictInOrder_.begin(), dictInOrder_.end(),
-              [this](const auto &a, const auto &b) {
-                // Invert comparison b/c we want frequent strings first
-                return dictionary_[a].occurences > dictionary_[b].occurences;
-              });
-    size_t idx = 0;
-    for (auto &v : dictInOrder_) {
-      dictionary_[v].internIndex = idx++;
+    std::sort(tmpDict.begin(), tmpDict.end(),
+              [] (const auto &a, const auto &b) { return a > b; });
+
+    dictInOrder_.clear();
+    dictionary_.clear();
+    std::size_t idx = 0;
+    for (const auto &[occurrences, str] : tmpDict) {
+      const auto &s = dictInOrder_.emplace_back(std::move(str));
+      dictionary_.emplace(s, InternEntry{idx++, occurrences});
     }
 
     return purged;
