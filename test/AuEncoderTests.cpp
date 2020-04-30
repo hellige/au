@@ -69,6 +69,26 @@ TEST_F(AuEncoderTest, smallInt) {
   dumpHex();
 }
 
+TEST_F(AuEncoderTest, smallNegInt) {
+  auto exponent = [] () -> std::int8_t {
+    return -9;
+  };
+  au.encode([&](AuWriter &writer) {
+    writer.value(exponent());
+  }, AuEncoderTest::write);
+  ASSERT_EQ("-9", getJson());
+}
+
+TEST_F(AuEncoderTest, bigNegInt) {
+  auto exponent = [] () -> std::int32_t {
+    return -99999;
+  };
+  au.encode([&](AuWriter &writer) {
+    writer.value(exponent());
+  }, AuEncoderTest::write);
+  ASSERT_EQ("-99999", getJson());
+}
+
 TEST_F(AuEncoderTest, bigInt) {
   au.encode([](AuWriter &writer) {
     writer.value(299792458);
