@@ -91,7 +91,7 @@ static void BM_StringInternInsert(benchmark::State &state, bool force, size_t cn
       auto val = os.str();
       state.ResumeTiming();
 
-      stringIntern.idx(val, force);
+      stringIntern.idx(val, force ? au::AuIntern::ForceIntern : au::AuIntern::ForceExplicit);
     }
   }
 }
@@ -109,11 +109,11 @@ static void BM_StringInternLookup(benchmark::State &state, bool force, size_t cn
     for (unsigned i = 0; i < cnt; ++i) {
       os << "value_" << i;
     }
-    stringIntern.idx(os.str(), force);
+    stringIntern.idx(os.str(), force ? au::AuIntern::ForceIntern : au::AuIntern::ForceExplicit);
   }
 
   for (auto _ : state) {
-    stringIntern.idx(std::string_view("value_58"), std::optional<bool>());
+    stringIntern.idx(std::string_view("value_58"), au::AuIntern::ByFrequency);
   }
 }
 BENCHMARK_CAPTURE(BM_StringInternLookup, Forced_Short,   true,   1)->Range(1, 1<<16);

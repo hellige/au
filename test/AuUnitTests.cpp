@@ -17,8 +17,8 @@ namespace au {
 TEST(AuStringIntern, NoIntern) {
   AuStringIntern si;
   EXPECT_EQ(0, si.dict().size());
-  EXPECT_FALSE(si.idx(std::string("shrt"), std::optional<bool>()));
-  EXPECT_FALSE(si.idx(std::string("Long string"), std::optional<bool>()));
+  EXPECT_FALSE(si.idx(std::string("shrt"), AuIntern::ByFrequency));
+  EXPECT_FALSE(si.idx(std::string("Long string"), AuIntern::ByFrequency));
   EXPECT_EQ(0, si.dict().size());
 }
 
@@ -27,10 +27,10 @@ TEST(AuStringIntern, ForceIntern) {
   EXPECT_EQ(0, si.dict().size());
 
   // Tiny strings are not interned even if forced
-  EXPECT_FALSE(si.idx(std::string("tiny"), true));
+  EXPECT_FALSE(si.idx(std::string("tiny"), AuIntern::ForceIntern));
   EXPECT_EQ(0, si.dict().size());
 
-  EXPECT_TRUE(si.idx(std::string("A normal string"), true));
+  EXPECT_TRUE(si.idx(std::string("A normal string"), AuIntern::ForceIntern));
   EXPECT_EQ(1, si.dict().size());
 }
 
@@ -39,15 +39,15 @@ TEST(AuStringIntern, InternFrequentStrings) {
   AuStringIntern si(4, INTERN_THRESH, 1000);
   std::string str("Normal value");
 
-  EXPECT_FALSE(si.idx(str, std::optional<bool>()));
+  EXPECT_FALSE(si.idx(str, AuIntern::ByFrequency));
   EXPECT_EQ(0, si.dict().size());
 
   for (size_t i = 0; i < INTERN_THRESH * 2 && !HasFailure(); ++i) {
     if (i < INTERN_THRESH - 1) {
-      EXPECT_FALSE(si.idx(str, std::optional<bool>())) << "i = " << i;
+      EXPECT_FALSE(si.idx(str, AuIntern::ByFrequency)) << "i = " << i;
       EXPECT_EQ(0, si.dict().size()) << "i = " << i;
     } else {
-      EXPECT_TRUE(si.idx(str, std::optional<bool>()));
+      EXPECT_TRUE(si.idx(str, AuIntern::ByFrequency));
       EXPECT_EQ(1, si.dict().size());
     }
   }
@@ -58,12 +58,12 @@ TEST(AuStringIntern, ReIndex) {
   auto &dict = si.dict();
 
   using namespace std::string_literals;
-  si.idx("twice"s, true); // idx 0
-  si.idx("once"s, true);  // idx 1
-  si.idx("thrice"s, true);// idx 2
-  si.idx("twice"s, true);
-  si.idx("thrice"s, true);
-  si.idx("thrice"s, true);
+  si.idx("twice"s, AuIntern::ForceIntern); // idx 0
+  si.idx("once"s, AuIntern::ForceIntern);  // idx 1
+  si.idx("thrice"s, AuIntern::ForceIntern);// idx 2
+  si.idx("twice"s, AuIntern::ForceIntern);
+  si.idx("thrice"s, AuIntern::ForceIntern);
+  si.idx("thrice"s, AuIntern::ForceIntern);
 
   EXPECT_EQ(3, dict.size());
   EXPECT_EQ("twice"s, dict[0]);
@@ -76,11 +76,11 @@ TEST(AuStringIntern, ReIndex) {
   EXPECT_EQ("thrice"s, dict[0]);
   EXPECT_EQ("twice"s, dict[1]);
 
-  EXPECT_EQ(0, *si.idx("thrice"s, true));
-  EXPECT_EQ(1, *si.idx("twice"s, true));
+  EXPECT_EQ(0, *si.idx("thrice"s, AuIntern::ForceIntern));
+  EXPECT_EQ(1, *si.idx("twice"s, AuIntern::ForceIntern));
 
-  si.idx("quadrice"s, true);
-  EXPECT_EQ(2, *si.idx("quadrice"s, true));
+  si.idx("quadrice"s, AuIntern::ForceIntern);
+  EXPECT_EQ(2, *si.idx("quadrice"s, AuIntern::ForceIntern));
 }
 
 struct AuFormatterTest : public ::testing::Test {
@@ -229,8 +229,8 @@ TEST_F(AuFormatterTest, LongString) {
 }
 
 TEST_F(AuFormatterTest, InternString) {
-  stringIntern.idx(std::string("aLongInternedString"), true);
-  stringIntern.idx(std::string("another string"), true);
+  stringIntern.idx(std::string("aLongInternedString"), AuIntern::ForceIntern);
+  stringIntern.idx(std::string("another string"), AuIntern::ForceIntern);
 
   writer.value("aLongInternedString", true);
   writer.value("another string", true);
