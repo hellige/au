@@ -141,16 +141,12 @@ class KeyValueRecHandler : public au::NoopRecordHandler {
   const KeyValueHandler::CallbackType kvCallback;
   au::Dictionary dictionary;
   au::AuRecordHandler<KeyValueRecHandler> auRecHandler;
-  au::RecordParser<au::AuRecordHandler<KeyValueRecHandler>> recParser;
 
  public:
-  KeyValueRecHandler(const KeyValueHandler::CallbackType &&kvCallback,
-                     au::AuByteSource &byteSource)
+  KeyValueRecHandler(const KeyValueHandler::CallbackType &&kvCallback)
       : kvCallback(kvCallback),
-        auRecHandler(dictionary, *this),
-        recParser(byteSource, auRecHandler) {
-    recParser.parseStream();
-  }
+        auRecHandler(dictionary, *this)
+  {}
 
   void onValue(au::AuByteSource &src, au::Dictionary::Dict &dict) {
     KeyValueHandler kvHandler(dict, kvCallback);
