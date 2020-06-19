@@ -27,7 +27,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
   std::vector<char> str_;
 
   using ValType =
-      std::variant<nullptr_t, uint64_t, int64_t, double, bool,
+      std::variant<std::nullptr_t, uint64_t, int64_t, double, bool,
                    std::string, std::chrono::system_clock::time_point>;
   using CallbackType = std::function<void(const std::string &path, ValType v)>;
   const CallbackType &callback_;
@@ -156,3 +156,4 @@ class KeyValueRecHandler : public au::NoopRecordHandler {
 };
 
 } // namespace
+
