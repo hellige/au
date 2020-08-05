@@ -19,6 +19,12 @@ namespace au {
 
 class AuEncoder;
 
+enum class AuIntern {
+  ByFrequency,
+  ForceIntern,
+  ForceExplicit
+};
+
 class AuStringIntern {
   /** Frequently encountered strings should be interned. The UsageTracker keeps
    * track of how many times we've seen a string. The INTERN_CACHE_SIZE most
@@ -105,9 +111,9 @@ public:
       : tinyStringSize_(tinyStr),
         internCache_(internThresh, internCacheSize) {}
 
-  std::optional<size_t> idx(std::string_view sv, std::optional<bool> intern) {
+  std::optional<size_t> idx(std::string_view sv, AuIntern intern) {
     if (sv.length() <= tinyStringSize_) return {std::nullopt};
-    if (intern.has_value() && !intern.value()) return {std::nullopt};
+    if (intern == AuIntern::ForceExplicit) return {std::nullopt};
 
     auto it = dictionary_.find(sv);
     if (it != dictionary_.end()) {
@@ -115,8 +121,7 @@ public:
       return it->second.internIndex;
     }
 
-    bool forceIntern = intern.has_value() && intern.value();
-    if (forceIntern || internCache_.shouldIntern(sv)) {
+    if (intern == AuIntern::ForceIntern || internCache_.shouldIntern(sv)) {
       auto nextEntry = dictInOrder_.size();
       const auto &s = dictInOrder_.emplace_back(std::string(sv));
       dictionary_.emplace(s, InternEntry{nextEntry, 1});
@@ -227,8 +232,7 @@ class AuWriter {
     msgBuf_.write(sv.data(), sv.length());
   }
 
-  void encodeStringIntern(const std::string_view sv,
-                          std::optional<bool> intern) {
+  void encodeStringIntern(const std::string_view sv, AuIntern intern) {
     auto idx = stringIntern_.idx(sv, intern);
     if (!idx) {
       encodeString(sv);
@@ -350,7 +354,7 @@ public:
     return *this;
   }
   void key(std::string_view key) {
-    encodeStringIntern(key, true);
+    encodeStringIntern(key, AuIntern::ForceIntern);
   }
 
   AuWriter &null() {
@@ -382,10 +386,15 @@ public:
    */
   AuWriter &value(const std::string_view sv,
                   std::optional<bool> intern = std::nullopt) {
-    if (intern.has_value() && !intern.value()) {
+    AuIntern internEnum{};
+    if (intern.has_value()) {
+      internEnum = intern.value()
+        ? AuIntern::ForceIntern : AuIntern::ForceExplicit;
+    }
+    if (internEnum == AuIntern::ForceExplicit) {
       encodeString(sv);
     } else {
-      encodeStringIntern(sv, intern);
+      encodeStringIntern(sv, internEnum);
     }
     return *this;
   }

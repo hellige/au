@@ -53,12 +53,15 @@ class JsonOutputHandler {
   };
   OurWriter writer_;
   Dictionary::Dict *dictionary_ = nullptr;
+  const bool signedOnly_;
 
 public:
-  explicit JsonOutputHandler(std::ostream &out = std::cout)
+  explicit JsonOutputHandler(
+          std::ostream &out = std::cout, bool signedOnly = false)
       : out(out),
         buffer_(nullptr, 1u << 16),
-        writer_(buffer_) {
+        writer_(buffer_),
+        signedOnly_(signedOnly) {
     str_.reserve(1u << 16);
   }
 
@@ -86,7 +89,12 @@ public:
   void onNull(size_t) { writer_.Null(); }
   void onBool(size_t, bool v) { writer_.Bool(v); }
   void onInt(size_t, int64_t v) { writer_.Int64(v); }
-  void onUint(size_t, uint64_t v) { writer_.Uint64(v); }
+  void onUint(size_t, uint64_t v) {
+      if (signedOnly_)
+          writer_.Int64(v);
+      else
+          writer_.Uint64(v);
+  }
   void onDouble(size_t, double v) {
     using namespace std::literals;
     if (std::isfinite(v)) writer_.Double(v);

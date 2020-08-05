@@ -1,6 +1,7 @@
 #pragma once
 
 #include "au/AuDecoder.h"
+#include "AuRecordHandler.h"
 #include "Dictionary.h"
 
 #include <list>

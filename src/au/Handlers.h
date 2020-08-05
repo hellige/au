@@ -38,6 +38,7 @@ struct NoopRecordHandler {
   virtual void onRecordStart([[maybe_unused]] size_t absPos) {}
   virtual void onValue([[maybe_unused]]size_t relDictPos, size_t len,
                        AuByteSource &source) {
+    // We would normally hand off to the ValueParser here which will consume len
     source.skip(len);
   }
   virtual void onHeader([[maybe_unused]] uint64_t version,

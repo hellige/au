@@ -495,7 +495,7 @@ public:
         if (c.charValue() & 0x20)
           handler_.onUint(sov, val);
         else
-          handler_.onInt(sov, -val);
+          handler_.onInt(sov, -static_cast<int>(val));
         return;
       }
       if (c.uint8Value() & 0x20) {
