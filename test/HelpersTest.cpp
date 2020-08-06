@@ -8,5 +8,5 @@ TEST(HelpersTest, Builds) {
     []([[maybe_unused]] const std::string &key,
        [[maybe_unused]] au::KeyValueHandler::ValType val) {
       ASSERT_TRUE(false);
-    }, auBuf);
+    });
 }
