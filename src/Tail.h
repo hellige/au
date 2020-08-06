@@ -222,7 +222,7 @@ public:
                   << e.what() << "\n";
         source_.seek(sor + 1);
       }
-    };
+    }
   }
 };
 

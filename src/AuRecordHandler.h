@@ -59,4 +59,8 @@ public:
   }
 };
 
+template<typename ValueHandler>
+AuRecordHandler(Dictionary &dictionary, ValueHandler &valueHandler) ->
+  AuRecordHandler<ValueHandler>;
+
 }
