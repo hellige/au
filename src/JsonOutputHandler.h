@@ -91,7 +91,7 @@ public:
   void onInt(size_t, int64_t v) { writer_.Int64(v); }
   void onUint(size_t, uint64_t v) {
       if (signedOnly_)
-          writer_.Int64(v);
+          writer_.Int64(static_cast<int64_t>(v));
       else
           writer_.Uint64(v);
   }
