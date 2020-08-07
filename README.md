@@ -92,3 +92,45 @@ decoded as JSON strings. The encoding library has dedicated functions for
 encoding timestamps, while the JSON encoder included in the command-line tool
 will recognize strings that happen to be representable as timestamps and encode
 them as such.
+
+## Rolling your own decoder
+
+Start with an `AuByteSource`. Use the provided `BufferByteSource` if you have an
+in-memory buffer with the `au` data. If you're starting with an on-disk file,
+use the `FileByteSourceImpl`. Or inherit from `AuByteSource` if you have more
+specialized needs.
+
+In the `src/au/Handlers.h` file you will find a `NoopRecordHandler` and a
+`NoopValueHandler` that you can inherit from and override the pieces you're
+interested in.
+
+You'll need a value handler like the `NoopValueHandler`. Let's call this
+`MyValueHandler`.
+
+You also need a different `ValueHandler` to give to the `au::AuRecordHandler`
+(let's call it `OnValueHandler`). This just needs to implement an `onValue()`
+that does something like:
+```
+struct OnValueHandler {
+    onValue(AuByteSource &src, Dictionary &dict) {
+        MyValueHandler vHandler(dict);
+        au::ValueParser parser(src, vHandler);
+        parser.value();
+    }
+};
+```
+
+Instead of using `au::AuRecordHandler` directly, you can roll your own (perhaps
+by ineriting from `NoopRecordHandler`).
+
+Putting it all together:
+```
+    au::BufferByteSource auBuf(buf, len);
+    au::Dictionary dict;
+    OnValueHandler onValueHandler;
+    au::AuRecordHandler<OnValueHandler> recHandler(dict, onValueHandler);
+    au::RecordParser(auBuf, recHandler).parseStream();
+```
+
+The call graph looks like:
+`au::RecordParser -> au::RecordHandler -> OnValueHandler -> au::ValueParser -> MyValueHandler`
