@@ -716,4 +716,9 @@ public:
   }
 };
 
+template<typename Handler>
+ValueParser(AuByteSource &source, Handler &handler) -> ValueParser<Handler>;
+template<typename Handler>
+RecordParser(AuByteSource &source, Handler &handler) -> RecordParser<Handler>;
+
 }

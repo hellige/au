@@ -23,7 +23,7 @@
 
 namespace au {
 struct KeyValueHandler : public au::NoopValueHandler {
-  au::Dictionary::Dict &dict_;
+  au::Dictionary::Dict *dict_ = nullptr;
   std::vector<char> str_;
 
   using ValType =
@@ -45,9 +45,15 @@ struct KeyValueHandler : public au::NoopValueHandler {
   };
   std::vector<ContextMarker> context_;
 
-  KeyValueHandler(au::Dictionary::Dict &dict, const CallbackType &kvCallback)
-      : dict_(dict), callback_(kvCallback) {
+  KeyValueHandler(const CallbackType &kvCallback)
+      : callback_(kvCallback) {
     context_.emplace_back(Context::BARE, "", "");
+  }
+
+  void onValue(au::AuByteSource &src, au::Dictionary::Dict &dict) {
+    dict_ = &dict;
+    au::ValueParser parser(src, *this);
+    parser.value();
   }
 
   bool isKey() const {
@@ -80,7 +86,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
     auto &c = context_.back();
     context_.emplace_back(Context::ARRAY, c.parent + "/" + c.key, "");
   }
-  void onArrayEnd() {
+  void onArrayEnd() override {
     context_.pop_back();
     incrCounter();
   }
@@ -105,16 +111,17 @@ struct KeyValueHandler : public au::NoopValueHandler {
     callback(d);
     incrCounter();
   }
-  virtual void onTime(size_t, std::chrono::system_clock::time_point nanos) {
+  virtual void onTime(size_t, std::chrono::system_clock::time_point nanos)
+      override {
     callback(nanos);
     incrCounter();
   }
 
   void onDictRef(size_t, size_t dictIdx) override {
     if (isKey()) {
-      context_.back().key = dict_.at(dictIdx);
+      context_.back().key = dict_->at(dictIdx);
     } else {
-      callback(dict_.at(dictIdx));
+      callback(dict_->at(dictIdx));
     }
     incrCounter();
   }
@@ -126,7 +133,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
   void onStringFragment(std::string_view frag) override {
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
-  void onStringEnd() {
+  void onStringEnd() override {
     std::string_view sv(&str_.front(), str_.size());
     if (isKey()) {
       context_.back().key = sv;
@@ -134,24 +141,6 @@ struct KeyValueHandler : public au::NoopValueHandler {
       callback(std::string(sv));
     }
     incrCounter();
-  }
-};
-
-class KeyValueRecHandler : public au::NoopRecordHandler {
-  const KeyValueHandler::CallbackType kvCallback;
-  au::Dictionary dictionary;
-  au::AuRecordHandler<KeyValueRecHandler> auRecHandler;
-
- public:
-  KeyValueRecHandler(const KeyValueHandler::CallbackType &&kvCallback)
-      : kvCallback(kvCallback),
-        auRecHandler(dictionary, *this)
-  {}
-
-  void onValue(au::AuByteSource &src, au::Dictionary::Dict &dict) {
-    KeyValueHandler kvHandler(dict, kvCallback);
-    au::ValueParser parser(src, kvHandler);
-    parser.value();
   }
 };
 
