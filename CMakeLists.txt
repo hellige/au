@@ -1,8 +1,19 @@
 cmake_minimum_required(VERSION 3.9.1)
 
-project(au)
+project(au VERSION 0.2.4 LANGUAGES CXX)
 
 option(STATIC "Build statically linked binary" OFF)
+
+execute_process(
+        COMMAND git describe --always --dirty --match v*
+        OUTPUT_VARIABLE GIT_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if (NOT "v${PROJECT_VERSION}" STREQUAL "${GIT_VERSION}")
+    message("This doesn't really seem to be verion ${PROJECT_VERSION}...")
+    set(PROJECT_VERSION "snapshot-${GIT_VERSION}")
+    message("Overriding to ${PROJECT_VERSION}!")
+endif ()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +48,7 @@ if (STATIC)
     SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif ()
 find_package(ZLIB REQUIRED)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)
 set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
