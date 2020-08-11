@@ -5,7 +5,7 @@
 working with sequential record-oriented data, primarily log files.
 
 
-## Motivation
+## Motivation and usage
 
 Ok, so you're doing some logging. The records have some structure but it's
 ragged and irregular, like maybe every line has a timestamp and a couple of
@@ -92,3 +92,27 @@ decoded as JSON strings. The encoding library has dedicated functions for
 encoding timestamps, while the JSON encoder included in the command-line tool
 will recognize strings that happen to be representable as timestamps and encode
 them as such.
+
+
+## Building from source
+
+We use git submodules to include some dependencies. The build is via CMake. You
+can set the usual options to control your compiler, build type, etc., but the
+crash course is:
+
+    $ git submdoule update -i
+    $ mkdir -p out/rel
+    $ cd out/rel
+    $ cmake -DCMAKE_BUILD_TYPE=Release -DSTATIC=On ../..
+    $ make
+    $ src/au --version
+
+You can run the unit tests in your cmake build directory with:
+
+    $ make test
+
+Alternatively, you might use `ctest`.
+
+_Please note that tarballs downloaded from Github releases do not include
+submodules, and so building from one of those won't work. Best to just clone
+the repo and check out the relevant tag._
