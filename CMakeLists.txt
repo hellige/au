@@ -6,7 +6,7 @@ option(STATIC "Build statically linked binary" OFF)
 option(COVERAGE "Build with code coverage enabled" OFF)
 
 execute_process(
-        COMMAND git describe --always --dirty --match v*
+        COMMAND git describe --tags --always --dirty --match v*
         OUTPUT_VARIABLE GIT_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
