@@ -30,7 +30,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
       std::variant<std::nullptr_t, uint64_t, int64_t, double, bool,
                    std::string, std::chrono::system_clock::time_point>;
   using CallbackType = std::function<void(const std::string &path, ValType v)>;
-  const CallbackType &callback_;
+  CallbackType callback_;
 
   enum class Context : uint8_t { BARE, OBJECT, ARRAY };
   struct ContextMarker {
