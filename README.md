@@ -1,5 +1,7 @@
-[![Build Status](https://travis-ci.org/hellige/au.svg?branch=master)](https://travis-ci.org/hellige/au)
-
+[![Build status](https://travis-ci.org/hellige/au.svg?branch=master)](https://travis-ci.org/hellige/au)
+[![Code coverage](https://codecov.io/gh/hellige/au/branch/master/graph/badge.svg)](https://codecov.io/gh/hellige/au)
+[![GitHub release](https://img.shields.io/github/v/release/hellige/au?include_prereleases&sort=semver)](https://github.com/hellige/au/releases)
+[![GitHub license](https://img.shields.io/github/license/hellige/au)](https://github.com/hellige/au/blob/master/LICENSE)
 
 `au` is a file format, header-only C++ library and command-line tool for
 working with sequential record-oriented data, primarily log files.
