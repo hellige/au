@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.9.1)
 project(au VERSION 0.2.4 LANGUAGES CXX)
 
 option(STATIC "Build statically linked binary" OFF)
+option(COVERAGE "Build with code coverage enabled" OFF)
 
 execute_process(
         COMMAND git describe --always --dirty --match v*
@@ -10,10 +11,12 @@ execute_process(
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 if (NOT "v${PROJECT_VERSION}" STREQUAL "${GIT_VERSION}")
-    message("This doesn't really seem to be verion ${PROJECT_VERSION}...")
+    message(STATUS, "This doesn't really seem to be verion ${PROJECT_VERSION}...")
     set(PROJECT_VERSION "snapshot-${GIT_VERSION}")
-    message("Overriding to ${PROJECT_VERSION}!")
+    message(STATUS, "Overriding to ${PROJECT_VERSION}!")
 endif ()
+
+message(STATUS, "Coverage: ${COVERAGE}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

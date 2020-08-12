@@ -1,3 +1,7 @@
+if (COVERAGE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif ()
+
 add_executable(Test
         AuUnitTests.cpp AuEncoderTests.cpp
         AuDecoderTests.cpp AuDecoderTestCases.cpp
