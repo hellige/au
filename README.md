@@ -109,7 +109,7 @@ crash course is:
 
 You can run the unit tests in your cmake build directory with:
 
-    $ make test
+    $ make unittest
 
 Alternatively, you might use `ctest`.
 
