@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include <vector>
 #include <stdio.h>
-#include <queue>
 
 namespace au {
 
@@ -99,17 +98,25 @@ class AuStringIntern {
     size_t occurences;
   };
 
-  std::deque<std::string> dictInOrder_;
+  std::vector<std::string> dictInOrder_;
   /// The string and its intern index
   std::unordered_map<std::string_view, InternEntry> dictionary_;
   const size_t tinyStringSize_;
   UsageTracker internCache_;
 
 public:
-  explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
-                          size_t internCacheSize = 1000)
+  explicit AuStringIntern(
+      size_t clearThreshold = 1400,
+      size_t tinyStr = 4,
+      size_t internThresh = 10,
+      size_t internCacheSize = 1000)
       : tinyStringSize_(tinyStr),
-        internCache_(internThresh, internCacheSize) {}
+        internCache_(internThresh, internCacheSize) {
+    const auto reserveSize = static_cast<size_t>(
+        static_cast<double>(clearThreshold) * 1.2);
+    dictInOrder_.reserve(reserveSize);
+    dictionary_.reserve(reserveSize);
+  }
 
   std::optional<size_t> idx(std::string_view sv, AuIntern intern) {
     if (sv.length() <= tinyStringSize_) return {std::nullopt};
@@ -130,7 +137,7 @@ public:
     return {std::nullopt};
   }
 
-  const std::deque<std::string> &dict() const { return dictInOrder_; }
+  const std::vector<std::string> &dict() const { return dictInOrder_; }
 
   void clear(bool clearUsageTracker) {
     dictionary_.clear();
@@ -159,7 +166,8 @@ public:
   size_t reIndex(size_t threshold) {
     size_t purged = purge(threshold);
 
-    std::deque<std::pair<std::size_t,std::string>> tmpDict;
+    std::vector<std::pair<std::size_t,std::string>> tmpDict;
+    tmpDict.reserve(dictionary_.size());
     for (auto &[_, entry] : dictionary_) {
       (void) _;
       tmpDict.emplace_back(
@@ -630,7 +638,8 @@ public:
             size_t purgeThreshold = 50,
             size_t reindexInterval = 500'000,
             size_t clearThreshold = 1400)
-      : backref_(0), lastDictSize_(0), records_(0),
+      : stringIntern_(clearThreshold),
+        backref_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
   {
