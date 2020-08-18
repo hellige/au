@@ -37,6 +37,7 @@ class AuStringIntern {
      * the oldest entry from the front before adding a new one at the end.
      */
     using InOrder = std::list<std::string>;
+    std::list<std::string> freeList_;
     InOrder inOrder_;
 
     /** DictVal.first == How many times the string pointed to by DictVal.second
@@ -47,11 +48,9 @@ class AuStringIntern {
     Dict dict_;
 
     void pop(Dict::iterator it) {
-      if (it != dict_.end()) {
-        auto listIt = it->second.second;
-        dict_.erase(it);
-        inOrder_.erase(listIt);
-      }
+      auto listIt = it->second.second;
+      dict_.erase(it);
+      freeList_.splice(freeList_.begin(), inOrder_, listIt);
     }
 
   public:
@@ -61,7 +60,10 @@ class AuStringIntern {
     const size_t INTERN_CACHE_SIZE;
 
     UsageTracker(size_t internThresh, size_t internCacheSize)
-        : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize) {}
+        : freeList_(internCacheSize + 1),
+          INTERN_THRESH(internThresh),
+          INTERN_CACHE_SIZE(internCacheSize)
+    {}
 
     bool shouldIntern(std::string_view sv) {
       auto it = dict_.find(sv);
@@ -77,7 +79,12 @@ class AuStringIntern {
         if (inOrder_.size() >= INTERN_CACHE_SIZE) {
           pop(dict_.find(inOrder_.front()));
         }
-        const auto &s = inOrder_.emplace_back(std::string(sv));
+        if (freeList_.begin() == freeList_.end())
+          throw std::bad_alloc();
+        // insert at end
+        inOrder_.splice(inOrder_.end(), freeList_, freeList_.begin());
+        auto &s = inOrder_.back();
+        s = std::string(sv);
         dict_.emplace(s, DictVal{size_t(1), --(inOrder_.end())});
         return false;
       }
@@ -85,7 +92,7 @@ class AuStringIntern {
 
     void clear() {
       dict_.clear();
-      inOrder_.clear();
+      freeList_.splice(freeList_.begin(), inOrder_);
     }
 
     size_t size() const {
