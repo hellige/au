@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <list>
 #include <map>
@@ -226,24 +227,34 @@ public:
 
 class AuVectorBuffer {
   std::vector<char> v;
+  std::size_t idx{};
 public:
-  AuVectorBuffer(size_t size = 1024) {
-    v.reserve(size);
+  AuVectorBuffer(size_t size = 1024 * 1024) {
+    v.resize(size);
   }
   void put(char c) {
-    v.push_back(c);
+    if (__builtin_expect(idx == v.capacity(), 0))
+      v.resize(v.size() * 2);
+    v[idx++] = c;
+  }
+  char *raw(size_t size) {
+    if (__builtin_expect(idx + size > v.capacity(), 0))
+      v.resize(std::max(v.size() * 2, idx + size));
+    auto front = idx;
+    idx += size;
+    return v.data() + front;
   }
   void write(const char *data, size_t size) {
-    v.insert(v.end(), data, data + size);
+    memcpy(raw(size), data, size);
   }
   size_t tellp() const {
-    return v.size();
+    return idx;
   }
   const std::string_view str() const {
-    return std::string_view(v.data(), v.size());
+    return std::string_view(v.data(), idx);
   }
   void clear() {
-    v.clear();
+    idx = 0;
   }
 };
 
@@ -499,14 +510,59 @@ protected:
   }
 
   void valueInt(uint64_t i) {
-    while (true) {
-      char toWrite = static_cast<char>(i & 0x7fu);
-      i >>= 7;
-      if (i) {
-        msgBuf_.put((toWrite | static_cast<char>(0x80u)));
-      } else {
-        msgBuf_.put(toWrite);
-        break;
+    if (i < (1ul << 7)) {
+      msgBuf_.put(static_cast<char>(i));
+    } else if (i < (1ul << 14)) {
+      auto ptr = msgBuf_.raw(2);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(i >> 7);
+    } else if (i < (1ul << 21)) {
+      auto ptr = msgBuf_.raw(3);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(i >> 14);
+    } else if (i < (1ul << 28)) {
+      auto ptr = msgBuf_.raw(4);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(i >> 21);
+    } else if (i < (1ul << 35)) {
+      auto ptr = msgBuf_.raw(5);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(i >> 28);
+    } else if (i < (1ul << 42)) {
+      auto ptr = msgBuf_.raw(6);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(((i >> 28) & 0x7fu) | 0x80u);
+      ptr[5] = static_cast<char>(i >> 35);
+    } else if (i < (1ul << 49)) {
+      auto ptr = msgBuf_.raw(7);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(((i >> 28) & 0x7fu) | 0x80u);
+      ptr[5] = static_cast<char>(((i >> 35) & 0x7fu) | 0x80u);
+      ptr[6] = static_cast<char>(i >> 42);
+    } else {
+      // above this we need at least 8 bytes. should not have called this
+      // function but we use the general formula...
+      while (true) {
+        char toWrite = static_cast<char>(i & 0x7fu);
+        i >>= 7;
+        if (i) {
+          msgBuf_.put((toWrite | static_cast<char>(0x80u)));
+        } else {
+          msgBuf_.put(toWrite);
+          break;
+        }
       }
     }
   }
