@@ -36,7 +36,7 @@ TEST(AuStringIntern, ForceIntern) {
 
 TEST(AuStringIntern, InternFrequentStrings) {
   constexpr size_t INTERN_THRESH = 10;
-  AuStringIntern si(4, INTERN_THRESH, 1000);
+  AuStringIntern si(AuStringIntern::Config{.internThresh = INTERN_THRESH});
   std::string str("Normal value");
 
   EXPECT_FALSE(si.idx(str, AuIntern::ByFrequency));
@@ -54,7 +54,8 @@ TEST(AuStringIntern, InternFrequentStrings) {
 }
 
 TEST(AuStringIntern, ReIndex) {
-  AuStringIntern si(1, 2, 10);
+  AuStringIntern si(AuStringIntern::Config{
+      .tinyStr = 1, .internThresh = 2, .internCacheSize = 10});
   auto &dict = si.dict();
 
   using namespace std::string_literals;

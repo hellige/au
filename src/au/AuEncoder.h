@@ -105,15 +105,20 @@ class AuStringIntern {
   UsageTracker internCache_;
 
 public:
-  explicit AuStringIntern(
-      size_t clearThreshold = 1400,
-      size_t tinyStr = 4,
-      size_t internThresh = 10,
-      size_t internCacheSize = 1000)
-      : tinyStringSize_(tinyStr),
-        internCache_(internThresh, internCacheSize) {
+  struct Config {
+    size_t tinyStr = 4;
+    size_t internThresh = 10;
+    size_t internCacheSize = 1000;
+    size_t clearThreshold = 1400;
+  };
+
+  explicit AuStringIntern() : AuStringIntern(Config{}) {}
+
+  explicit AuStringIntern(Config config)
+      : tinyStringSize_(config.tinyStr),
+        internCache_(config.internThresh, config.internCacheSize) {
     const auto reserveSize = static_cast<size_t>(
-        static_cast<double>(clearThreshold) * 1.2);
+        static_cast<double>(config.clearThreshold) * 1.2);
     dictInOrder_.reserve(reserveSize);
     dictionary_.reserve(reserveSize);
   }
@@ -638,7 +643,7 @@ public:
             size_t purgeThreshold = 50,
             size_t reindexInterval = 500'000,
             size_t clearThreshold = 1400)
-      : stringIntern_(clearThreshold),
+      : stringIntern_(AuStringIntern::Config{.clearThreshold = clearThreshold}),
         backref_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
