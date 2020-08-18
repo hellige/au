@@ -84,7 +84,7 @@ class AuStringIntern {
         // insert at end
         inOrder_.splice(inOrder_.end(), freeList_, freeList_.begin());
         auto &s = inOrder_.back();
-        s = std::string(sv);
+        s.assign(sv);
         dict_.emplace(s, DictVal{size_t(1), --(inOrder_.end())});
         return false;
       }
