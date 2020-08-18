@@ -142,6 +142,14 @@ public:
 
     if (intern == AuIntern::ForceIntern || internCache_.shouldIntern(sv)) {
       auto nextEntry = dictInOrder_.size();
+      if (dictInOrder_.size() == dictInOrder_.capacity()) {
+        // about to resize... need to reconstruct dictionary_ since string_view
+        // might point to a SSO std::string. might as well reIndex. If we
+        // `clear` about where we are told in Config, this should very rarely
+        // happen
+        dictInOrder_.reserve(dictInOrder_.size() * 2);
+        doReIndex();
+      }
       const auto &s = dictInOrder_.emplace_back(std::string(sv));
       dictionary_.emplace(s, InternEntry{nextEntry, 1});
       return nextEntry;
@@ -177,7 +185,11 @@ public:
   /// frequent ones are at the beginning (and have smaller indices).
   size_t reIndex(size_t threshold) {
     size_t purged = purge(threshold);
+    doReIndex();
+    return purged;
+  }
 
+  void doReIndex() {
     std::vector<std::pair<std::size_t,std::string>> tmpDict;
     tmpDict.reserve(dictionary_.size());
     for (auto &[_, entry] : dictionary_) {
@@ -197,8 +209,6 @@ public:
       const auto &s = dictInOrder_.emplace_back(std::move(str));
       dictionary_.emplace(s, InternEntry{idx++, occurrences});
     }
-
-    return purged;
   }
 
   // For debug/profiling
