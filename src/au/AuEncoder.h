@@ -711,15 +711,28 @@ public:
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  AuEncoder(std::string metadata = "",
+  AuEncoder(std::string metadata = std::string{},
             size_t purgeInterval = 250'000,
             size_t purgeThreshold = 50,
-            size_t reindexInterval = 500'000,
-            size_t clearThreshold = 1400)
-      : stringIntern_(AuStringIntern::Config{.clearThreshold = clearThreshold}),
+            size_t reindexInterval = 500'000)
+      : AuEncoder(
+          std::move(metadata),
+          purgeInterval,
+          purgeThreshold,
+          reindexInterval,
+          AuStringIntern::Config{})
+  {}
+  AuEncoder(std::string metadata,
+            size_t purgeInterval,
+            size_t purgeThreshold,
+            size_t reindexInterval,
+            AuStringIntern::Config stringInternConfig)
+      : stringIntern_(stringInternConfig),
         backref_(0), lastDictSize_(0), records_(0),
-        purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
-        reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
+        purgeInterval_(purgeInterval),
+        purgeThreshold_(purgeThreshold),
+        reindexInterval_(reindexInterval),
+        clearThreshold_(stringInternConfig.clearThreshold)
   {
     if (metadata.size() > FormatVersion1::MAX_METADATA_SIZE)
       metadata.resize(FormatVersion1::MAX_METADATA_SIZE);
