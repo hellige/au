@@ -105,11 +105,10 @@ public:
 
   void onTime(size_t, time_point timestamp) {
     using namespace std::chrono;
-    using Clock = std::chrono::high_resolution_clock;
 
     auto nanos = timestamp.time_since_epoch();
     auto s = duration_cast<seconds>(nanos); // Because to_time_t might round
-    auto tp = std::chrono::time_point<Clock, seconds>(s);
+    auto tp = system_clock::time_point(s);
     std::time_t tt = system_clock::to_time_t(tp);
     std::tm *tm = gmtime(&tt);
 
