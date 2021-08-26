@@ -3,6 +3,8 @@ if (COVERAGE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif ()
 
+# this is probably only needed for gcc 8. once that's gone, try again without
+# this.
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(CXX_FS_LIB "stdc++fs")
 endif()
