@@ -3,11 +3,15 @@ if (COVERAGE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 endif ()
 
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(CXX_FS_LIB "stdc++fs")
+endif()
+
 add_executable(Test
         AuUnitTests.cpp AuEncoderTests.cpp
         AuDecoderTests.cpp AuDecoderTestCases.cpp
         HelpersTest.cpp)
-target_link_libraries(Test libau gtest gtest_main gmock stdc++fs)
+target_link_libraries(Test libau gtest gtest_main gmock ${CXX_FS_LIB})
 add_test(NAME Tests
         COMMAND Test
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
