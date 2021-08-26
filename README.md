@@ -1,4 +1,4 @@
-[![Build status](https://travis-ci.org/hellige/au.svg?branch=master)](https://travis-ci.org/hellige/au)
+[![Build status]()](https://github.com/hellige/au/actions/workflows/ci.yml/badge.svg)](https://github.com/hellige/au/actions?workflow=CI)
 [![Code coverage](https://codecov.io/gh/hellige/au/branch/master/graph/badge.svg)](https://codecov.io/gh/hellige/au)
 [![GitHub release](https://img.shields.io/github/v/release/hellige/au?include_prereleases&sort=semver)](https://github.com/hellige/au/releases)
 [![GitHub license](https://img.shields.io/github/license/hellige/au)](https://github.com/hellige/au/blob/master/LICENSE)
