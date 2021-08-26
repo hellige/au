@@ -28,7 +28,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
 
   using ValType =
       std::variant<std::nullptr_t, uint64_t, int64_t, double, bool,
-                   std::string, std::chrono::system_clock::time_point>;
+                   std::string, time_point>;
   using CallbackType = std::function<void(const std::string &path, ValType v)>;
   CallbackType callback_;
 
@@ -111,7 +111,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
     callback(d);
     incrCounter();
   }
-  virtual void onTime(size_t, std::chrono::system_clock::time_point nanos)
+  virtual void onTime(size_t, time_point nanos)
       override {
     callback(nanos);
     incrCounter();

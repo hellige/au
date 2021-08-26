@@ -480,7 +480,7 @@ public:
     using namespace std::chrono;
 
     // Note: system_clock will be UNIX epoch based in C++20
-    time_point<system_clock, Duration> unixT0;
+    std::chrono::time_point<system_clock, Duration> unixT0;
     auto nanoDuration = duration_cast<nanoseconds>(tp - unixT0);
     return nanos(static_cast<uint64_t>(nanoDuration.count()));
   }

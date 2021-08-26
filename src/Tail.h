@@ -117,7 +117,7 @@ public:
   void onInt(size_t, int64_t) override { checkBounds(); }
   void onUint(size_t, uint64_t) override { checkBounds(); }
   void onDouble(size_t, double) override { checkBounds(); }
-  void onTime(size_t, std::chrono::system_clock::time_point) override {
+  void onTime(size_t, time_point) override {
     checkBounds();
   }
 

@@ -197,7 +197,7 @@ struct StatsValueHandler : public NoopValueHandler {
     doubleBytes += source_->pos() - pos;
   }
 
-  void onTime(size_t pos, std::chrono::system_clock::time_point) override {
+  void onTime(size_t pos, time_point) override {
     timestamps++;
     timestampBytes += source_->pos() - pos;
   }
