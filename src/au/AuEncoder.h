@@ -4,16 +4,17 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <list>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 #include <stdio.h>
-#include <queue>
 
 namespace au {
 
@@ -38,6 +39,7 @@ class AuStringIntern {
      * the oldest entry from the front before adding a new one at the end.
      */
     using InOrder = std::list<std::string>;
+    std::list<std::string> freeList_;
     InOrder inOrder_;
 
     /** DictVal.first == How many times the string pointed to by DictVal.second
@@ -48,11 +50,9 @@ class AuStringIntern {
     Dict dict_;
 
     void pop(Dict::iterator it) {
-      if (it != dict_.end()) {
-        auto listIt = it->second.second;
-        dict_.erase(it);
-        inOrder_.erase(listIt);
-      }
+      auto listIt = it->second.second;
+      dict_.erase(it);
+      freeList_.splice(freeList_.begin(), inOrder_, listIt);
     }
 
   public:
@@ -62,7 +62,10 @@ class AuStringIntern {
     const size_t INTERN_CACHE_SIZE;
 
     UsageTracker(size_t internThresh, size_t internCacheSize)
-        : INTERN_THRESH(internThresh), INTERN_CACHE_SIZE(internCacheSize) {}
+        : freeList_(internCacheSize + 1),
+          INTERN_THRESH(internThresh),
+          INTERN_CACHE_SIZE(internCacheSize)
+    {}
 
     bool shouldIntern(std::string_view sv) {
       auto it = dict_.find(sv);
@@ -78,7 +81,12 @@ class AuStringIntern {
         if (inOrder_.size() >= INTERN_CACHE_SIZE) {
           pop(dict_.find(inOrder_.front()));
         }
-        const auto &s = inOrder_.emplace_back(std::string(sv));
+        if (freeList_.begin() == freeList_.end())
+          throw std::bad_alloc();
+        // insert at end
+        inOrder_.splice(inOrder_.end(), freeList_, freeList_.begin());
+        auto &s = inOrder_.back();
+        s.assign(sv);
         dict_.emplace(s, DictVal{size_t(1), --(inOrder_.end())});
         return false;
       }
@@ -86,7 +94,7 @@ class AuStringIntern {
 
     void clear() {
       dict_.clear();
-      inOrder_.clear();
+      freeList_.splice(freeList_.begin(), inOrder_);
     }
 
     size_t size() const {
@@ -99,17 +107,30 @@ class AuStringIntern {
     size_t occurences;
   };
 
-  std::deque<std::string> dictInOrder_;
+  std::vector<std::string> dictInOrder_;
   /// The string and its intern index
   std::unordered_map<std::string_view, InternEntry> dictionary_;
   const size_t tinyStringSize_;
   UsageTracker internCache_;
 
 public:
-  explicit AuStringIntern(size_t tinyStr = 4, size_t internThresh = 10,
-                          size_t internCacheSize = 1000)
-      : tinyStringSize_(tinyStr),
-        internCache_(internThresh, internCacheSize) {}
+  struct Config {
+    size_t tinyStr = 4;
+    size_t internThresh = 10;
+    size_t internCacheSize = 1000;
+    size_t clearThreshold = 1400;
+  };
+
+  explicit AuStringIntern() : AuStringIntern(Config{}) {}
+
+  explicit AuStringIntern(Config config)
+      : tinyStringSize_(config.tinyStr),
+        internCache_(config.internThresh, config.internCacheSize) {
+    const auto reserveSize = static_cast<size_t>(
+        static_cast<double>(config.clearThreshold) * 1.2);
+    dictInOrder_.reserve(reserveSize);
+    dictionary_.reserve(reserveSize);
+  }
 
   std::optional<size_t> idx(std::string_view sv, AuIntern intern) {
     if (sv.length() <= tinyStringSize_) return {std::nullopt};
@@ -123,6 +144,14 @@ public:
 
     if (intern == AuIntern::ForceIntern || internCache_.shouldIntern(sv)) {
       auto nextEntry = dictInOrder_.size();
+      if (dictInOrder_.size() == dictInOrder_.capacity()) {
+        // about to resize... need to reconstruct dictionary_ since string_view
+        // might point to a SSO std::string. might as well reIndex. If we
+        // `clear` about where we are told in Config, this should very rarely
+        // happen
+        dictInOrder_.reserve(dictInOrder_.size() * 2);
+        doReIndex();
+      }
       const auto &s = dictInOrder_.emplace_back(std::string(sv));
       dictionary_.emplace(s, InternEntry{nextEntry, 1});
       return nextEntry;
@@ -130,7 +159,7 @@ public:
     return {std::nullopt};
   }
 
-  const std::deque<std::string> &dict() const { return dictInOrder_; }
+  const std::vector<std::string> &dict() const { return dictInOrder_; }
 
   void clear(bool clearUsageTracker) {
     dictionary_.clear();
@@ -158,8 +187,13 @@ public:
   /// frequent ones are at the beginning (and have smaller indices).
   size_t reIndex(size_t threshold) {
     size_t purged = purge(threshold);
+    doReIndex();
+    return purged;
+  }
 
-    std::deque<std::pair<std::size_t,std::string>> tmpDict;
+  void doReIndex() {
+    std::vector<std::pair<std::size_t,std::string>> tmpDict;
+    tmpDict.reserve(dictionary_.size());
     for (auto &[_, entry] : dictionary_) {
       (void) _;
       tmpDict.emplace_back(
@@ -177,8 +211,6 @@ public:
       const auto &s = dictInOrder_.emplace_back(std::move(str));
       dictionary_.emplace(s, InternEntry{idx++, occurrences});
     }
-
-    return purged;
   }
 
   // For debug/profiling
@@ -196,24 +228,34 @@ public:
 
 class AuVectorBuffer {
   std::vector<char> v;
+  std::size_t idx{};
 public:
-  AuVectorBuffer(size_t size = 1024) {
-    v.reserve(size);
+  AuVectorBuffer(size_t size = 1024 * 1024) {
+    v.resize(size);
   }
   void put(char c) {
-    v.push_back(c);
+    if (__builtin_expect(idx == v.capacity(), 0))
+      v.resize(v.size() * 2);
+    v[idx++] = c;
+  }
+  char *raw(size_t size) {
+    if (__builtin_expect(idx + size > v.capacity(), 0))
+      v.resize(std::max(v.size() * 2, idx + size));
+    auto front = idx;
+    idx += size;
+    return v.data() + front;
   }
   void write(const char *data, size_t size) {
-    v.insert(v.end(), data, data + size);
+    memcpy(raw(size), data, size);
   }
   size_t tellp() const {
-    return v.size();
+    return idx;
   }
   const std::string_view str() const {
-    return std::string_view(v.data(), v.size());
+    return std::string_view(v.data(), idx);
   }
   void clear() {
-    v.clear();
+    idx = 0;
   }
 };
 
@@ -438,7 +480,7 @@ public:
     using namespace std::chrono;
 
     // Note: system_clock will be UNIX epoch based in C++20
-    time_point<system_clock, Duration> unixT0;
+    std::chrono::time_point<system_clock, Duration> unixT0;
     auto nanoDuration = duration_cast<nanoseconds>(tp - unixT0);
     return nanos(static_cast<uint64_t>(nanoDuration.count()));
   }
@@ -469,14 +511,59 @@ protected:
   }
 
   void valueInt(uint64_t i) {
-    while (true) {
-      char toWrite = static_cast<char>(i & 0x7fu);
-      i >>= 7;
-      if (i) {
-        msgBuf_.put((toWrite | static_cast<char>(0x80u)));
-      } else {
-        msgBuf_.put(toWrite);
-        break;
+    if (i < (1ul << 7)) {
+      msgBuf_.put(static_cast<char>(i));
+    } else if (i < (1ul << 14)) {
+      auto ptr = msgBuf_.raw(2);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(i >> 7);
+    } else if (i < (1ul << 21)) {
+      auto ptr = msgBuf_.raw(3);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(i >> 14);
+    } else if (i < (1ul << 28)) {
+      auto ptr = msgBuf_.raw(4);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(i >> 21);
+    } else if (i < (1ul << 35)) {
+      auto ptr = msgBuf_.raw(5);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(i >> 28);
+    } else if (i < (1ul << 42)) {
+      auto ptr = msgBuf_.raw(6);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(((i >> 28) & 0x7fu) | 0x80u);
+      ptr[5] = static_cast<char>(i >> 35);
+    } else if (i < (1ul << 49)) {
+      auto ptr = msgBuf_.raw(7);
+      ptr[0] = static_cast<char>((i & 0x7fu) | 0x80u);
+      ptr[1] = static_cast<char>(((i >> 7) & 0x7fu) | 0x80u);
+      ptr[2] = static_cast<char>(((i >> 14) & 0x7fu) | 0x80u);
+      ptr[3] = static_cast<char>(((i >> 21) & 0x7fu) | 0x80u);
+      ptr[4] = static_cast<char>(((i >> 28) & 0x7fu) | 0x80u);
+      ptr[5] = static_cast<char>(((i >> 35) & 0x7fu) | 0x80u);
+      ptr[6] = static_cast<char>(i >> 42);
+    } else {
+      // above this we need at least 8 bytes. should not have called this
+      // function but we use the general formula...
+      while (true) {
+        char toWrite = static_cast<char>(i & 0x7fu);
+        i >>= 7;
+        if (i) {
+          msgBuf_.put((toWrite | static_cast<char>(0x80u)));
+        } else {
+          msgBuf_.put(toWrite);
+          break;
+        }
       }
     }
   }
@@ -625,14 +712,28 @@ public:
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
    */
-  AuEncoder(std::string metadata = "",
+  AuEncoder(std::string metadata = std::string{},
             size_t purgeInterval = 250'000,
             size_t purgeThreshold = 50,
-            size_t reindexInterval = 500'000,
-            size_t clearThreshold = 1400)
-      : backref_(0), lastDictSize_(0), records_(0),
-        purgeInterval_(purgeInterval), purgeThreshold_(purgeThreshold),
-        reindexInterval_(reindexInterval), clearThreshold_(clearThreshold)
+            size_t reindexInterval = 500'000)
+      : AuEncoder(
+          std::move(metadata),
+          purgeInterval,
+          purgeThreshold,
+          reindexInterval,
+          AuStringIntern::Config{})
+  {}
+  AuEncoder(std::string metadata,
+            size_t purgeInterval,
+            size_t purgeThreshold,
+            size_t reindexInterval,
+            AuStringIntern::Config stringInternConfig)
+      : stringIntern_(stringInternConfig),
+        backref_(0), lastDictSize_(0), records_(0),
+        purgeInterval_(purgeInterval),
+        purgeThreshold_(purgeThreshold),
+        reindexInterval_(reindexInterval),
+        clearThreshold_(stringInternConfig.clearThreshold)
   {
     if (metadata.size() > FormatVersion1::MAX_METADATA_SIZE)
       metadata.resize(FormatVersion1::MAX_METADATA_SIZE);

@@ -366,11 +366,11 @@ protected:
     return val;
   }
 
-  std::chrono::system_clock::time_point readTime() const {
+  time_point readTime() const {
     uint64_t nanos;
     source_.read(&nanos, sizeof(nanos));
     std::chrono::nanoseconds n(nanos);
-    return std::chrono::system_clock::time_point() + n;
+    return time_point() + n;
   }
 
   uint64_t readVarint() const {

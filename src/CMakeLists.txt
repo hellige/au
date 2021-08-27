@@ -20,6 +20,14 @@ if (UsePGO)
     set(PGO "-fprofile-use=${CMAKE_BINARY_DIR}")
 endif ()
 
+if (COVERAGE)
+    add_compile_options(--coverage -O0)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif ()
+
+set(VERSION_FILE "${PROJECT_BINARY_DIR}/au/Version.h")
+configure_file(au/Version.template.h ${VERSION_FILE})
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PGO}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PGO}")
 

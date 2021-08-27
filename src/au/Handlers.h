@@ -23,7 +23,7 @@ struct NoopValueHandler {
   virtual void onDouble([[maybe_unused]] size_t pos, double) {}
   virtual void onTime(
       [[maybe_unused]] size_t pos,
-      [[maybe_unused]] std::chrono::system_clock::time_point nanos) {}
+      [[maybe_unused]] time_point nanos) {}
   virtual void onDictRef([[maybe_unused]] size_t pos,
                          [[maybe_unused]] size_t dictIdx) {}
   virtual void onStringStart([[maybe_unused]] size_t sov,

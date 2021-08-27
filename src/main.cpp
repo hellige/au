@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "au/AuCommon.h"
+#include "au/Version.h"
 
 #include <functional>
 #include <iostream>

@@ -52,7 +52,7 @@ struct Pattern {
     return *atomPattern == val;
   }
 
-  bool matchesValue(std::chrono::system_clock::time_point val) const {
+  bool matchesValue(time_point val) const {
     if (!timestampPattern) return false;
     if (matchOrGreater) return val >= timestampPattern->first;
     return val >= timestampPattern->first && val < timestampPattern->second;
@@ -178,7 +178,7 @@ public:
     incrCounter();
   }
 
-  void onTime(size_t, std::chrono::system_clock::time_point value) {
+  void onTime(size_t, time_point value) {
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();

@@ -43,7 +43,7 @@ class DocumentParser {
     void onInt(size_t, int64_t v) { doc->Int64(v); count.back()++; }
     void onUint(size_t, uint64_t v) { doc->Uint64(v); count.back()++; }
     void onDouble(size_t, double d) { doc->Double(d); count.back()++; }
-    void onTime(size_t, std::chrono::system_clock::time_point) {
+    void onTime(size_t, time_point) {
       count.back()++;
       THROW_RT("Timestamps not supported in rapidjson document parser!");
     }

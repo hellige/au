@@ -46,9 +46,7 @@ bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
   return true;
 }
 
-using TimestampPattern = std::pair<
-    std::chrono::system_clock::time_point,
-    std::chrono::system_clock::time_point>;
+using TimestampPattern = std::pair<time_point, time_point>;
 
 std::optional<TimestampPattern>
 parseTimestampPattern(std::string_view sv) {
@@ -80,7 +78,7 @@ parseTimestampPattern(std::string_view sv) {
   if (ttstart == -1 || ttend == -1) return std::nullopt;
 
   using namespace std::chrono;
-  auto epoch = std::chrono::system_clock::time_point();
+  auto epoch = time_point();
   auto startInt = epoch + duration_cast<nanoseconds>(
       seconds(ttstart) + nanoseconds(startNanos));
   auto endInt = epoch + duration_cast<nanoseconds>(

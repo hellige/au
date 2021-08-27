@@ -3,6 +3,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <random>
 #include <sstream>
 #include <string.h>
 
@@ -121,5 +122,58 @@ BENCHMARK_CAPTURE(BM_StringInternLookup, Forced_Long,    true,  25)->Range(1, 1<
 BENCHMARK_CAPTURE(BM_StringInternLookup, Unforced_Short, false,  1)->Range(1, 1<<16);
 BENCHMARK_CAPTURE(BM_StringInternLookup, Unforced_Long,  false, 25)->Range(1, 1<<16);
 
+struct BM_AuWriter : au::AuWriter {
+  au::AuVectorBuffer bmMsgBuf_;
+  au::AuStringIntern bmStringIntern_;
+
+  BM_AuWriter() : au::AuWriter(bmMsgBuf_, bmStringIntern_) {}
+
+  void valueInt(uint64_t i) {
+    AuWriter::valueInt(i);
+  }
+};
+
+static void BM_valueInt_Noop(benchmark::State &state) {
+  BM_AuWriter writer;
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint64_t> distrib(0);
+
+  for (auto _ : state) {
+    state.PauseTiming();
+    [[maybe_unused]] uint64_t val = distrib(gen);
+    state.ResumeTiming();
+
+    for (int i = 0; i < 1000; ++i) {
+      asm volatile("" : : : "memory");
+    }
+  }
+}
+BENCHMARK(BM_valueInt_Noop);
+
+static void BM_valueInt(benchmark::State &state) {
+  BM_AuWriter writer;
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint64_t> distrib(
+      0, 1ul << ((32 - uint64_t(__builtin_clz(state.range(0)))) * 7));
+
+  for (auto _ : state) {
+    state.PauseTiming();
+    uint64_t val = distrib(gen);
+    state.ResumeTiming();
+
+    for (int i = 0; i < 1000; ++i) {
+      writer.bmMsgBuf_.clear();
+      writer.valueInt(val);
+    }
+  }
+}
+
+// last iteration should fall off a 'cliff' because we switch to the general
+// formula
+BENCHMARK(BM_valueInt)->RangeMultiplier(2)->Range(1ul<<0, 1ul<<7);
 
 BENCHMARK_MAIN();

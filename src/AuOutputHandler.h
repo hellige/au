@@ -36,7 +36,7 @@ class AuOutputHandler {
     void onInt(size_t, int64_t v) { writer_.value(v); }
     void onUint(size_t, uint64_t v) { writer_.value(v); }
     void onDouble(size_t, double v) { writer_.value(v); }
-    void onTime(size_t, std::chrono::system_clock::time_point nanos) {
+    void onTime(size_t, time_point nanos) {
       writer_.value(nanos);
     }
     void onDictRef(size_t, size_t idx) {
