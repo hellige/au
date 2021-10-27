@@ -26,6 +26,7 @@ int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
     << "   cat      Decode listed files to stdout (alias au2json)\n"
+    << "   zcat     cat in gzipped file\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
     << "   zgrep    grep in gzipped file\n"
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
   commands["stats"] = au::stats;
   commands["zindex"] = au::zindex;
   commands["zgrep"] = au::zgrep;
+  commands["zcat"] = au::zcat;
 
   std::string cmd(argv[1]);
   auto it = commands.find(cmd);
