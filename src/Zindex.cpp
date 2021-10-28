@@ -345,37 +345,52 @@ struct Zindex {
 
 struct ZipByteSource::Impl {
   File compressed_;
-  Zindex index_;
+  std::optional<Zindex> index_;
   // based on the average block size, used to determine whether to seek forward
   // by decompressing or seeking to a new block. also used to determine the size
   // of the decompression lookback buffer to use after each seek
-  size_t blockSize_;
+  std::optional<size_t> blockSize_;
   std::unique_ptr<CachedContext> context_;
   uint8_t input_[ChunkSize];
+  size_t outputSize_;
   uint8_t *output_;
 
   Impl(const std::string &fname,
        const std::optional<std::string> &indexFname)
       : compressed_(fopen(fname.c_str(), "rb")),
-        index_(getIndexFilename(fname, indexFname)),
-        blockSize_(2 * index_.uncompressedSize() / index_.numEntries()),
+        index_([&]() -> std::optional<Zindex> {
+          auto name = getIndexFilename(fname, indexFname);
+          if (::access(name.c_str(), F_OK) == 0) {
+            return Zindex(name);
+          }
+          return std::nullopt;
+        }()),
+        blockSize_([&]() -> std::optional<size_t> {
+          if (index_.has_value()) {
+            return 2 * index_->uncompressedSize() / index_->numEntries();
+          }
+          return std::nullopt;
+        }()),
         context_(new CachedContext()),
-        output_(new uint8_t[blockSize_]) {
+        outputSize_(ChunkSize * 4), // Chosen at random
+        output_(new uint8_t[outputSize_]) {
     if (compressed_.get() == nullptr)
       THROW_RT("Could not open " << fname << " for reading");
 
-    if (index_.compressedFilename != getBaseName(fname))
+    if (index_ && index_->compressedFilename != getBaseName(fname))
       THROW_RT("Wrong compressed filename in index: '"
-                   << index_.compressedFilename << "', expected '"
+                   << index_->compressedFilename << "', expected '"
                    << getBaseName(fname) << "'");
 
     struct stat stats;
     if (fstat(fileno(compressed_.get()), &stats) != 0)
       THROW_RT("Unable to get file stats"); // TODO errno
-    if (stats.st_size != static_cast<int64_t>(index_.compressedSize))
-      THROW_RT("Compressed size changed since index was built");
-    if (index_.compressedModTime != static_cast<uint64_t>(stats.st_mtime))
-      THROW_RT("Compressed file has been modified since index was built");
+    if (index_) {
+      if (stats.st_size != static_cast<int64_t>(index_->compressedSize))
+        THROW_RT("Compressed size changed since index was built");
+      if (index_->compressedModTime != static_cast<uint64_t>(stats.st_mtime))
+        THROW_RT("Compressed file has been modified since index was built");
+    }
 
     context_->zs_.stream.avail_in = 0;
   }
@@ -395,18 +410,21 @@ struct ZipByteSource::Impl {
   }
 
   size_t endPos() const {
-    return index_.uncompressedSize();
+    return index_.value().uncompressedSize();
   }
 
   bool isSeekable() const {
-    // for now, all ZipByteSources are indexed and thus should be seekable.
-    // this may not be true forever, if we add support for sequential reading
-    // of non-indexed gz files...
-    return true;
+    return index_.has_value();
   }
 
   void doSeek(size_t abspos) {
     auto &c = *context_;
+    if (!blockSize_) {
+      THROW_RT("blockSize_ is not set but trying to perform a seek");
+    }
+    if (!index_) {
+      THROW_RT("index_ is not set but trying to perform a seek");
+    }
 
     if (abspos < c.pos_ && c.pos_ - abspos <= c.cur_) {
       // we're seeking backward within current buffer
@@ -427,10 +445,10 @@ struct ZipByteSource::Impl {
 
     // now we're either seeking backward, or else forward beyond end of
     // buffer. do we really need to seek? or can we just skip ahead some?
-    if (abspos < c.pos_ || abspos > blockSize_ + bufRemaining) {
+    if (abspos < c.pos_ || abspos > *blockSize_ + bufRemaining) {
       // we're either seeking backward beyond the start of output_,
       // or far enough forward that it's better to jump instead of scan.
-      Zindex::IndexEntry &indexEntry = index_.find(abspos);
+      Zindex::IndexEntry &indexEntry = index_->find(abspos);
       auto compressedOffset = indexEntry.compressedOffset;
       auto uncompressedOffset = indexEntry.uncompressedOffset;
       auto bitOffset = indexEntry.bitOffset;
@@ -475,7 +493,7 @@ struct ZipByteSource::Impl {
     if (context_->cur_ != context_->limit_)
       THROW_RT("Shouldn't call gzread() unless cur_ == limit_!");
 
-    if (context_->cur_ == blockSize_) {
+    if (context_->cur_ == outputSize_) {
       // buffer is full. we're only called when we're supposed to read
       // something, so just clear it and continue...
       context_->cur_ = context_->limit_ = 0;
@@ -484,7 +502,7 @@ struct ZipByteSource::Impl {
     auto &zs = context_->zs_;
     zs.stream.next_out = output_+context_->limit_;
     zs.stream.avail_out = static_cast<uInt>(
-        std::min(blockSize_ - context_->limit_, ChunkSize)); // TODO ChunkSize or whatever...
+        std::min(outputSize_ - context_->limit_, ChunkSize)); // TODO ChunkSize or whatever...
     size_t total = 0;
     do {
       if (zs.stream.avail_in == 0) {
