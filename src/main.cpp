@@ -26,7 +26,7 @@ int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
     << "   cat      Decode listed files to stdout (alias au2json)\n"
-    << "   zcat     cat in gzipped file\n"
+    << "   zcat     cat gzipped au file\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
     << "   zgrep    grep in gzipped file\n"
