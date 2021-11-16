@@ -372,7 +372,7 @@ struct ZipByteSource::Impl {
           return std::nullopt;
         }()),
         context_(new CachedContext()),
-        outputSize_(ChunkSize * 4), // Chosen at random
+        outputSize_(blockSize_ ? *blockSize_ : ChunkSize * 4), // Chosen at random
         output_(new uint8_t[outputSize_]) {
     if (compressed_.get() == nullptr)
       THROW_RT("Could not open " << fname << " for reading");
