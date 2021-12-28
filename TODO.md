@@ -1,8 +1,5 @@
 ### TODO
 
- - Add osx debug CI build
- - Add osx clang CI builds, verify osx clang build is ok with newer clang!
- - Determine version number from git tag, etc.
  - Make the header-check at start of stream apply to all commands, including
    bisecting `grep` and `zgrep`. Consider adding a flag to disable this check.
  - Add compressed encoding of doubles, either via special-casing common values,
@@ -11,9 +8,6 @@
    something like this already been done? I can't remember...)
  - The json parser in the encoder chokes on `nan` rather than `NaN`, but there
    isn't any kind of error. Why?
- - Teach `zgrep` to grep a non-indexed gzip file, and fail only if/when seeking
-   is actually required. (This should be a special-case of what `grep` will do
-   on a non-seekable stream.)
  - Teach `tail` to do `n` records rather than bytes from end.
  - `stats`: count pos/neg int representations
  - Configurable encoding:
@@ -24,13 +18,17 @@
      logic?
  - `-e` arg to `tail`
  - scan-buf-size arg to `grep` (for bisect)
- - seek-buf-size arg to `grep` (for record lookback)
  - Add grepping of content of keys. (This is just a bit different from `-k`...)
 
 ### Consider
 
  - It would be nice if `grep` were able to binary search json as well as au.
    It's a very handy feature, particularly coupled with the gzip support.
+ - It would be nice for `au` to be able to run a persistent daemon (or some such
+   approach) to be able to support a large number of repeated binary searches
+   into the same file for values of the same key. By incrementally building a
+   binary search tree, we should be able to get a nice speedup, not to mention
+   avoiding the overhead of loading the index every single time, etc.
  - Might be nice for `au` to auto-detect compressed files, json, and au files.
  - Might be nice to have a slice command:
 
