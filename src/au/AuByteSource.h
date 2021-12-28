@@ -72,7 +72,7 @@ public:
   template<typename T>
   void read(T *t, size_t len) {
     char *buf = static_cast<char *>(static_cast<void *>(t));
-    read(len, [&](std::string_view fragment) {
+    readFunc(len, [&](std::string_view fragment) {
       ::memcpy(buf, fragment.data(), fragment.size());
       buf += fragment.size();
     });
@@ -80,14 +80,14 @@ public:
 
   using Fn = std::function<void(std::string_view)>;
   /// Call func with the next len bytes from the underlying byte source.
-  virtual void read(size_t len, Fn &&func) = 0;
-  virtual ssize_t doRead(char *buf, size_t len) = 0;
+  virtual void readFunc(size_t len, Fn &&func) = 0;
 
+  virtual void setPin(size_t abspos) = 0;
+  virtual void clearPin() = 0;
   virtual bool isSeekable() const = 0;
   virtual void seek(size_t abspos) = 0;
-  virtual void doSeek(size_t abspos) = 0;
 
-  virtual bool seekTo(std::string_view needle) = 0;
+  virtual bool scanTo(std::string_view needle) = 0;
 
   virtual void skip(size_t len) = 0;
 

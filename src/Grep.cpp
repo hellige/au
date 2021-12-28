@@ -6,6 +6,7 @@
 #include "TimestampPattern.h"
 #include "Zindex.h"
 #include "au/AuDecoder.h"
+#include "au/FileByteSource.h"
 
 #include <chrono>
 #include <cstdlib>

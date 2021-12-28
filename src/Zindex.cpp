@@ -452,7 +452,6 @@ struct ZipByteSource::Impl {
       auto compressedOffset = indexEntry.compressedOffset;
       auto uncompressedOffset = indexEntry.uncompressedOffset;
       auto bitOffset = indexEntry.bitOffset;
-      //log_.debug("Creating new context at offset ", compressedOffset); TODO
       context_.reset(new CachedContext(uncompressedOffset));
       uint8_t window[WindowSize];
       uncompressWindow(indexEntry.window, window, WindowSize);

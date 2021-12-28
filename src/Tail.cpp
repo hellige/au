@@ -2,6 +2,7 @@
 #include "JsonOutputHandler.h"
 #include "Tail.h"
 #include "TclapHelper.h"
+#include "au/FileByteSource.h"
 
 namespace au {
 

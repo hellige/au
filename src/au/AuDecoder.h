@@ -7,316 +7,20 @@
 
 #include <cassert>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iostream>
 #include <iomanip>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
-#include <fcntl.h>
-#include <unistd.h>
 #include <cstddef>
 #include <chrono>
 #include <variant>
-#include <sys/stat.h>
 
 // TODO add position/expectation info to all error messages
 
 namespace au {
-
-class BufferByteSource : public AuByteSource {
-  const char *buf_; //< Underlying source buffer
-  size_t bufLen_;   //< Underlying source buffer length
-
-  size_t pos_ = 0;  //< Current position (this may be 1 past the end of buf_)
-
-public:
-  BufferByteSource(const char *buf, size_t len) : buf_(buf), bufLen_(len) {}
-
-  BufferByteSource(std::string_view buf)
-  : buf_(buf.data()), bufLen_(buf.length())
-  {}
-
-  std::string name() const override {
-    return "<buffer>";
-  }
-
-  size_t pos() const override {
-    assert(pos_ <= bufLen_);
-    return pos_;
-  }
-
-  size_t endPos() const override { return bufLen_; }
-
-  Byte peek() override {
-    return pos_ < bufLen_ ? Byte(buf_[pos_]) : Byte::Eof();
-  }
-
-  Byte next() override {
-    return pos_ < bufLen_ ? Byte(buf_[pos_++]) : Byte::Eof();
-  }
-
-  void read(size_t len, Fn &&func) override {
-    size_t sz = std::min(len, bufLen_ - pos_);
-    func(std::string_view(buf_ + pos_, sz));
-    pos_ += sz;
-  }
-
-  ssize_t doRead(char *buf, size_t len) override {
-    if (pos_ < bufLen_) {
-      size_t sz = std::min(bufLen_ - pos_, len);
-      ::memcpy(buf, buf_ + pos_, sz);
-      return static_cast<ssize_t>(sz);
-    }
-    return 0;
-  }
-
-  bool isSeekable() const override { return true; }
-
-  void seek(size_t abspos) override {
-    doSeek(abspos);
-  }
-  void doSeek(size_t abspos) override {
-    if (abspos >= bufLen_) { // TODO: Should we allow seek to EOF?
-      THROW_RT("failed to seek to desired location: " << abspos);
-    }
-    pos_ = abspos;
-  }
-
-  void skip(size_t len) override { seek(pos_ + len); }
-
-  bool seekTo(std::string_view needle) override {
-    char *found = static_cast<char *>(memmem(buf_ + pos_, bufLen_ - pos_,
-                        needle.data(), needle.length()));
-    if (found) {
-      assert(found >= buf_);
-      pos_ = static_cast<size_t>(found - buf_);
-      return true;
-    }
-    return false;
-  }
-};
-
-class FileByteSource : public AuByteSource { // TODO rename this and FileByteSourceImpl
-protected:
-  const size_t BUFFER_SIZE;
-
-  std::string name_; // TODO use this in errors, etc...
-  char *buf_;   //< Working buffer
-  size_t pos_;  //< Current position in the underlying data stream
-  char *cur_;   //< Current position in the working buffer
-  char *limit_; //< End of the current working buffer
-
-  bool waitForData_;
-
-public:
-  explicit FileByteSource(const std::string &fname, bool waitForData,
-                          size_t bufferSizeInK = 256)
-      : BUFFER_SIZE(bufferSizeInK * 1024),
-        name_(fname == "-" ? "<stdin>" : fname),
-        buf_(new char[BUFFER_SIZE]),
-        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData) {}
-
-  FileByteSource(const FileByteSource &) = delete;
-  FileByteSource(FileByteSource &&) = delete;
-  FileByteSource &operator=(const FileByteSource &) = delete;
-  FileByteSource &operator=(FileByteSource &&) = delete;
-
-  ~FileByteSource() override {
-    delete[] buf_;
-  }
-
-  std::string name() const override {
-    return name_;
-  }
-
-  /// Position in the underlying data stream
-  size_t pos() const override { return pos_; }
-
-  Byte next() override {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    pos_++;
-    return Byte(*cur_++);
-  }
-
-  Byte peek() override {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    return Byte(*cur_);
-  }
-
-  // Add the base class's read() to the overload resolution list of this class.
-  using AuByteSource::read;
-
-  void read(size_t len, Fn &&func) override {
-    while (len) {
-      while (cur_ == limit_)
-        if (!read())
-          AU_THROW("reached eof while trying to read " << len << " bytes");
-      // limit_ > cur_, so cast to size_t is fine...
-      auto first = std::min(len, static_cast<size_t>(limit_ - cur_));
-      func(std::string_view(cur_, first));
-      pos_ += first;
-      cur_ += first;
-      len -= first;
-    }
-  }
-
-  void skip(size_t len) override {
-    seek(pos_ + len);
-  }
-
-  void seek(size_t abspos) override {
-    if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
-      auto relseek = pos_ - abspos;
-      cur_ -= relseek;
-      pos_ -= relseek;
-    } else {
-      doSeek(abspos);
-      cur_ = limit_ = buf_;
-      pos_ = abspos;
-      if (!read())
-        THROW_RT("failed to read from new location");
-    }
-  }
-
-  bool seekTo(std::string_view needle) override {
-    while (true) {
-      while (buffAvail() < needle.length()) {
-        // we might have just done a seek that left us with a very small
-        // amount of buffered data. alternatively, we might have already
-        // attempted to find 'needle' and failed. then we've done a seek to
-        // very near the end of the buffer, leaving just len(needle)-1 bytes.
-        // the seek automatically clears the buffer and re-reads, but the
-        // UNDERLYING source might just return the same few bytes again, in
-        // which case we'll fail on the next iteration. the contract is that
-        // the underlying source can return any non-zero number of bytes on a
-        // read(), but it won't return 0 unless it really actually has no more
-        // bytes to give us. therefore...
-
-        // we attempt to keep reading until we either have enough buffer
-        // to scan, or until we really can't get anything more.
-        // this is a crappy way of doing this, but given the
-        // current design, it's the simplest solution. this whole thing should
-        // be refactored...
-        if (!read())
-          return false;
-      }
-      auto found = static_cast<char *>(memmem(cur_, buffAvail(), needle.data(),
-        needle.length()));
-      if (found) {
-        assert(found >= cur_);
-        size_t offset = static_cast<size_t>(found - cur_);
-        pos_ += offset;
-        cur_ += offset;
-        return true;
-      } else {
-        // TODO for zipped files where seeking may expensive, it'll be better
-        // perhaps to copy the last few bytes to the start of buffer and just
-        // read again, since they're contiguous reads and we're not really seeking.
-        // but the zipped file source may hide that anyway using a context like
-        // zindex does
-        skip(buffAvail()-(needle.length()-1));
-      }
-    }
-  }
-
-private:
-  /// Free space in the buffer
-  size_t buffFree() const {
-    return BUFFER_SIZE - static_cast<size_t>(limit_ - buf_);
-  }
-
-  /// Available to be consumed
-  size_t buffAvail() const {
-    return static_cast<size_t>(limit_ - cur_);
-  }
-
-protected:
-  /// @return true if some data was read, false of 0 bytes were read.
-  bool read() {
-    return read(BUFFER_SIZE / 16);
-  }
-
-private:
-  bool read(size_t minHistSz) {
-    // Keep a minimum amount of consumed data in the buffer so we can seek back
-    // even in non-seekable data streams.
-    //const auto minHistSz = (BUFFER_SIZE / 16);
-    if (cur_ > buf_ + minHistSz) {
-      auto startOfHistory = cur_ - minHistSz;
-      memmove(buf_, startOfHistory,
-              static_cast<size_t>(limit_ - startOfHistory));
-      auto shift = startOfHistory - buf_;
-      cur_ -= shift;
-      limit_ -= shift;
-    }
-
-    ssize_t bytesRead = 0;
-    do {
-      bytesRead = doRead(limit_, buffFree());
-      if (bytesRead < 0) // TODO: && errno != EAGAIN ?
-        THROW_RT("Error reading file: " << strerror(errno));
-      if (bytesRead == 0 && waitForData_)
-        sleep(1);
-    } while (!bytesRead && waitForData_);
-
-    if (!bytesRead) return false;
-    limit_ += bytesRead;
-    return true;
-  }
-};
-
-class FileByteSourceImpl : public FileByteSource {
-  int fd_;
-
-public:
-  explicit FileByteSourceImpl(const std::string &fname, bool waitForData,
-                              size_t bufferSizeInK = 256)
-      : FileByteSource(fname, waitForData, bufferSizeInK) {
-    if (fname == "-") {
-      fd_ = fileno(stdin);
-    } else {
-      fd_ = ::open(fname.c_str(), O_RDONLY);
-    }
-    if (fd_ == -1)
-      THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
-#ifndef __APPLE__
-    ::posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL);  // TODO report error?
-#endif
-  }
-
-  ~FileByteSourceImpl() override {
-    close(fd_); // TODO report error?
-  }
-
-  ssize_t doRead(char *buf, size_t len) override {
-    return ::read(fd_, buf, len);
-  }
-
-  size_t endPos() const override {
-    struct stat stat;
-    if (auto res = fstat(fd_, &stat); res < 0)
-      THROW_RT("failed to stat file: " << strerror(errno));
-    if (stat.st_size < 0)
-      THROW_RT("file size was negative!");
-    return static_cast<size_t>(stat.st_size);
-  }
-
-  bool isSeekable() const override {
-    return lseek(fd_, 0, SEEK_CUR) == 0;
-  }
-
-  void doSeek(size_t abspos) override {
-    auto pos = lseek(fd_, static_cast<off_t>(abspos), SEEK_SET);
-    if (pos < 0) {
-      THROW_RT("failed to seek to desired location: " << strerror(errno));
-    }
-  }
-};
 
 class StringBuilder {
   std::string str_;
@@ -431,7 +135,7 @@ protected:
   template<typename Handler>
   void parseString(size_t pos, size_t len, Handler &handler) const {
     handler.onStringStart(pos, len);
-    source_.read(len, [&](std::string_view fragment) {
+    source_.readFunc(len, [&](std::string_view fragment) {
       handler.onStringFragment(fragment);
     });
     handler.onStringEnd();
@@ -695,24 +399,6 @@ private:
     }
     if (!hh.headerSeen)
       AU_THROW("This file doesn't appear to start with an au header record");
-  }
-};
-
-class AuDecoder {
-  std::string filename_;
-
-public:
-  AuDecoder(const std::string &filename)
-      : filename_(filename) {}
-
-  template<typename H>
-  void decode(H &handler, bool waitForData) const {
-    FileByteSourceImpl source(filename_, waitForData);
-    try {
-      RecordParser<H>(source, handler).parseStream();
-    } catch (parse_error &e) {
-      std::cerr << e.what() << std::endl;
-    }
   }
 };
 

@@ -13,7 +13,7 @@
 /** @file This pair of handlers can be used to process all _scalar_ key-value
  * pairs in an au file via a callback. If the value is not one of the ValType
  * types, the callback will not be called. Usage:
- * 
+ *
  *      au::BufferByteSource auBuf(someDataBuffer, bufferLen);
  *      KeyValueRecHandler handler(
  *        [](const std::string &key, au::KeyValueHandler::ValType val) {
@@ -145,4 +145,3 @@ struct KeyValueHandler : public au::NoopValueHandler {
 };
 
 } // namespace
-

@@ -1,5 +1,6 @@
 #include "au/AuEncoder.h"
 #include "au/AuDecoder.h"
+#include "au/FileByteSource.h"
 
 #include <benchmark/benchmark.h>
 

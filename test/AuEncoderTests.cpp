@@ -1,4 +1,5 @@
-#include <au/AuEncoder.h>
+#include "au/AuEncoder.h"
+#include "au/BufferByteSource.h"
 #include "JsonOutputHandler.h"
 
 #include "gtest/gtest.h"

@@ -283,18 +283,27 @@ int reallyDoGrep(Pattern &pattern, Dictionary &dictionary,
           posBuffer.erase(posBuffer.begin());
       }
       posBuffer.push_back(source.pos());
+      source.setPin(posBuffer.front());
       if (!RecordParser(source, recordHandler).parseUntilValue())
         break;
       if (grepHandler.matched() && total < numMatches) {
         matchPos = posBuffer.back();
         total++;
         if (pattern.count) continue;
+        // this is a little tricky. this seek() might send us backward over a
+        // number of records, which might cross over one or more dictionary
+        // resets. but since we know we've been in sync up to this point, we
+        // should always expect the needed dictionary to be within the last
+        // few that we're keeping cached. so no dictionary rebuild will be
+        // needed here, unless we seek backward over a large number of
+        // dictionary resets (like, more than 32 according to the current code)
         source.seek(posBuffer.front());
         while (!posBuffer.empty()) {
           RecordParser<AuRecordHandler<OutputHandler>>(
             source, outputRecordHandler).parseUntilValue();
           posBuffer.pop_back();
         }
+        source.clearPin();
         force = pattern.afterContext;
       } else if (force) {
         source.seek(posBuffer.back());

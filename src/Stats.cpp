@@ -1,4 +1,5 @@
 #include "au/AuDecoder.h"
+#include "au/FileByteSource.h"
 #include "AuRecordHandler.h"
 #include "TclapHelper.h"
 

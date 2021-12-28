@@ -173,7 +173,7 @@ public:
       size_t sor = source_.pos();
       try {
         const char marker[] = {marker::RecordEnd, '\n', 'V', 0};
-        if (!source_.seekTo(marker)) {
+        if (!source_.scanTo(marker)) {
           return false;
         }
         term();

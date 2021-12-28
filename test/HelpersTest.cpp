@@ -1,5 +1,6 @@
 #include <gmock/gmock.h>
 
+#include "au/BufferByteSource.h"
 #include "au/helpers/KeyValueHandler.h"
 
 TEST(HelpersTest, Builds) {

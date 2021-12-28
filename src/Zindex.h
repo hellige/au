@@ -1,6 +1,7 @@
 #pragma once
 
 #include "au/AuDecoder.h"
+#include "au/FileByteSource.h"
 
 #include <memory>
 #include <optional>
