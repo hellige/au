@@ -139,12 +139,16 @@ public:
   }
 
   void onValue(AuByteSource &source, const Dictionary::Dict &dict) {
-    dictionary_ = &dict;
+    initializeForValue(&dict);
+    ValueParser<GrepHandler> parser(source, *this);
+    parser.value();
+  }
+
+  void initializeForValue(const Dictionary::Dict *dict = nullptr) {
+    dictionary_ = dict;
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
     matched_ = false;
-    ValueParser<GrepHandler> parser(source, *this);
-    parser.value();
   }
 
   template<typename C, typename V>

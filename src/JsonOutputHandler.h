@@ -82,6 +82,24 @@ public:
     }
   }
 
+  void startJsonValue() {
+    buffer_.Clear();
+    writer_.Reset(buffer_);
+    dictionary_ = nullptr;
+  }
+
+  void endJsonValue() {
+    if (!writer_.IsComplete()) {
+      AU_THROW("rapidjson writer does not report a complete value after parse of"
+            " au value!");
+    }
+    if (buffer_.GetSize()) {
+      out
+          << std::string_view(buffer_.GetString(), buffer_.GetSize())
+          << std::endl;
+    }
+  }
+
   void onObjectStart() { writer_.StartObject(); }
   void onObjectEnd() { writer_.EndObject(); }
   void onArrayStart() { writer_.StartArray(); }

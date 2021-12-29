@@ -1,5 +1,6 @@
 #include "main.h"
 #include "AuOutputHandler.h"
+#include "JsonGrepHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 #include "TclapHelper.h"
@@ -93,10 +94,13 @@ int grepFile(Pattern &pattern,
   }
 
   if (encodeOutput) {
-    AuOutputHandler handler(
-        AU_STR("Encoded by au: grep output from json file "
-                << (fileName == "-" ? "<stdin>" : fileName)));
-    return doGrep(pattern, *source, handler);
+    // TODO while testing...
+    // AuOutputHandler handler(
+    //     AU_STR("Encoded by au: grep output from json file "
+    //             << (fileName == "-" ? "<stdin>" : fileName)));
+    // return doGrep(pattern, *source, handler);
+    JsonOutputHandler handler;
+    return doJGrep(pattern, *source, handler);
   } else {
     JsonOutputHandler handler;
     return doGrep(pattern, *source, handler);
