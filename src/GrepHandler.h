@@ -442,11 +442,13 @@ private:
   }
 
   bool outputValue() {
-    return RecordParser(this->source, outputRecordHandler_).parseUntilValue();
+    auto parser = RecordParser(this->source, outputRecordHandler_);
+    return parser.parseUntilValue();
   }
 
   bool parseValue() {
-    return RecordParser(this->source, grepRecordHandler_).parseUntilValue();
+    auto parser = RecordParser(this->source, grepRecordHandler_);
+    return parser.parseUntilValue();
   }
 };
 
