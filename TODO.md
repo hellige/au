@@ -1,5 +1,6 @@
 ### TODO
 
+ - Improve docs, especially for the command-line tool.
  - Make the header-check at start of stream apply to all commands, including
    bisecting `grep` and `zgrep`. Consider adding a flag to disable this check.
  - Add compressed encoding of doubles, either via special-casing common values,
@@ -22,14 +23,15 @@
 
 ### Consider
 
- - It would be nice if `grep` were able to binary search json as well as au.
-   It's a very handy feature, particularly coupled with the gzip support.
  - It would be nice for `au` to be able to run a persistent daemon (or some such
    approach) to be able to support a large number of repeated binary searches
    into the same file for values of the same key. By incrementally building a
    binary search tree, we should be able to get a nice speedup, not to mention
    avoiding the overhead of loading the index every single time, etc.
- - Might be nice for `au` to auto-detect compressed files, json, and au files.
+ - Automatically build in-memory index when binary searching non-indexed gzip
+   file? This is potentially very time-consuming, so might not be a good idea
+   to do it transparently. But with a command-line option, maybe?
+ - Might be nice for `au` to auto-detect compressed files.
  - Might be nice to have a slice command:
 
        au slice -k eventId 123412321321 13412312312
