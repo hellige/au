@@ -442,11 +442,13 @@ private:
   }
 
   bool outputValue() {
+    // clang 10 and 11 erroneously warn here if "parser" is inlined.
     auto parser = RecordParser(this->source, outputRecordHandler_);
     return parser.parseUntilValue();
   }
 
   bool parseValue() {
+    // clang 10 and 11 erroneously warn here if "parser" is inlined.
     auto parser = RecordParser(this->source, grepRecordHandler_);
     return parser.parseUntilValue();
   }
