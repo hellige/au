@@ -4,7 +4,11 @@
 [![GitHub license](https://img.shields.io/github/license/hellige/au)](https://github.com/hellige/au/blob/master/LICENSE)
 
 `au` is a file format, header-only C++ library and command-line tool for
-working with sequential record-oriented data, primarily log files.
+working with sequential record-oriented data, primarily log files. The tool
+supports grepping in `.au` files, and for convenience supports grepping normal
+JSON files as well. The combination of binary search within large json files,
+and the ability to index and offer random access to gzipped files, make this a
+very useful tool even for plain ASCII JSON files!
 
 
 ## Motivation and usage
@@ -58,6 +62,13 @@ This often reduces a multi-minute grep to 100ms! And you can also request
 a specific number of matches, records of context before/after your match, etc.
 (see `au grep --help` for details).
 
+`au` also provides the same ability to search within normal JSON files:
+
+    $ au grep -o eventTime 2018-07-16T08:01:23.102 biglog.json
+
+`au` will attempt to automatically detect whether the input stream is JSON
+or au-encoded.
+
 ### Compressed files
 
 When your files are big enough to be annoying, you'll probably also want to
@@ -66,10 +77,16 @@ can read and index gzipped files, after which binary search is supported there
 too:
 
     # build an index of the file, written to biglog.au.gz.auzx:
-    $ au zindex biglog.au.zx
+    $ au zindex biglog.au.gz
 
     # note grep is now zgrep! this is still a binary search:
     $ au zgrep -o eventTime 2018-07-16T08:01:23.102 biglog.au.gz
+
+And, once again, we can do this with normal JSON files as well:
+
+    $ au zindex biglog.json.gz
+    $ au zgrep -o eventTime 2018-07-16T08:01:23.102 biglog.json.gz
+
 
 ### Patterns
 
