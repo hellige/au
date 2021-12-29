@@ -1,6 +1,5 @@
 #include "main.h"
 #include "AuOutputHandler.h"
-#include "JsonGrepHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
 #include "TclapHelper.h"
@@ -100,10 +99,10 @@ int grepFile(Pattern &pattern,
     //             << (fileName == "-" ? "<stdin>" : fileName)));
     // return doGrep(pattern, *source, handler);
     JsonOutputHandler handler;
-    return doJGrep(pattern, *source, handler);
+    return JsonGrepper(pattern, *source, handler).doGrep();
   } else {
     JsonOutputHandler handler;
-    return doGrep(pattern, *source, handler);
+    return AuGrepper(pattern, *source, handler).doGrep();
   }
 }
 
