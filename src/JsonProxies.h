@@ -78,6 +78,9 @@ struct JsonSaxProxy
   }
 };
 
+template <typename Handler>
+JsonSaxProxy(Handler &handler) -> JsonSaxProxy<Handler>;
+
 struct AuByteSourceStream {
   typedef char Ch;
   AuByteSource &source;
