@@ -80,6 +80,20 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
   return true;
 }
 
+bool isAuFile(AuByteSource &source) {
+  auto headerMatched = false;
+  auto pos = source.pos();
+  try {
+    source.readFunc(3, [&](auto fragment) {
+      if (fragment == "HAU") {
+        headerMatched = true;
+      }
+    });
+  } catch (parse_error &) {}
+  source.seek(pos);
+  return headerMatched;
+}
+
 int grepFile(Pattern &pattern,
              const std::string &fileName,
              bool encodeOutput,
@@ -92,17 +106,25 @@ int grepFile(Pattern &pattern,
     source.reset(new FileByteSourceImpl(fileName, false));
   }
 
-  if (encodeOutput) {
-    // TODO while testing...
-    // AuOutputHandler handler(
-    //     AU_STR("Encoded by au: grep output from json file "
-    //             << (fileName == "-" ? "<stdin>" : fileName)));
-    // return doGrep(pattern, *source, handler);
-    JsonOutputHandler handler;
-    return JsonGrepper(pattern, *source, handler).doGrep();
+  if (isAuFile(*source)) {
+    if (encodeOutput) {
+      AuOutputHandler handler(
+          AU_STR("Encoded by au: grep output from au file "
+                 << (fileName == "-" ? "<stdin>" : fileName)));
+      return AuGrepper(pattern, *source, handler).doGrep();
+    } else {
+      JsonOutputHandler handler;
+      return AuGrepper(pattern, *source, handler).doGrep();
+    }
   } else {
-    JsonOutputHandler handler;
-    return AuGrepper(pattern, *source, handler).doGrep();
+    if (encodeOutput) {
+      std::cerr << fileName << " appears to be json. au-encoded output is not"
+        << " yet supported when searching within json" << std::endl;
+      return 1;
+    } else {
+      JsonOutputHandler handler;
+      return JsonGrepper(pattern, *source, handler).doGrep();
+    }
   }
 }
 

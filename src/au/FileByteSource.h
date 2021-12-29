@@ -170,7 +170,8 @@ private:
   /// @return true if some data was read, false if 0 bytes were read.
   bool read() {
     // Keep a minimum amount of consumed data in the buffer so we can seek back
-    // even in non-seekable data streams.
+    // even in non-seekable data streams. we rely on this to inspect the first
+    // few bytes of a file to guess the file type, and in a few other places.
     auto histSz = MIN_HIST_SIZE;
     // and if the pinned position extends that history, so be it.
     if (pinPos_ && *pinPos_ < pos_) {
@@ -249,7 +250,7 @@ public:
   }
 
   bool isSeekable() const override {
-    return lseek(fd_, 0, SEEK_CUR) == 0;
+    return lseek(fd_, 0, SEEK_CUR) != -1;
   }
 
 private:
