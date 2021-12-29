@@ -424,8 +424,10 @@ class AuGrepper : public Grepper<AuGrepper<OutputHandler>> {
   AuRecordHandler<GrepHandler> grepRecordHandler_;
 
 public:
-  AuGrepper(Pattern &pattern, AuByteSource &source, OutputHandler &handler)
-  : Grepper<AuGrepper<OutputHandler>>(pattern, source),
+  // clang warns too aggressively if the names of these arguments shadow the
+  // base class member vars. hence "p" and "s"...
+  AuGrepper(Pattern &p, AuByteSource &s, OutputHandler &handler)
+  : Grepper<AuGrepper<OutputHandler>>(p, s),
     dictionary_(32),
     outputRecordHandler_(dictionary_, handler),
     grepRecordHandler_(dictionary_, this->grepHandler) {}
@@ -459,8 +461,10 @@ class JsonGrepper : public Grepper<JsonGrepper<OutputHandler>> {
   OutputHandler &handler_;
 
 public:
-  JsonGrepper(Pattern &pattern, AuByteSource &source, OutputHandler &handler)
-  : Grepper<JsonGrepper<OutputHandler>>(pattern, source),
+  // clang warns too aggressively if the names of these arguments shadow the
+  // base class member vars. hence "p" and "s"...
+  JsonGrepper(Pattern &p, AuByteSource &s, OutputHandler &handler)
+  : Grepper<JsonGrepper<OutputHandler>>(p, s),
     handler_(handler) {}
 
 private:
@@ -487,6 +491,11 @@ private:
     return reader_.Parse<parseOpt>(wrappedSource, proxy);
   }
 };
+
+template <typename H>
+AuGrepper(Pattern &, AuByteSource &, H &) -> AuGrepper<H>;
+template <typename H>
+JsonGrepper(Pattern &, AuByteSource &, H &) -> JsonGrepper<H>;
 
 }
 

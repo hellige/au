@@ -93,7 +93,7 @@ struct AuByteSourceStream {
   size_t Tell() const { return source.pos(); }
 
   // rapidjson requires these for compilation, but won't call them.
-  Ch* PutBegin() { assert(false); return 0; }
+  Ch* PutBegin() { assert(false); return nullptr; }
   void Put(Ch) { assert(false); }
   void Flush() { assert(false); }
   size_t PutEnd(Ch*) { assert(false); return 0; }
