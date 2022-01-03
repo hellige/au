@@ -474,6 +474,15 @@ public:
 private:
   void seekSync(size_t pos) {
     this->source.seek(pos);
+    // for json files, we can't tell if we've landed precisely on the beginning
+    // of a record, since the only indicator is the newline separator (which
+    // would be at pos-1). we could try to detect that specifically, but in the
+    // normal course of bisecting a file, it really doesn't matter if we're off
+    // by one record either way. however, it *does* matter if we happen to land
+    // exactly on the start of the file, as may happen if the file is very
+    // small. so in particular case, we do need to detect it and do something
+    // special.
+    if (pos == 0) return;
     if (!this->source.scanTo("\n")) {
       AU_THROW("Failed to find record at position " << pos);
     }
