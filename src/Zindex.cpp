@@ -399,7 +399,7 @@ struct ZipByteSource::Impl {
     // TODO all of this, and the friend declaration in FileByteSourceImpl, is
     // quite ugly. find a cleaner way to upgrade a file byte source to a
     // ZipByteSource...
-    auto len = source.limit_ - source.cur_;
+    auto len = static_cast<size_t>(source.limit_ - source.cur_);
     if (len > sizeof(input_))
       THROW_RT("Initializing ZipByteStream from FileInputSream with too much"
         " buffered data (" << len << " > " << sizeof(input_) << ")");
