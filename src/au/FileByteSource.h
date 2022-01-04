@@ -217,32 +217,39 @@ private:
   }
 };
 
+struct Closer {
+    void operator()(FILE *f) {
+        if (f) ::fclose(f);
+    }
+};
+
+// A File is a self-closing FILE *.
+using File = std::unique_ptr<FILE, Closer>;
+
 class FileByteSourceImpl : public FileByteSource {
-  int fd_;
+  friend class ZipByteSource;
+  File file_;
 
 public:
   explicit FileByteSourceImpl(const std::string &fname, bool waitForData,
                               size_t bufferSizeInK = 256)
       : FileByteSource(fname, waitForData, bufferSizeInK) {
     if (fname == "-") {
-      fd_ = fileno(stdin);
+      file_ = File(stdin);
     } else {
-      fd_ = ::open(fname.c_str(), O_RDONLY);
+      file_ = File(::fopen(fname.c_str(), "rb"));
     }
-    if (fd_ == -1)
-      THROW_RT("open: " << strerror(errno) << " (" << fname << ")");
+    if (!file_)
+      THROW_RT("fopen: " << strerror(errno) << " (" << fname << ")");
 #ifndef __APPLE__
-    ::posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL);  // TODO report error?
+    // we don't care if this fails
+    ::posix_fadvise(::fileno(file_.get()), 0, 0, POSIX_FADV_SEQUENTIAL);
 #endif
-  }
-
-  ~FileByteSourceImpl() override {
-    close(fd_); // TODO report error?
   }
 
   size_t endPos() const override {
     struct stat stat;
-    if (auto res = fstat(fd_, &stat); res < 0)
+    if (auto res = fstat(fileno(file_.get()), &stat); res < 0)
       THROW_RT("failed to stat file: " << strerror(errno));
     if (stat.st_size < 0)
       THROW_RT("file size was negative!");
@@ -250,16 +257,16 @@ public:
   }
 
   bool isSeekable() const override {
-    return lseek(fd_, 0, SEEK_CUR) != -1;
+    return ::fseek(file_.get(), 0, SEEK_CUR) != -1;
   }
 
 private:
   ssize_t doRead(char *buf, size_t len) override {
-    return ::read(fd_, buf, len);
+    return ::fread(buf, 1, len, file_.get());
   }
 
   void doSeek(size_t abspos) override {
-    auto pos = lseek(fd_, static_cast<off_t>(abspos), SEEK_SET);
+    auto pos = ::fseek(file_.get(), static_cast<off_t>(abspos), SEEK_SET);
     if (pos < 0) {
       THROW_RT("failed to seek to desired location: " << strerror(errno));
     }

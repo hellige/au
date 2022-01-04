@@ -26,13 +26,17 @@ int help(int, char **) {
   usage(std::cout);
   std::cout << "\nCommands:\n"
     << "   cat      Decode listed files to stdout (alias au2json)\n"
-    << "   zcat     cat gzipped au file\n"
     << "   tail     Decode and/or follow file\n"
     << "   grep     Find records matching pattern\n"
-    << "   zgrep    grep in gzipped file\n"
     << "   enc      Encode listed files to stdout (alias json2au)\n"
     << "   stats    Display file statistics\n"
-    << "   zindex   Build an index of a gzipped au file\n";
+    << "   zindex   Build an index of a gzipped file (to support grep -o)\n"
+    << "            Works for .json and .au files. Index will be written to <file>.auzx\n"
+    << "            unless specified with -x <index>\n"
+    << "\n"
+    << "   zcat     cat gzipped au file (deprecated, just use cat)\n"
+    << "   zgrep    grep in gzipped file (deprecated, just use grep)\n";
+
   return 0;
 }
 
@@ -71,4 +75,3 @@ int main(int argc, char **argv) {
     std::cerr << "Runtime error: " << e.what() << std::endl;
   }
 }
-

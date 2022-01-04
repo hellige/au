@@ -8,6 +8,8 @@
 
 namespace au {
 
+class FileByteSourceImpl;
+
 int zindexFile(const std::string &fileName,
                const std::optional<std::string> &indexFilename);
 
@@ -16,6 +18,8 @@ class ZipByteSource : public FileByteSource {
   std::unique_ptr<Impl> impl_;
 public:
   ZipByteSource(const std::string &fname,
+                const std::optional<std::string> &indexFname);
+  ZipByteSource(FileByteSourceImpl &source,
                 const std::optional<std::string> &indexFname);
   ~ZipByteSource() override;
 

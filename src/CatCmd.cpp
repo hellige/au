@@ -1,11 +1,10 @@
 #include "AuOutputHandler.h"
+#include "AuRecordHandler.h"
 #include "Dictionary.h"
 #include "JsonOutputHandler.h"
-#include "au/AuDecoder.h"
-#include "au/FileByteSource.h"
-#include "AuRecordHandler.h"
+#include "StreamDetection.h"
 #include "TclapHelper.h"
-#include "Zindex.h"
+#include "au/AuDecoder.h"
 
 namespace au {
 
@@ -26,12 +25,8 @@ template<typename H>
 int doCat(const std::string &fileName, H &handler, bool compressed) {
   Dictionary dictionary;
   AuRecordHandler recordHandler(dictionary, handler);
-  std::unique_ptr<AuByteSource> source;
-  if (compressed) {
-    source = std::make_unique<ZipByteSource>(fileName, std::nullopt);
-  } else {
-    source = std::make_unique<FileByteSourceImpl>(fileName, false);
-  }
+  auto source = detectSource(fileName, std::nullopt, compressed);
+  if (!checkAuFile(*source)) return 1;
   try {
     RecordParser<AuRecordHandler<H>>(*source, recordHandler).parseStream();
   } catch (const std::exception &e) {

@@ -2,11 +2,10 @@
 #include "AuOutputHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
+#include "StreamDetection.h"
 #include "TclapHelper.h"
 #include "TimestampPattern.h"
-#include "Zindex.h"
 #include "au/AuDecoder.h"
-#include "au/FileByteSource.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -80,31 +79,12 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
   return true;
 }
 
-bool isAuFile(AuByteSource &source) {
-  auto headerMatched = false;
-  auto pos = source.pos();
-  try {
-    source.readFunc(3, [&](auto fragment) {
-      if (fragment == "HAU") {
-        headerMatched = true;
-      }
-    });
-  } catch (parse_error &) {}
-  source.seek(pos);
-  return headerMatched;
-}
-
 int grepFile(Pattern &pattern,
              const std::string &fileName,
              bool encodeOutput,
              bool compressed,
              const std::optional<std::string> &indexFile) {
-  std::unique_ptr<AuByteSource> source;
-  if (compressed) {
-    source.reset(new ZipByteSource(fileName, indexFile));
-  } else {
-    source.reset(new FileByteSourceImpl(fileName, false));
-  }
+  auto source = detectSource(fileName, indexFile, compressed);
 
   if (isAuFile(*source)) {
     if (encodeOutput) {

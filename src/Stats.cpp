@@ -1,6 +1,6 @@
 #include "au/AuDecoder.h"
-#include "au/FileByteSource.h"
 #include "AuRecordHandler.h"
+#include "StreamDetection.h"
 #include "TclapHelper.h"
 
 #include <cmath>
@@ -314,11 +314,12 @@ public:
       : filename_(filename) {}
 
   int decode(StatsRecordHandler &handler) const {
-    FileByteSourceImpl source(filename_, false);
+    auto source = detectSource(filename_, std::nullopt, false);
+    if (!checkAuFile(*source)) return 1;
     try {
-      RecordParser(source, handler).parseStream();
+      RecordParser(*source, handler).parseStream();
     } catch (parse_error &e) {
-      std::cout << e.what() << std::endl;
+      std::cerr << e.what() << std::endl;
       return 1;
     }
 
@@ -342,13 +343,13 @@ public:
     }
 
     std::cout
-        << "  Total read: " << prettyBytes(source.pos()) << '\n'
+        << "  Total read: " << prettyBytes(source->pos()) << '\n'
         << "  Records: " << commafy(handler.numRecords) << '\n'
         << "     Version headers: " << commafy(handler.headers.size()) << '\n'
         << "     Dictionary resets: " << commafy(handler.dictClears) << '\n'
         << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n';
-    handler.valueHist.dumpStats(source.pos());
-    handler.vh.dumpStats(source.pos());
+    handler.valueHist.dumpStats(source->pos());
+    handler.vh.dumpStats(source->pos());
 
     return 0;
   }
@@ -373,15 +374,13 @@ int stats(int argc, const char * const *argv) {
 
   if (!tclap.parse(argc, argv)) return 1;
 
-  if (fileNames.getValue().empty()) {
+  std::vector<std::string> inputFiles{"-"};
+  if (fileNames.isSet()) inputFiles = fileNames.getValue();
+
+  for (auto &f : fileNames.getValue()) {
     StatsRecordHandler handler(dictDump.isSet());
-    return StatsDecoder("-").decode(handler);
-  } else {
-    for (auto &f : fileNames.getValue()) {
-      StatsRecordHandler handler(dictDump.isSet());
-      auto result = StatsDecoder(f).decode(handler);
-      if (result) return result;
-    }
+    auto result = StatsDecoder(f).decode(handler);
+    if (result) return result;
   }
 
   return 0;

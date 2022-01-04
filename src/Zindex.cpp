@@ -38,7 +38,7 @@ std::string getBaseName(const std::string &path) {
 
 struct ZlibError : std::runtime_error {
   ZlibError(int result)
-  : std::runtime_error(std::string("Error from zlib : ") + zError(result)) {}
+  : std::runtime_error(std::string("Error from zlib: ") + zError(result)) {}
 };
 
 void X(int zlibErr) {
@@ -89,15 +89,6 @@ struct ZStream {
   ZStream(ZStream &) = delete;
   ZStream &operator=(ZStream &) = delete;
 };
-
-struct Closer {
-    void operator()(FILE *f) {
-        if (f) ::fclose(f);
-    }
-};
-
-// A File is a self-closing FILE *.
-using File = std::unique_ptr<FILE, Closer>;
 
 struct CachedContext {
   ZStream zs_;
@@ -277,13 +268,14 @@ struct Zindex {
     metadataParser.parse(source, dictionary);
     auto &meta = metadataParser.document();
     if (!meta.IsObject())
-      THROW_RT("First record in index file is not a json object!");
+      THROW_RT("First record in index " << filename
+        << " is not a json object!");
     auto fileType = std::string_view(meta["fileType"].GetString(),
                                      meta["fileType"].GetStringLength());
     if (fileType != "zindex")
-      THROW_RT("Wrong fileType in index, expected 'zindex'");
+      THROW_RT("Wrong fileType in index " << filename << ", expected 'zindex'");
     if (!meta["version"].IsInt() || meta["version"].GetInt() != 1)
-      THROW_RT("Wrong version index, expected version 1");
+      THROW_RT("Wrong version in index " << filename << ", expected version 1");
     compressedFilename =
         std::string_view(meta["compressedFile"].GetString(),
                          meta["compressedFile"].GetStringLength());
@@ -308,17 +300,17 @@ struct Zindex {
     }
 
     if (index_.empty())
-      THROW_RT("Index should contain at least one entry!");
+      THROW_RT("Index " << filename <<  " should contain at least one entry!");
 
     const auto &last = index_.back();
     if (!last.window.empty()) {
-      THROW_RT("Index appears to be incomplete: Final entry has"
-               " non-empty compression window data.");
+      THROW_RT("Index " << filename << " appears to be incomplete: Final entry"
+               " has non-empty compression window data.");
     }
 
     if (last.compressedOffset != compressedSize) {
-      THROW_RT("Index appears to be incomplete: Final entry has"
-               " compressed offset " << last.compressedOffset
+      THROW_RT("Index " << filename << " appears to be incomplete: Final entry"
+               " has compressed offset " << last.compressedOffset
                << " but metadata shows compressed size " << compressedSize);
     }
   }
@@ -355,9 +347,10 @@ struct ZipByteSource::Impl {
   size_t outputSize_;
   uint8_t *output_;
 
-  Impl(const std::string &fname,
+  Impl(File &&file,
+       const std::string &fname,
        const std::optional<std::string> &indexFname)
-      : compressed_(fopen(fname.c_str(), "rb")),
+      : compressed_(std::move(file)),
         index_([&]() -> std::optional<Zindex> {
           auto name = getIndexFilename(fname, indexFname);
           if (::access(name.c_str(), F_OK) == 0) {
@@ -382,10 +375,10 @@ struct ZipByteSource::Impl {
                    << index_->compressedFilename << "', expected '"
                    << getBaseName(fname) << "'");
 
-    struct stat stats;
-    if (fstat(fileno(compressed_.get()), &stats) != 0)
-      THROW_RT("Unable to get file stats"); // TODO errno
     if (index_) {
+      struct stat stats;
+      if (fstat(fileno(compressed_.get()), &stats) != 0)
+        THROW_RT("Unable to get file stats"); // TODO errno
       if (stats.st_size != static_cast<int64_t>(index_->compressedSize))
         THROW_RT("Compressed size changed since index was built");
       if (index_->compressedModTime != static_cast<uint64_t>(stats.st_mtime))
@@ -393,6 +386,26 @@ struct ZipByteSource::Impl {
     }
 
     context_->zs_.stream.avail_in = 0;
+  }
+
+  Impl(const std::string &fname,
+       const std::optional<std::string> &indexFname)
+      : Impl(File(fopen(fname.c_str(), "rb")), fname, indexFname) {}
+
+  Impl(FileByteSourceImpl &source, // TODO rvalue ref?
+       const std::optional<std::string> &indexFname)
+      : Impl(std::move(source.file_), source.name(), indexFname) {
+
+    // TODO all of this, and the friend declaration in FileByteSourceImpl, is
+    // quite ugly. find a cleaner way to upgrade a file byte source to a
+    // ZipByteSource...
+    size_t len = source.limit_ - source.cur_;
+    if (len > sizeof(input_))
+      THROW_RT("Initializing ZipByteStream from FileInputSream with too much"
+        " buffered data (" << len << " > " << sizeof(input_) << ")");
+    ::memcpy(input_, source.cur_, len);
+    context_->zs_.stream.avail_in = static_cast<uint32_t>(len);
+    context_->zs_.stream.next_in = input_;
   }
 
   ~Impl() {
@@ -537,6 +550,11 @@ ZipByteSource::ZipByteSource(const std::string &fname,
                              const std::optional<std::string> &indexFilename)
 : FileByteSource(fname, false),
   impl_(std::make_unique<Impl>(fname, indexFilename)) {}
+
+ZipByteSource::ZipByteSource(FileByteSourceImpl &source,
+                             const std::optional<std::string> &indexFilename)
+: FileByteSource(source.name(), false),
+  impl_(std::make_unique<Impl>(source, indexFilename)) {}
 
 ZipByteSource::~ZipByteSource() {}
 

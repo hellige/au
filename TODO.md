@@ -1,8 +1,7 @@
 ### TODO
 
  - Improve docs, especially for the command-line tool.
- - Make the header-check at start of stream apply to all commands, including
-   bisecting `grep` and `zgrep`. Consider adding a flag to disable this check.
+ - Detect non-json, non-au files, at least simple cases.
  - Add compressed encoding of doubles, either via special-casing common values,
    dictionary or some combination.
  - Add checks to emit empty dict-add record if backref approaches max? (Has
@@ -20,6 +19,15 @@
  - `-e` arg to `tail`
  - scan-buf-size arg to `grep` (for bisect)
  - Add grepping of content of keys. (This is just a bit different from `-k`...)
+ - The gzip handling code has an extra layer of buffering. There's the buffer
+   in the FileByteSource and then an `output_` buffer in ZipByteSource, and 
+   data is pointlessly copied between. This is an artifact of lifting the gzip
+   code from `zindex`, but it would be good to clean that up and eliminate the
+   intermediate buffer.
+ - Get rid of the pure virtual AuByteSource and make BufferByteSource a subtype
+   like the other two. The buffer case is much less common, and I don't think
+   it's worth adding lots of virtual calls in the common case just to keep that
+   code simple.
 
 ### Consider
 
@@ -31,7 +39,6 @@
  - Automatically build in-memory index when binary searching non-indexed gzip
    file? This is potentially very time-consuming, so might not be a good idea
    to do it transparently. But with a command-line option, maybe?
- - Might be nice for `au` to auto-detect compressed files.
  - Might be nice to have a slice command:
 
        au slice -k eventId 123412321321 13412312312
