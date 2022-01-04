@@ -153,7 +153,7 @@ public:
   }
 
 private:
-  virtual ssize_t doRead(char *buf, size_t len) = 0;
+  virtual size_t doRead(char *buf, size_t len) = 0;
   virtual void doSeek(size_t abspos) = 0;
 
   /// Free space in the buffer
@@ -202,11 +202,9 @@ private:
         limit_ = buf_ +  limitPos;
     }
 
-    ssize_t bytesRead = 0;
+    size_t bytesRead = 0;
     do {
       bytesRead = doRead(limit_, buffFree());
-      if (bytesRead < 0) // TODO: && errno != EAGAIN ?
-        THROW_RT("Error reading file: " << strerror(errno));
       if (bytesRead == 0 && waitForData_)
         sleep(1);
     } while (!bytesRead && waitForData_);
@@ -261,7 +259,7 @@ public:
   }
 
 private:
-  ssize_t doRead(char *buf, size_t len) override {
+  size_t doRead(char *buf, size_t len) override {
     return ::fread(buf, 1, len, file_.get());
   }
 

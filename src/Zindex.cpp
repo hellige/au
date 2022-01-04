@@ -412,14 +412,14 @@ struct ZipByteSource::Impl {
     delete[] output_;
   }
 
-  ssize_t doRead(char *buf, size_t len) {
+  size_t doRead(char *buf, size_t len) {
     auto &c = *context_;
     if (c.cur_ == c.limit_) gzread();
     auto n = std::min(c.limit_ - c.cur_, len);
     ::memcpy(buf, output_+c.cur_, n);
     c.cur_ += n;
     c.pos_ += n;
-    return static_cast<ssize_t>(n);
+    return n;
   }
 
   size_t endPos() const {
@@ -562,7 +562,7 @@ bool ZipByteSource::isSeekable() const {
   return impl_->isSeekable();
 }
 
-ssize_t ZipByteSource::doRead(char *buf, size_t len) {
+size_t ZipByteSource::doRead(char *buf, size_t len) {
   return impl_->doRead(buf, len);
 }
 

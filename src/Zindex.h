@@ -24,7 +24,7 @@ public:
   ~ZipByteSource() override;
 
   bool isSeekable() const override;
-  ssize_t doRead(char *buf, size_t len) override;
+  size_t doRead(char *buf, size_t len) override;
   size_t endPos() const override;
   void doSeek(size_t abspos) override;
 };
