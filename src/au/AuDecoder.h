@@ -325,11 +325,11 @@ public:
 
   void parseStream(bool expectHeader = true) const {
     if (expectHeader) checkHeader();
-    while (source_.peek() != EOF) record();
+    while (!source_.peek().isEof()) record();
   }
 
   bool parseUntilValue() {
-    while (source_.peek() != EOF)
+    while (!source_.peek().isEof())
       if (record()) return true;
     return false;
   }
@@ -390,7 +390,7 @@ private:
   void checkHeader() const {
     // this is a special case. empty files should be considered ok, even
     // though they don't have a header/magic bytes, etc...
-    if (source_.peek() == EOF) return;
+    if (source_.peek().isEof()) return;
     HeaderHandler hh;
     try {
       RecordParser<HeaderHandler>(source_, hh).record();

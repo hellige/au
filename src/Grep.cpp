@@ -82,11 +82,14 @@ bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
 int grepFile(Pattern &pattern,
              const std::string &fileName,
              bool encodeOutput,
+             bool asciiLog,
              bool compressed,
              const std::optional<std::string> &indexFile) {
   auto source = detectSource(fileName, indexFile, compressed);
 
-  if (isAuFile(*source)) {
+  if (asciiLog) {
+    return AsciiGrepper(pattern, *source).doGrep();
+  } else if (isAuFile(*source)) {
     if (encodeOutput) {
       AuOutputHandler handler(
           AU_STR("Encoded by au: grep output from au file "
@@ -96,7 +99,7 @@ int grepFile(Pattern &pattern,
       JsonOutputHandler handler;
       return AuGrepper(pattern, *source, handler).doGrep();
     }
-  } else {
+  } else { // assume file is json
     if (encodeOutput) {
       std::cerr << fileName << " appears to be json. au-encoded output is not"
         << " yet supported when searching within json" << std::endl;
@@ -117,6 +120,7 @@ void usage(const char *cmd) {
       << "  -k --key <key>      match pattern only in object values with key <key>\n"
       << "  -o --ordered <key>  like -k, but values for <key> are assumed to to be\n"
       << "                      roughly ordered\n"
+      << "  -l --ascii-log      see below\n"
       << "  -i --integer        match <pattern> with integer values\n"
       << "  -d --double         match <pattern> with double-precision float values\n"
       << "  -t --timestamp      match <pattern> with timestamps: format is\n"
@@ -132,7 +136,14 @@ void usage(const char *cmd) {
       << "  -A --after <n>      show <n> records of context after each match\n"
       << "  -C --context <n>    equivalent to -A n -B n\n"
       << "  -c --count          print count of matching records per file\n"
-      << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n";
+      << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n"
+      << "\n"
+      << "  When -l is specified, the input files are assumed to be plain ASCII\n"
+      << "  log files (rather than JSON or au-encoded), possibly gzipped, with a\n"
+      << "  timestamp at the beginning of each line. <pattern> is expected to be\n"
+      << "  a timestamp (or prefix thereof, as with -t). Files are binary searched\n"
+      << "  for lines with timestamps matching <pattern>. Most output-controlling\n"
+      << "  arguments (e.g., -m, -C, -c) are accepted in combination with -l.\n";
 }
 
 int grepCmd(int argc, const char * const *argv, bool compressed) {
@@ -152,6 +163,7 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
       "m", "matches", "matches", false, 0, "uint32_t", tclap.cmd());
   TCLAP::ValueArg<std::string> index(
       "x", "index", "index", false, "", "string", tclap.cmd());
+  TCLAP::SwitchArg asciiLog("l", "ascii-log", "ascii-log", tclap.cmd());
   TCLAP::SwitchArg encode("e", "encode", "encode", tclap.cmd());
   TCLAP::SwitchArg count("c", "count", "count", tclap.cmd());
   TCLAP::SwitchArg matchAtom("a", "atom", "atom", tclap.cmd());
@@ -167,9 +179,15 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
 
   if (!tclap.parse(argc, argv)) return 1;
 
-  if (key.isSet() && ordered.isSet()) {
-    std::cerr << "only one of -k or -o may be specified." << std::endl;
-    return 1;
+  {
+    auto n = 0;
+    if (key.isSet()) n++;
+    if (ordered.isSet()) n++;
+    if (asciiLog.isSet()) n++;
+    if (n > 1) {
+      std::cerr << "only one of -k, -o or -l may be specified." << std::endl;
+      return 1;
+    }
   }
 
   Pattern pattern;
@@ -178,9 +196,13 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
     pattern.keyPattern = ordered.getValue();
     pattern.bisect = true;
   }
+  if (asciiLog.isSet()) {
+    pattern.bisect = true;
+  }
 
   if (matches.isSet()) pattern.numMatches = matches.getValue();
 
+  bool explicitTimestampMatch = asciiLog.isSet() || matchTimestamp.isSet();
   bool explicitStringMatch = matchString.isSet() || matchSubstring.isSet();
   bool numericMatch = matchInt.isSet() || matchDouble.isSet()
                       || matchTimestamp.isSet() || matchAtom.isSet();
@@ -219,10 +241,10 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
     }
   }
 
-  if (defaultMatch || matchTimestamp.isSet()) {
+  if (defaultMatch || explicitTimestampMatch) {
     bool success = setTimestampPattern(pattern, pat.getValue());
-    if (!success && matchTimestamp.isSet()) {
-      std::cerr << "-t specified, but pattern '"
+    if (!success && explicitTimestampMatch) {
+      std::cerr << "-t/-l specified, but pattern '"
                 << pat.getValue() << "' is not a date/time."
                 << std::endl;
       return 1;
@@ -252,11 +274,13 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
   if (compressed && index.isSet()) indexFile = index.getValue();
 
   if (fileNames.getValue().empty()) {
-    return grepFile(pattern, "-", encode.isSet(), compressed, indexFile);
+    return grepFile(pattern, "-", encode.isSet(), asciiLog.isSet(), compressed,
+                    indexFile);
   } else {
     for (auto &f : fileNames) {
       auto result =
-        grepFile(pattern, f, encode.isSet(), compressed, indexFile);
+          grepFile(pattern, f, encode.isSet(), asciiLog.isSet(), compressed,
+                   indexFile);
       if (result) return result;
     }
   }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "au/AuCommon.h"
+
 #include <string_view>
 #include <chrono>
 #include <cctype>
@@ -10,8 +12,9 @@ namespace au {
 
 namespace {
 
-bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
-                 int &end, int max, int min = 0, int base = 0) {
+template <bool strict=true>
+bool parsePrefix(std::string_view &str, size_t len, const char *delims,
+                 int &start, int &end, int max, int min = 0, int base = 0) {
   if (str.empty()) {
     start = end = 0;
     return true;
@@ -22,8 +25,11 @@ bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
   for (; i < len; i++) {
     if (i == str.size()) break;
     auto c = str[i];
-    if (c == delim) return false;
-    if (!isdigit(c)) return false;
+    if (strchr(delims, c)) return false;
+    if (!isdigit(c)) {
+      if (strict) return false;
+      break;
+    }
     result = 10 * result + c - '0';
   }
   str.remove_prefix(i);
@@ -31,9 +37,9 @@ bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
   if (str.empty()) {
     end += 1;
   } else {
-    if (str[0] != delim) return false;
+    if (!strchr(delims, str[0]) && strict) return false;
     str.remove_prefix(1);
-    if (str.empty()) return false;
+    if (str.empty() && strict) return false;
   }
   for (; i < len; i++) {
     start *= 10;
@@ -48,6 +54,7 @@ bool parsePrefix(std::string_view &str, size_t len, char delim, int &start,
 
 using TimestampPattern = std::pair<time_point, time_point>;
 
+template <bool strict=true>
 std::optional<TimestampPattern>
 parseTimestampPattern(std::string_view sv) {
   std::tm start;
@@ -55,22 +62,30 @@ parseTimestampPattern(std::string_view sv) {
   memset(&start, 0, sizeof(tm));
   memset(&end, 0, sizeof(tm));
 
-  if (!parsePrefix(sv, 4, '-', start.tm_year, end.tm_year, 9999, 1900, 1900))
+  // note the occurence of <strict> vs always-strict. it seems reasonable, in
+  // non-strict mode, to insist on at least a full yyyy-mm-dd date, and then if
+  // followed by a number, at least "yyyy-mm-dd hh:mm". other formats like
+  // "yyyy-mm" or "yyyy-mm-dd hh" are pretty rare, and seem highly likely to
+  // just lead to confusion. note that this applies *only* in non-strict mode
+  // with trailing characters, you can still use patterns like those for
+  // searching.
+
+  if (!parsePrefix(sv, 4, "-", start.tm_year, end.tm_year, 9999, 1900, 1900))
     return std::nullopt;
-  if (!parsePrefix(sv, 2, '-', start.tm_mon, end.tm_mon, 12, 1, 1))
+  if (!parsePrefix(sv, 2, "-", start.tm_mon, end.tm_mon, 12, 1, 1))
     return std::nullopt;
-  if (!parsePrefix(sv, 2, 'T', start.tm_mday, end.tm_mday, 31, 1))
+  if (!parsePrefix<strict>(sv, 2, "T ", start.tm_mday, end.tm_mday, 31, 1))
     return std::nullopt;
-  if (!parsePrefix(sv, 2, ':', start.tm_hour, end.tm_hour, 23))
+  if (!parsePrefix(sv, 2, ":", start.tm_hour, end.tm_hour, 23))
     return std::nullopt;
-  if (!parsePrefix(sv, 2, ':', start.tm_min, end.tm_min, 59))
+  if (!parsePrefix<strict>(sv, 2, ":", start.tm_min, end.tm_min, 59))
     return std::nullopt;
-  if (!parsePrefix(sv, 2, '.', start.tm_sec, end.tm_sec, 59))
+  if (!parsePrefix<strict>(sv, 2, ".,", start.tm_sec, end.tm_sec, 59))
     return std::nullopt;
 
   int startNanos;
   int endNanos;
-  if (!parsePrefix(sv, 9, 0, startNanos, endNanos, 999999999))
+  if (!parsePrefix<strict>(sv, 9, "", startNanos, endNanos, 999999999))
     return std::nullopt;
 
   std::time_t ttstart = timegm(&start);

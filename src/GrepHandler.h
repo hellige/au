@@ -294,22 +294,25 @@ private:
       size_t suffixLength = std::numeric_limits<size_t>::max();
       if (pattern.scanSuffixAmount) suffixLength = *pattern.scanSuffixAmount;
 
-      while (source.peek() != EOF) {
+      while (!source.peek().isEof()) {
         if (!force) {
           if (total >= numMatches) break;
           if (source.pos() - matchPos > suffixLength) break;
         }
 
+        auto candidatePos = source.pos();
         if (!pattern.count) {
           if (posBuffer.size() == pattern.beforeContext + 1)
             posBuffer.erase(posBuffer.begin());
+          posBuffer.push_back(candidatePos);
+          source.setPin(posBuffer.front());
         }
-        posBuffer.push_back(source.pos());
-        source.setPin(posBuffer.front());
         if (!static_cast<This *>(this)->parseValue())
           break;
         if (grepHandler.matched() && total < numMatches) {
-          matchPos = posBuffer.back();
+          // avoid using posBuffer.back() for this, so that we can completely
+          // ignore posBuffer in case pattern.count is true
+          matchPos = candidatePos;
           total++;
           if (pattern.count) continue;
           // this is a little tricky. this seek() might send us backward over a
@@ -320,15 +323,17 @@ private:
           // needed here, unless we seek backward over a large number of
           // dictionary resets (like, more than 32 according to the current
           // code)
+          source.clearPin();
           source.seek(posBuffer.front());
           while (!posBuffer.empty()) {
             static_cast<This *>(this)->outputValue();
             posBuffer.pop_back();
           }
-          source.clearPin();
           force = pattern.afterContext;
         } else if (force) {
+          source.clearPin();
           source.seek(posBuffer.back());
+          posBuffer.clear();
           static_cast<This *>(this)->outputValue();
           force--;
         }
@@ -441,10 +446,10 @@ private:
     }
   }
 
-  bool outputValue() {
+  void outputValue() {
     // clang 10 and 11 erroneously warn here if "parser" is inlined.
     auto parser = RecordParser(this->source, outputRecordHandler_);
-    return parser.parseUntilValue();
+    parser.parseUntilValue();
   }
 
   bool parseValue() {
@@ -488,13 +493,12 @@ private:
     }
   }
 
-  bool outputValue() {
+  void outputValue() {
     JsonSaxProxy proxy(handler_);
     AuByteSourceStream wrappedSource(this->source);
     handler_.startJsonValue();
-    auto res = reader_.Parse<parseOpt>(wrappedSource, proxy);
+    reader_.Parse<parseOpt>(wrappedSource, proxy);
     handler_.endJsonValue();
-    return res;
   }
 
   bool parseValue() {
@@ -502,6 +506,70 @@ private:
     JsonSaxProxy proxy(this->grepHandler);
     AuByteSourceStream wrappedSource(this->source);
     return reader_.Parse<parseOpt>(wrappedSource, proxy);
+  }
+};
+
+class AsciiGrepper : public Grepper<AsciiGrepper> {
+  friend class Grepper<AsciiGrepper>;
+
+public:
+  // clang warns too aggressively if the names of these arguments shadow the
+  // base class member vars. hence "p" and "s"...
+  AsciiGrepper(Pattern &p, AuByteSource &s)
+  : Grepper<AsciiGrepper>(p, s) {}
+
+private:
+  void seekSync(size_t pos) {
+    source.seek(pos);
+    // see comment in JsonGrepper above...
+    if (pos == 0) return;
+    if (!source.scanTo("\n")) {
+      AU_THROW("Failed to find record at position " << pos);
+    }
+    source.next();
+  }
+
+  void outputValue() {
+    // this contortion with the pin will force the byte source to keep the
+    // entire line buffered. then the call to read will definitely give us the
+    // whole line in one callback.
+    auto start = source.pos();
+    source.setPin(start);
+    // if we don't find a newline, then we're left at the end of the stream,
+    // and ought to just print the last (unterminated) line anyway. we just need
+    // to know to add the newline in that case. we can unconditionally call
+    // next() either way.
+    auto foundNewline = source.scanTo("\n");
+    source.next();
+    auto len = source.pos() - start;
+    source.clearPin();
+    source.seek(start);
+    source.readFunc(len, [](auto line) { std::cout << line; });
+    if (!foundNewline) std::cout << "\n";
+  }
+
+  bool parseValue() {
+    grepHandler.initializeForValue();
+
+    // we only bail when we really have nothing left to read. we don't
+    // necessarily want to require a final newline.
+    if (source.peek().isEof()) return false;
+
+    constexpr size_t MAX_TIMESTAMP_LEN =
+        sizeof("yyyy-mm-ddThh:mm:ss.mmmuuunnn") - 1;
+    char buf[MAX_TIMESTAMP_LEN];
+    auto len = 0u;
+    while (len < sizeof(buf)) {
+      if (source.peek().isEof() || source.peek() == '\n')
+        break;
+      buf[len++] = source.next().charValue();
+    }
+    auto res = parseTimestampPattern<false>(std::string_view(buf, len));
+    if (res) grepHandler.onTime(0, res->first);
+
+    source.scanTo("\n");
+    source.next();
+    return true;
   }
 };
 

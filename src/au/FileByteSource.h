@@ -68,8 +68,7 @@ public:
       while (cur_ == limit_)
         if (!read())
           AU_THROW("reached eof while trying to read " << len << " bytes");
-      // limit_ > cur_, so cast to size_t is fine...
-      auto first = std::min(len, static_cast<size_t>(limit_ - cur_));
+      auto first = std::min(len, buffAvail());
       func(std::string_view(cur_, first));
       pos_ += first;
       cur_ += first;
@@ -78,11 +77,16 @@ public:
   }
 
   void skip(size_t len) override {
-    // this implementation might conceivably fail if we're processing a
-    // non-seekable stream like stdin. this has never been an issue in practice,
-    // since we almost always call skip() with small values of len. but it's
-    // worth noting, in case it ever comes up.
-    seek(pos_ + len);
+    // it's better to avoid using seek() even for large skips. not all streams
+    // are seekable, and the overwhelming majority of skips are tiny.
+    while (len) {
+      auto jump = std::min(len, buffAvail());
+      cur_ += jump;
+      pos_ += jump;
+      len -= jump;
+      if (len && !read())
+        THROW_RT("failed to read from new location while skipping");
+    }
   }
 
   void setPin(size_t abspos) override final {
@@ -97,18 +101,20 @@ public:
   }
 
   void seek(size_t abspos) override {
-    if (abspos < pos_ && pos_ - abspos <= static_cast<size_t>(cur_ - buf_)) {
-      auto relseek = pos_ - abspos;
-      cur_ -= relseek;
-      pos_ -= relseek;
-    } else {
-      doSeek(abspos);
-      cur_ = limit_ = buf_;
+    assert(!pinPos_);
+    clearPin(); // assert AND clear is a little much.
+    auto bufStartPos = pos_ - (cur_ - buf_);
+    if (abspos >= bufStartPos && abspos < (pos_ + buffAvail())) {
+      cur_ = buf_ + (abspos - bufStartPos);
       pos_ = abspos;
-      clearPin(); // if we actually have to seek the stream, just forget the pin
-      if (!read())
-        THROW_RT("failed to read from new location");
+      return;
     }
+
+    doSeek(abspos);
+    cur_ = limit_ = buf_;
+    pos_ = abspos;
+    if (read()) return;
+    THROW_RT("failed to read from new location");
   }
 
   bool scanTo(std::string_view needle) override {
@@ -126,10 +132,9 @@ public:
         // bytes to give us. therefore...
 
         // we attempt to keep reading until we either have enough buffer
-        // to scan, or until we really can't get anything more.
-        // this is a crappy way of doing this, but given the
-        // current design, it's the simplest solution. this whole thing should
-        // be refactored...
+        // to scan, or until we really can't get anything more. this is the
+        // simplest solution, and since all the values of needle are very short
+        // strings, it's fine.
         if (!read())
           return false;
       }
@@ -142,11 +147,6 @@ public:
         cur_ += offset;
         return true;
       } else {
-        // TODO for zipped files where seeking may expensive, it'll be better
-        // perhaps to copy the last few bytes to the start of buffer and just
-        // read again, since they're contiguous reads and we're not really seeking.
-        // but the zipped file source may hide that anyway using a context like
-        // zindex does
         skip(buffAvail()-(needle.length()-1));
       }
     }

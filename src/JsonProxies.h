@@ -17,7 +17,6 @@ struct JsonSaxProxy
   JsonSaxProxy(Handler &handler) : handler(handler) {}
 
   bool tryTime(const char *str, rapidjson::SizeType length) {
-    using namespace std::chrono;
     auto result = parseTimestampPattern(std::string_view(str, length));
     if (result) {
       handler.onTime(0, result->first);
