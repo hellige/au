@@ -271,7 +271,7 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
   pattern.count = count.isSet();
 
   std::optional<std::string> indexFile;
-  if (compressed && index.isSet()) indexFile = index.getValue();
+  if (index.isSet()) indexFile = index.getValue();
 
   if (fileNames.getValue().empty()) {
     return grepFile(pattern, "-", encode.isSet(), asciiLog.isSet(), compressed,

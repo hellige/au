@@ -20,7 +20,10 @@ namespace {
 
 constexpr size_t DefaultIndexEvery = 8 * 1024 * 1024u;
 constexpr size_t WindowSize = 32768u;
-constexpr size_t ChunkSize = 16384u;
+// TODO to ensure upgrading from an uncompressed stream works, this must
+// currently be at least as big as the buf_ in the FileByteStream. this is NOT
+// the best way to do this.
+constexpr size_t ChunkSize = 256 * 1024u; //16384u;
 constexpr auto Version = 1u;
 
 std::string getRealPath(const std::string &relPath) {
