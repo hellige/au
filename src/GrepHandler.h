@@ -102,6 +102,7 @@ class GrepHandler {
 
   std::vector<char> str_;
   const Dictionary::Dict *dictionary_ = nullptr;
+  bool attempted_;
   bool matched_;
 
   // Keeps track of the context we're in so we know if the string we're
@@ -124,10 +125,12 @@ class GrepHandler {
 public:
   GrepHandler(const Pattern &pattern)
       : pattern_(pattern),
+        attempted_(false),
         matched_(false) {
     str_.reserve(1<<16);
   }
 
+  bool attemptedMatch() const { return attempted_; }
   bool matched() const { return matched_; }
 
   bool isKey() const {
@@ -149,6 +152,7 @@ public:
     dictionary_ = dict;
     context_.clear();
     context_.emplace_back(Context::BARE, 0, !pattern_.requiresKeyMatch());
+    attempted_ = false;
     matched_ = false;
   }
 
@@ -159,6 +163,7 @@ public:
   }
 
   void onNull(size_t) {
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(Pattern::Atom::Null))
       matched_ = true;
     incrCounter();
@@ -166,30 +171,35 @@ public:
 
   void onBool(size_t, bool val) {
     auto atom = val ? Pattern::Atom::True : Pattern::Atom::False;
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(atom))
       matched_ = true;
     incrCounter();
   }
 
   void onInt(size_t, int64_t value) {
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
   void onUint(size_t, uint64_t value) {
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
   void onTime(size_t, time_point value) {
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
   }
 
   void onDouble(size_t, double value) {
+    attempted_ |= context_.back().checkVal;
     if (context_.back().checkVal && pattern_.matchesValue(value))
       matched_ = true;
     incrCounter();
@@ -249,6 +259,7 @@ private:
       context_.back().checkVal = pattern_.matchesKey(sv);
       return;
     } else {
+      attempted_ |= context_.back().checkVal;
       if (context_.back().checkVal && pattern_.matchesValue(sv))
         matched_ = true;
     }
@@ -387,30 +398,32 @@ private:
         size_t next = start + (end-start)/2;
         static_cast<This *>(this)->seekSync(next);
 
-        auto sor = source.pos();
-        if (!static_cast<This *>(this)->parseValue())
-          break;
+        auto startOfScan = source.pos();
+        do {
+            if (!static_cast<This *>(this)->parseValue())
+            return 0;
 
-        // the bisect pattern fails to match if the current record *strictly*
-        // precedes any records matching the pattern (i.e., it matches any record
-        // which is greater than or equal to the pattern). so we should eventually
-        // find the approximate location of the first such record.
-        if (grepHandler.matched()) {
-          if (sor < end) {
-            end = sor;
-          } else {
-            // this is an indication that we've jumped back to bisect the range
-            // (start, end) but that in scanning forward to find the first record,
-            // we ended up at or even past the end of the range. (basically, this
-            // means the file contains a huge record.) if we update end
-            // and bisect again, the same thing will happen again and we'll end
-            // up doing this forever. in this case, we'll just set start and end
-            // in such a way as to force a scan on the next iteration.
-            end = start + 1;
+          // the bisect pattern fails to match if the current record *strictly*
+          // precedes any records matching the pattern (i.e., it matches any record
+          // which is greater than or equal to the pattern). so we should eventually
+          // find the approximate location of the first such record.
+          if (grepHandler.matched()) {
+            if (startOfScan < end) {
+              end = startOfScan;
+            } else {
+              // this is an indication that we've jumped back to bisect the range
+              // (start, end) but that in scanning forward to find the first record,
+              // we ended up at or even past the end of the range. (basically, this
+              // means the file contains a huge record.) if we update end
+              // and bisect again, the same thing will happen again and we'll end
+              // up doing this forever. in this case, we'll just set start and end
+              // in such a way as to force a scan on the next iteration.
+              end = start + 1;
+            }
+          } else if (grepHandler.attemptedMatch()) {
+            start = startOfScan;
           }
-        } else {
-          start = sor;
-        }
+        } while (!grepHandler.attemptedMatch());
       }
     } catch (parse_error &e) {
       std::cerr << e.what() << std::endl;
