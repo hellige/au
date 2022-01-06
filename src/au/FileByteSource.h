@@ -103,7 +103,7 @@ public:
   void seek(size_t abspos) override {
     assert(!pinPos_);
     clearPin(); // assert AND clear is a little much.
-    auto bufStartPos = pos_ - (cur_ - buf_);
+    auto bufStartPos = pos_ - static_cast<size_t>(cur_ - buf_);
     if (abspos >= bufStartPos && abspos < (pos_ + buffAvail())) {
       cur_ = buf_ + (abspos - bufStartPos);
       pos_ = abspos;
