@@ -37,6 +37,7 @@ struct Pattern {
   uint32_t afterContext = 0;
   bool bisect = false;
   bool count = false;
+  bool forceFollow = false;
   bool matchOrGreater = false;
 
   bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
@@ -299,6 +300,7 @@ private:
       posBuffer.reserve(pattern.beforeContext+1);
       size_t force = 0;
       size_t total = 0;
+      bool inMatchRegion = false;
       size_t matchPos = source.pos();
       size_t numMatches = std::numeric_limits<size_t>::max();
       if (pattern.numMatches) numMatches = *pattern.numMatches;
@@ -306,10 +308,7 @@ private:
       if (pattern.scanSuffixAmount) suffixLength = *pattern.scanSuffixAmount;
 
       while (!source.peek().isEof()) {
-        if (!force) {
-          if (total >= numMatches) break;
-          if (source.pos() - matchPos > suffixLength) break;
-        }
+        if (!force && source.pos() - matchPos > suffixLength) break;
 
         auto candidatePos = source.pos();
         if (!pattern.count) {
@@ -318,13 +317,26 @@ private:
           posBuffer.push_back(candidatePos);
           source.setPin(posBuffer.front());
         }
+
         if (!static_cast<This *>(this)->parseValue())
           break;
+        auto matchedNow = false;
         if (grepHandler.matched() && total < numMatches) {
-          // avoid using posBuffer.back() for this, so that we can completely
-          // ignore posBuffer in case pattern.count is true
-          matchPos = candidatePos;
+          inMatchRegion = true;
+          matchedNow = true;
+          // we only want to count records with *actual* matches, not records
+          // matched by virtue of grep -F
           total++;
+        } else if (grepHandler.attemptedMatch()) {
+          inMatchRegion = false;
+        }
+        matchedNow |= pattern.forceFollow && inMatchRegion;
+        if (matchedNow) {
+          // avoid using posBuffer.back() for this, so that we can completely
+          // ignore posBuffer in case pattern.count is true. also do this even
+          // if we're force-following (not only if total < numMatches) so that
+          // we don't fall out of the suffix length until we're really done
+          matchPos = candidatePos;
           if (pattern.count) continue;
           // this is a little tricky. this seek() might send us backward over a
           // number of records, which might cross over one or more dictionary
@@ -380,7 +392,7 @@ private:
       return -1;
     }
 
-    assert(!pattern.matchOrGreater);
+    auto origMatchOrGreater = pattern.matchOrGreater;
     pattern.matchOrGreater = true;
 
     try {
@@ -391,7 +403,7 @@ private:
           static_cast<This *>(this)->seekSync(
                   start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
           pattern.scanSuffixAmount = SUFFIX_AMOUNT;
-          pattern.matchOrGreater = false;
+          pattern.matchOrGreater = origMatchOrGreater;
           return reallyDoGrep();
         }
 

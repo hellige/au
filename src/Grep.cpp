@@ -120,6 +120,7 @@ void usage(const char *cmd) {
       << "  -k --key <key>      match pattern only in object values with key <key>\n"
       << "  -o --ordered <key>  like -k, but values for <key> are assumed to to be\n"
       << "                      roughly ordered\n"
+      << "  -g --or-greater     match any value equal to or greater than <pattern>\n"
       << "  -l --ascii-log      see below\n"
       << "  -i --integer        match <pattern> with integer values\n"
       << "  -d --double         match <pattern> with double-precision float values\n"
@@ -135,6 +136,9 @@ void usage(const char *cmd) {
       << "  -B --before <n>     show <n> records of context before each match\n"
       << "  -A --after <n>      show <n> records of context after each match\n"
       << "  -C --context <n>    equivalent to -A n -B n\n"
+      << "  -F --follow-context print records following match until first explicitly\n"
+      << "                      non-matching record (i.e., record with matching key\n"
+      << "                      but non-matching value)\n"
       << "  -c --count          print count of matching records per file\n"
       << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n"
       << "\n"
@@ -143,7 +147,7 @@ void usage(const char *cmd) {
       << "  timestamp at the beginning of each line. <pattern> is expected to be\n"
       << "  a timestamp (or prefix thereof, as with -t). Files are binary searched\n"
       << "  for lines with timestamps matching <pattern>. Most output-controlling\n"
-      << "  arguments (e.g., -m, -C, -c) are accepted in combination with -l.\n";
+      << "  arguments (e.g., -m, -F, -C, -c) are accepted in combination with -l.\n";
 }
 
 int grepCmd(int argc, const char * const *argv, bool compressed) {
@@ -163,6 +167,9 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
       "m", "matches", "matches", false, 0, "uint32_t", tclap.cmd());
   TCLAP::ValueArg<std::string> index(
       "x", "index", "index", false, "", "string", tclap.cmd());
+  TCLAP::SwitchArg orGreater("g", "or-greater", "or-greater", tclap.cmd());
+  TCLAP::SwitchArg followContext(
+      "F", "follow-context", "follow-context", tclap.cmd());
   TCLAP::SwitchArg asciiLog("l", "ascii-log", "ascii-log", tclap.cmd());
   TCLAP::SwitchArg encode("e", "encode", "encode", tclap.cmd());
   TCLAP::SwitchArg count("c", "count", "count", tclap.cmd());
@@ -200,6 +207,9 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
     pattern.bisect = true;
   }
 
+  if (orGreater.isSet()) {
+    pattern.matchOrGreater = true;
+  }
   if (matches.isSet()) pattern.numMatches = matches.getValue();
 
   bool explicitTimestampMatch = asciiLog.isSet() || matchTimestamp.isSet();
@@ -267,6 +277,8 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
     pattern.beforeContext = before.getValue();
   if (after.isSet())
     pattern.afterContext = after.getValue();
+  if (followContext.isSet())
+    pattern.forceFollow = true;
 
   pattern.count = count.isSet();
 
