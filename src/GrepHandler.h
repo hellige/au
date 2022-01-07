@@ -160,6 +160,14 @@ public:
     str_.reserve(1<<16);
   }
 
+  // it's not entirely clear whether attemptedMatch() should be based upon
+  // whether a value was offered to the handler at a time when a match might
+  // have been valid (as it is currently), or whether we should only mark
+  // attempted as true when the pattern itself might accept the value (e.g.,
+  // only when an actual timestamp is checked in the case of an explicit
+  // timestamp-only match). the latter would be slightly uglier, so i'm sticking
+  // with the first option for now. for my own common uses, this makes no
+  // difference. but if anybody ever cares, it might be worth reconsidering.
   bool attemptedMatch() const { return attempted_; }
   bool matched() const { return matched_; }
 
