@@ -96,7 +96,7 @@ struct Pattern {
     needsDateScan = false;
 
     using namespace std::chrono;
-    auto tt = system_clock::to_time_t(val);
+    auto tt = system_clock::to_time_t(time_point_cast<milliseconds>(val));
     std::tm tm;
     memset(&tm, 0, sizeof(tm));
     gmtime_r(&tt, &tm);
