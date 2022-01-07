@@ -56,7 +56,7 @@ using TimestampPattern = std::pair<time_point, time_point>;
 
 template <bool strict=true>
 std::optional<TimestampPattern>
-parseTimestampPattern(std::string_view sv) {
+inline parseTimestampPattern(std::string_view sv) {
   std::tm start;
   std::tm end;
   memset(&start, 0, sizeof(tm));
@@ -86,6 +86,43 @@ parseTimestampPattern(std::string_view sv) {
   int startNanos;
   int endNanos;
   if (!parsePrefix<strict>(sv, 9, "", startNanos, endNanos, 999999999))
+    return std::nullopt;
+
+  std::time_t ttstart = timegm(&start);
+  std::time_t ttend = timegm(&end);
+  if (ttstart == -1 || ttend == -1) return std::nullopt;
+
+  using namespace std::chrono;
+  auto epoch = time_point();
+  auto startInt = epoch + duration_cast<nanoseconds>(
+      seconds(ttstart) + nanoseconds(startNanos));
+  auto endInt = epoch + duration_cast<nanoseconds>(
+      seconds(ttend) + nanoseconds(endNanos));
+
+  if (startInt == endInt) endInt += nanoseconds(1);
+  return std::make_pair(startInt, endInt);
+}
+
+std::optional<TimestampPattern>
+inline parseTimePattern(std::string_view sv) {
+  std::tm start;
+  std::tm end;
+  memset(&start, 0, sizeof(tm));
+  memset(&end, 0, sizeof(tm));
+  start.tm_year = end.tm_year = 70;
+  start.tm_mon = end.tm_mon = 0;
+  start.tm_mday = end.tm_mday = 1;
+
+  if (!parsePrefix(sv, 2, ":", start.tm_hour, end.tm_hour, 23))
+    return std::nullopt;
+  if (!parsePrefix(sv, 2, ":", start.tm_min, end.tm_min, 59))
+    return std::nullopt;
+  if (!parsePrefix(sv, 2, ".,", start.tm_sec, end.tm_sec, 59))
+    return std::nullopt;
+
+  int startNanos;
+  int endNanos;
+  if (!parsePrefix(sv, 9, "", startNanos, endNanos, 999999999))
     return std::nullopt;
 
   std::time_t ttstart = timegm(&start);

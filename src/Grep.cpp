@@ -73,10 +73,16 @@ bool setAtomPattern(Pattern &pattern, std::string &atomPat) {
 }
 
 bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
-  auto result = parseTimestampPattern(tsPat);
-  if (!result) return false;
-  pattern.timestampPattern = result;
-  return true;
+  if (auto result = parseTimestampPattern(tsPat); result) {
+    pattern.timestampPattern = result;
+    return true;
+  }
+  if (auto result = parseTimePattern(tsPat); result) {
+    pattern.timestampPattern = result;
+    pattern.needsDateScan = true;
+    return true;
+  }
+  return false;
 }
 
 int grepFile(Pattern &pattern,
@@ -142,12 +148,19 @@ void usage(const char *cmd) {
       << "  -c --count          print count of matching records per file\n"
       << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n"
       << "\n"
-      << "  When -l is specified, the input files are assumed to be plain ASCII\n"
-      << "  log files (rather than JSON or au-encoded), possibly gzipped, with a\n"
-      << "  timestamp at the beginning of each line. <pattern> is expected to be\n"
-      << "  a timestamp (or prefix thereof, as with -t). Files are binary searched\n"
-      << "  for lines with timestamps matching <pattern>. Most output-controlling\n"
-      << "  arguments (e.g., -m, -F, -C, -c) are accepted in combination with -l.\n";
+      << "  Timestamps may be specified without a date (e.g., 18:45:00.123), in which \n"
+      << "  case the first few records of the stream will be scanned for timestamp matches.\n"
+      << "  If a match is found, the pattern date will be set from the first matching\n"
+      << "  timestamp. If the resulting timestamp is prior to the start of the file, the\n"
+      << "  date will be incremented. This provides a reasonable default for log files\n"
+      << "  which span less than twenty-four hours.\n"
+      << "\n"
+      << "  When -l is specified, the input files are assumed to be plain ASCII log files\n"
+      << "  (rather than JSON or au-encoded), possibly gzipped, with a teimstamp at the\n"
+      << "  beginning of each line. <pattern> is expected to be a timestamp (or prefix\n"
+      << "  thereof, as with -t). Files are binary searched for lines with timestamps\n"
+      << "  matching <pattern>. Most output-controlling arguments (e.g., -m, -F, -C, -c)\n"
+      << "  are accepted in combination with -l.\n";
 }
 
 int grepCmd(int argc, const char * const *argv, bool compressed) {

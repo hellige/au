@@ -39,6 +39,7 @@ struct Pattern {
   bool count = false;
   bool forceFollow = false;
   bool matchOrGreater = false;
+  bool needsDateScan = false;
 
   bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
 
@@ -54,8 +55,9 @@ struct Pattern {
     return *atomPattern == val;
   }
 
-  bool matchesValue(time_point val) const {
+  bool matchesValue(time_point val) {
     if (!timestampPattern) return false;
+    if (needsDateScan) guessDate(val);
     if (matchOrGreater) return val >= timestampPattern->first;
     return val >= timestampPattern->first && val < timestampPattern->second;
   }
@@ -89,6 +91,33 @@ struct Pattern {
     if (matchOrGreater) return false;
     return sv.find(strPattern->pattern) != std::string::npos;
   }
+
+  void guessDate(time_point val) {
+    needsDateScan = false;
+
+    using namespace std::chrono;
+    auto tt = system_clock::to_time_t(val);
+    std::tm tm;
+    memset(&tm, 0, sizeof(tm));
+    gmtime_r(&tt, &tm);
+
+    std::tm daytm;
+    memset(&daytm, 0, sizeof(tm));
+    daytm.tm_year = tm.tm_year;
+    daytm.tm_mon = tm.tm_mon;
+    daytm.tm_mday = tm.tm_mday;
+    auto base = duration_cast<nanoseconds>(seconds(timegm(&daytm)));
+
+    if (timestampPattern->first + base < val) {
+      // if the time is less than the first matching timestamp, then roll to
+      // the next day
+      daytm.tm_mday += 1;
+      base = duration_cast<nanoseconds>(seconds(timegm(&daytm)));
+    }
+
+    timestampPattern->first += base;
+    timestampPattern->second += base;
+  }
 };
 
 /**
@@ -99,7 +128,7 @@ struct Pattern {
  * @tparam OutputHandler A ValueHandler to delegate matching records to.
  */
 class GrepHandler {
-  const Pattern &pattern_;
+  Pattern &pattern_;
 
   std::vector<char> str_;
   const Dictionary::Dict *dictionary_ = nullptr;
@@ -124,7 +153,7 @@ class GrepHandler {
   std::vector<ContextMarker> context_;
 
 public:
-  GrepHandler(const Pattern &pattern)
+  GrepHandler(Pattern &pattern)
       : pattern_(pattern),
         attempted_(false),
         matched_(false) {
@@ -284,6 +313,10 @@ public:
     grepHandler(pattern) {}
 
   int doGrep() {
+    if (pattern.needsDateScan) {
+      performDateScan();
+    }
+
     if (pattern.bisect) {
       return doBisect();
     }
@@ -292,6 +325,26 @@ public:
   }
 
 private:
+  void performDateScan() {
+    constexpr size_t DATE_SCAN_RECORDS = 100;
+    constexpr size_t DATE_SCAN_BYTES = 256 * 1024;
+
+    auto pos = source.pos();
+    source.setPin(pos);
+    for (auto i = 0u; i < DATE_SCAN_RECORDS; i++) {
+      if (source.pos() - pos > DATE_SCAN_BYTES)
+        break;
+      if (!static_cast<This *>(this)->parseValue())
+        break;
+      if (grepHandler.matched()) {
+        assert(!pattern.needsDateScan);
+        break;
+      }
+    }
+    source.clearPin();
+    source.seek(pos);
+  }
+
   int reallyDoGrep() {
     if (pattern.count) pattern.beforeContext = pattern.afterContext = 0;
 
