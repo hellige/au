@@ -11,8 +11,8 @@ static inline bool isAuFile(AuByteSource &source) {
   auto headerMatched = false;
   auto pos = source.pos();
   try {
-    source.readFunc(3, [&](auto fragment) {
-      if (fragment == "HAU") {
+    source.readFunc(4, [&](auto fragment) {
+      if (fragment == "HAU\x61") {
         headerMatched = true;
       }
     });

@@ -94,6 +94,11 @@ int grepFile(Pattern &pattern,
   auto source = detectSource(fileName, indexFile, compressed);
 
   if (asciiLog) {
+    if (isAuFile(*source)) {
+      std::cerr << fileName << " appears to be au-encoded. -l is unlikely to"
+        << " to do anything useful here!" << std::endl;
+      return 1;
+    }
     return AsciiGrepper(pattern, *source).doGrep();
   } else if (isAuFile(*source)) {
     if (encodeOutput) {
