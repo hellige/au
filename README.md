@@ -6,9 +6,10 @@
 `au` is a file format, header-only C++ library and command-line tool for
 working with sequential record-oriented data, primarily log files. The tool
 supports grepping in `.au` files, and for convenience supports grepping normal
-JSON files as well. The combination of binary search within large json files,
-and the ability to index and offer random access to gzipped files, make this a
-very useful tool even for plain ASCII JSON files!
+JSON files and plain timestamped ASCII log files as well. The combination of
+binary search within large files, and the ability to index and offer random
+access to gzipped files, make this a very useful tool even for plain ASCII
+logs!
 
 
 ## Motivation and usage
@@ -69,6 +70,7 @@ a specific number of matches, records of context before/after your match, etc.
 `au` will attempt to automatically detect whether the input stream is JSON
 or au-encoded.
 
+
 ### Compressed files
 
 When your files are big enough to be annoying, you'll probably also want to
@@ -112,6 +114,7 @@ encoding timestamps, while the JSON encoder included in the command-line tool
 will recognize strings that happen to be representable as timestamps and encode
 them as such.
 
+
 ## Rolling your own decoder
 
 Start with an `AuByteSource`. Use the provided `BufferByteSource` if you have an
@@ -153,6 +156,7 @@ Putting it all together:
 
 The call graph looks like:
 `au::RecordParser -> au::RecordHandler -> OnValueHandler -> au::ValueParser -> MyValueHandler`
+
 
 ## Building from source
 
