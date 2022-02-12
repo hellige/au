@@ -362,14 +362,14 @@ private:
       size_t force = 0;
       size_t total = 0;
       bool inMatchRegion = false;
-      size_t matchPos = source.pos();
+      size_t suffixStartPos = source.pos();
       size_t numMatches = std::numeric_limits<size_t>::max();
       if (pattern.numMatches) numMatches = *pattern.numMatches;
       size_t suffixLength = std::numeric_limits<size_t>::max();
       if (pattern.scanSuffixAmount) suffixLength = *pattern.scanSuffixAmount;
 
       while (!source.peek().isEof()) {
-        if (!force && source.pos() - matchPos > suffixLength) break;
+        if (!force && source.pos() - suffixStartPos > suffixLength) break;
 
         auto candidatePos = source.pos();
         if (!pattern.count) {
@@ -397,7 +397,7 @@ private:
           // ignore posBuffer in case pattern.count is true. also do this even
           // if we're force-following (not only if total < numMatches) so that
           // we don't fall out of the suffix length until we're really done
-          matchPos = candidatePos;
+          suffixStartPos = source.pos();
           if (pattern.count) continue;
           // this is a little tricky. this seek() might send us backward over a
           // number of records, which might cross over one or more dictionary
@@ -444,7 +444,7 @@ private:
     // SUFFIX_AMOUNT without seeing any matches. but we do want to make sure we
     // look for the first match in the entire region where it could possibly be
     // (and a bit beyond).
-    constexpr size_t SUFFIX_AMOUNT = SCAN_THRESHOLD + PREFIX_AMOUNT + 266 * 1024;
+    constexpr size_t SUFFIX_AMOUNT = SCAN_THRESHOLD + PREFIX_AMOUNT + 512 * 1024;
     static_assert(SUFFIX_AMOUNT > PREFIX_AMOUNT + SCAN_THRESHOLD);
 
     if (!source.isSeekable()) {
