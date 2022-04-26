@@ -1,3 +1,4 @@
 /.vscode
 /build
 /out
+cmake-build-*/
