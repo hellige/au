@@ -9,9 +9,9 @@ namespace au {
 
 namespace {
 
-void usage() {
+void usage(const char *cmd) {
   std::cout
-      << "usage: au tail [options] [--] <path>...\n"
+      << "usage: au " << cmd << " [options] [--] <path>...\n"
       << "\n"
       << "  -h --help           show usage and exit\n"
       << "  -f --follow         output appended data as the file grows\n"
@@ -20,7 +20,7 @@ void usage() {
 }
 
 int tailCmd(int argc, const char *const *argv, bool compressed) {
-  TclapHelper tclap(usage);
+  TclapHelper tclap([compressed]() { usage(compressed ? "ztail" : "tail"); });
 
   TCLAP::SwitchArg follow("f", "follow", "follow", tclap.cmd(), false);
   // Offset in bytes so we can fine-tune the starting point for test purposes.

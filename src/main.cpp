@@ -35,7 +35,8 @@ int help(int, char **) {
     << "            unless specified with -x <index>\n"
     << "\n"
     << "   zcat     cat gzipped au file (deprecated, just use cat)\n"
-    << "   zgrep    grep in gzipped file (deprecated, just use grep)\n";
+    << "   zgrep    grep in gzipped file (deprecated, just use grep)\n"
+    << "   ztail    tail gzipped au file (deprecated, just use tail)\n";
 
   return 0;
 }

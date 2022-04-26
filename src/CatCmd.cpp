@@ -10,9 +10,9 @@ namespace au {
 
 namespace {
 
-void usage() {
+void usage(const char *cmd) {
   std::cout
-      << "usage: au cat [options] [--] <path>...\n"
+      << "usage: au " << cmd << " [options] [--] <path>...\n"
       << "\n"
       << " Decodes au to json. Reads stdin if no files specified. Writes to\n"
       << " stdout. Any <path> may be \"-\" for stdin.\n"
@@ -49,7 +49,7 @@ int catFile(const std::string &fileName, bool encodeOutput, bool compressed) {
 }
 
 int catCmd(int argc, const char * const *argv, bool compressed) {
-  TclapHelper tclap(usage);
+  TclapHelper tclap([compressed]() { usage(compressed ? "zcat" : "cat"); });
 
   TCLAP::UnlabeledMultiArg<std::string> fileNames(
       "path", "", false, "path", tclap.cmd());
