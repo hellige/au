@@ -164,7 +164,7 @@ We use git submodules to include some dependencies. The build is via CMake. You
 can set the usual options to control your compiler, build type, etc., but the
 crash course is:
 
-    $ git submdoule update -i
+    $ git submodule update -i
     $ mkdir -p out/rel
     $ cd out/rel
     $ cmake -DCMAKE_BUILD_TYPE=Release -DSTATIC=On ../..
