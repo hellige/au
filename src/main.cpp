@@ -61,6 +61,7 @@ int main(int argc, char **argv) {
   commands["zindex"] = au::zindex;
   commands["zgrep"] = au::zgrep;
   commands["zcat"] = au::zcat;
+  commands["ztail"] = au::ztail;
 
   std::string cmd(argv[1]);
   auto it = commands.find(cmd);
