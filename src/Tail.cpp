@@ -44,7 +44,8 @@ int tailCmd(int argc, const char *const *argv, bool compressed) {
                       : std::nullopt;
     auto source = detectSource(fileName, indexFile, compressed);
     if (!source->isSeekable()) {
-      std::cerr << "Tail must work on seekable source\n";
+      std::cerr << "Cannot tail non-seekable file '" << source->name() << "'"
+          << std::endl;
       return 0;
     }
     source->tail(startOffset);
