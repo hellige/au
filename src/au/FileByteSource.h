@@ -34,7 +34,7 @@ public:
         name_(fname == "-" ? "<stdin>" : fname),
         bufSize_(INIT_BUFFER_SIZE),
         buf_(static_cast<char *>(malloc(bufSize_))),
-        pos_(0), cur_(buf_), limit_(buf_) {}
+        pos_(0), cur_(buf_), limit_(buf_), waitForData_(false) {}
 
   FileByteSource(const FileByteSource &) = delete;
   FileByteSource(FileByteSource &&) = delete;

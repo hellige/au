@@ -551,12 +551,12 @@ struct ZipByteSource::Impl {
 
 ZipByteSource::ZipByteSource(const std::string &fname,
                              const std::optional<std::string> &indexFilename)
-: FileByteSource(fname, false),
+: FileByteSource(fname),
   impl_(std::make_unique<Impl>(fname, indexFilename)) {}
 
 ZipByteSource::ZipByteSource(FileByteSourceImpl &source,
                              const std::optional<std::string> &indexFilename)
-: FileByteSource(source.name(), false),
+: FileByteSource(source.name()),
   impl_(std::make_unique<Impl>(source, indexFilename)) {}
 
 ZipByteSource::~ZipByteSource() {}
