@@ -161,7 +161,7 @@ void usage(const char *cmd) {
       << "  which span less than twenty-four hours.\n"
       << "\n"
       << "  When -l is specified, the input files are assumed to be plain ASCII log files\n"
-      << "  (rather than JSON or au-encoded), possibly gzipped, with a teimstamp at the\n"
+      << "  (rather than JSON or au-encoded), possibly gzipped, with a timestamp at the\n"
       << "  beginning of each line. <pattern> is expected to be a timestamp (or prefix\n"
       << "  thereof, as with -t). Files are binary searched for lines with timestamps\n"
       << "  matching <pattern>. Most output-controlling arguments (e.g., -m, -F, -C, -c)\n"
