@@ -46,8 +46,9 @@ int tailCmd(int argc, const char *const *argv, bool compressed) {
     if (!source->isSeekable()) {
       std::cerr << "Cannot tail non-seekable file '" << source->name() << "'"
           << std::endl;
-      return 0;
+      return 1;
     }
+    source->setFollow(follow);
     source->tail(startOffset);
     TailHandler tailHandler(dictionary, *source);
     tailHandler.parseStream(jsonHandler);

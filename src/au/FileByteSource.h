@@ -28,13 +28,13 @@ protected:
   bool waitForData_;
 
 public:
-  explicit FileByteSource(const std::string &fname, bool waitForData,
+  explicit FileByteSource(const std::string &fname,
                           size_t bufferSizeInK = 256)
       : INIT_BUFFER_SIZE(bufferSizeInK * 1024),
         name_(fname == "-" ? "<stdin>" : fname),
         bufSize_(INIT_BUFFER_SIZE),
         buf_(static_cast<char *>(malloc(bufSize_))),
-        pos_(0), cur_(buf_), limit_(buf_), waitForData_(waitForData) {}
+        pos_(0), cur_(buf_), limit_(buf_) {}
 
   FileByteSource(const FileByteSource &) = delete;
   FileByteSource(FileByteSource &&) = delete;
@@ -47,6 +47,10 @@ public:
 
   std::string name() const override {
     return name_;
+  }
+
+  void setFollow(bool follow) {
+    waitForData_ = follow;
   }
 
   /// Position in the underlying data stream
@@ -229,9 +233,9 @@ class FileByteSourceImpl : public FileByteSource {
   File file_;
 
 public:
-  explicit FileByteSourceImpl(const std::string &fname, bool waitForData,
+  explicit FileByteSourceImpl(const std::string &fname,
                               size_t bufferSizeInK = 256)
-      : FileByteSource(fname, waitForData, bufferSizeInK) {
+      : FileByteSource(fname, bufferSizeInK) {
     if (fname == "-") {
       file_ = File(stdin);
     } else {

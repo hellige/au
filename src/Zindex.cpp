@@ -264,7 +264,7 @@ struct Zindex {
   size_t compressedModTime = 0;
 
   Zindex(const std::string &filename) {
-    FileByteSourceImpl source(filename, false);
+    FileByteSourceImpl source(filename);
     Dictionary dictionary;
 
     DocumentParser metadataParser;

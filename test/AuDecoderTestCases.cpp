@@ -21,8 +21,8 @@ public:
       : filename_(filename) {}
 
   template<typename H>
-  void decode(H &handler, bool waitForData) const {
-    FileByteSourceImpl source(filename_, waitForData);
+  void decode(H &handler) const {
+    FileByteSourceImpl source(filename_);
     try {
       RecordParser<H>(source, handler).parseStream();
     } catch (parse_error &e) {
@@ -42,7 +42,7 @@ TEST(AuDecoderTestCases, doesntCrashOnCases) {
       JsonOutputHandler valueHandler;
       AuRecordHandler<JsonOutputHandler> recordHandler(dictionary,
                                                        valueHandler);
-      auDecoder.decode(recordHandler, false);
+      auDecoder.decode(recordHandler);
     } catch (const std::exception &) {}
   }
 }

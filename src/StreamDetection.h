@@ -35,12 +35,12 @@ static inline bool isGzipFile(AuByteSource &source) {
   return magicMatched;
 }
 
-static inline std::unique_ptr<AuByteSource> detectSource(
+static inline std::unique_ptr<FileByteSource> detectSource(
     const std::string &fileName,
     const std::optional<std::string> &indexFile,
     bool compressed) {
-  std::unique_ptr<AuByteSource> source;
-  auto fbs = std::make_unique<FileByteSourceImpl>(fileName, false);
+  std::unique_ptr<FileByteSource> source;
+  auto fbs = std::make_unique<FileByteSourceImpl>(fileName);
   if (compressed || isGzipFile(*fbs)) {
     auto *ptr = fbs.get();
     source.reset(new ZipByteSource(*ptr, indexFile));
