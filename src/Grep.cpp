@@ -73,16 +73,8 @@ bool setAtomPattern(Pattern &pattern, std::string &atomPat) {
 }
 
 bool setTimestampPattern(Pattern &pattern, const std::string &tsPat) {
-  if (auto result = parseTimestampPattern(tsPat); result) {
-    pattern.timestampPattern = result;
-    return true;
-  }
-  if (auto result = parseTimePattern(tsPat); result) {
-    pattern.timestampPattern = result;
-    pattern.needsDateScan = true;
-    return true;
-  }
-  return false;
+  pattern.timestampPattern = parseFlexPattern(tsPat);
+  return pattern.timestampPattern.has_value();
 }
 
 int grepFile(Pattern &pattern,

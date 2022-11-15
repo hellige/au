@@ -39,9 +39,12 @@ struct Pattern {
   bool count = false;
   bool forceFollow = false;
   bool matchOrGreater = false;
-  bool needsDateScan = false;
 
   bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
+
+  bool needsDateScan() const {
+    return timestampPattern && timestampPattern->isRelativeTime;
+  }
 
   bool matchesKey(std::string_view key) const {
     if (!keyPattern) return true;
@@ -57,9 +60,9 @@ struct Pattern {
 
   bool matchesValue(time_point val) {
     if (!timestampPattern) return false;
-    if (needsDateScan) guessDate(val);
-    if (matchOrGreater) return val >= timestampPattern->first;
-    return val >= timestampPattern->first && val < timestampPattern->second;
+    if (timestampPattern->isRelativeTime) guessDate(val);
+    if (matchOrGreater) return val >= timestampPattern->start;
+    return val >= timestampPattern->start && val < timestampPattern->end;
   }
 
   bool matchesValue(uint64_t val) const {
@@ -93,7 +96,7 @@ struct Pattern {
   }
 
   void guessDate(time_point val) {
-    needsDateScan = false;
+    timestampPattern->isRelativeTime = false;
 
     using namespace std::chrono;
     auto tt = system_clock::to_time_t(time_point_cast<milliseconds>(val));
@@ -108,15 +111,15 @@ struct Pattern {
     daytm.tm_mday = tm.tm_mday;
     auto base = duration_cast<nanoseconds>(seconds(timegm(&daytm)));
 
-    if (timestampPattern->first + base < val) {
+    if (timestampPattern->start + base < val) {
       // if the time is less than the first matching timestamp, then roll to
       // the next day
       daytm.tm_mday += 1;
       base = duration_cast<nanoseconds>(seconds(timegm(&daytm)));
     }
 
-    timestampPattern->first += base;
-    timestampPattern->second += base;
+    timestampPattern->start += base;
+    timestampPattern->end += base;
   }
 };
 
@@ -321,7 +324,7 @@ public:
     grepHandler(pattern) {}
 
   int doGrep() {
-    if (pattern.needsDateScan) {
+    if (pattern.needsDateScan()) {
       performDateScan();
     }
 
@@ -345,7 +348,7 @@ private:
       if (!static_cast<This *>(this)->parseValue())
         break;
       if (grepHandler.matched()) {
-        assert(!pattern.needsDateScan);
+        assert(!pattern.needsDateScan());
         break;
       }
     }
@@ -651,7 +654,7 @@ private:
       buf[len++] = source.next().charValue();
     }
     auto res = parseTimestampPattern<false>(std::string_view(buf, len));
-    if (res) grepHandler.onTime(0, res->first);
+    if (res) grepHandler.onTime(0, res->start);
 
     source.scanTo("\n");
     source.next();

@@ -58,7 +58,7 @@ class JsonSaxHandler
     timeConversionAttempts_++;
     auto result = parseTimestampPattern(std::string_view(str, length));
     if (result) {
-      writer_.value(result->first);
+      writer_.value(result->start);
       return true;
     } else {
       timeConversionFailures_++;

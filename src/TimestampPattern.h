@@ -10,13 +10,24 @@
 
 namespace au {
 
+struct TimestampPattern {
+  time_point start;
+  time_point end;
+  bool isRelativeTime;
+
+  bool operator==(const TimestampPattern &that) const {
+    return std::tie(start, end, isRelativeTime)
+      == std::tie(that.start, that.end, that.isRelativeTime);
+  }
+};
+
 namespace {
 
 template <bool strict=true>
 bool parsePrefix(std::string_view &str, size_t len, const char *delims,
                  int &start, int &end, int max, int min = 0, int base = 0) {
   if (str.empty()) {
-    start = end = 0;
+    start = end = min - base;
     return true;
   }
 
@@ -45,14 +56,25 @@ bool parsePrefix(std::string_view &str, size_t len, const char *delims,
     start *= 10;
     end *= 10;
   }
-  if (start < min || start > max) return false;
+
+  if (start > max) return false;
+  // this is a little subtle. the goal is, when min is 1 for example, to accept
+  // "0" (since it's a valid prefix of "01") but to reject "00" (since it's
+  // fully specified and outside the valid range). the following check
+  // accomplishes the goal. first, if start >= min, we're clearly ok. if
+  // start < min, then end will be > min iff the string is a valid prefix.
+  // e.g., suppose min is 012. then if the string is 01, end will be 020, which
+  // is > 012 as needed. if the string is 011, then end will be 012, exactly
+  // equal to min, failing the check and thus rejected.
+  if (start < min) {
+    if (end <= min) return false;
+    start = min;
+  }
   start -= base;
-  if (end < min || end > max + 1) return false;
+  end = std::min(end, max + 1);
   end -= base;
   return true;
 }
-
-using TimestampPattern = std::pair<time_point, time_point>;
 
 template <bool strict=true>
 std::optional<TimestampPattern>
@@ -100,7 +122,7 @@ inline parseTimestampPattern(std::string_view sv) {
       seconds(ttend) + nanoseconds(endNanos));
 
   if (startInt == endInt) endInt += nanoseconds(1);
-  return std::make_pair(startInt, endInt);
+  return TimestampPattern{startInt, endInt, false};
 }
 
 std::optional<TimestampPattern>
@@ -137,7 +159,14 @@ inline parseTimePattern(std::string_view sv) {
       seconds(ttend) + nanoseconds(endNanos));
 
   if (startInt == endInt) endInt += nanoseconds(1);
-  return std::make_pair(startInt, endInt);
+  return TimestampPattern{startInt, endInt, true};
+}
+
+std::optional<TimestampPattern>
+inline parseFlexPattern(const std::string &tsPat) {
+  if (auto result = parseTimePattern(tsPat); result)
+    return result;
+  return parseTimestampPattern(tsPat);
 }
 
 }

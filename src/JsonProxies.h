@@ -19,7 +19,7 @@ struct JsonSaxProxy
   bool tryTime(const char *str, rapidjson::SizeType length) {
     auto result = parseTimestampPattern(std::string_view(str, length));
     if (result) {
-      handler.onTime(0, result->first);
+      handler.onTime(0, result->start);
       return true;
     }
     return false;
