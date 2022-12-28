@@ -3,6 +3,7 @@
 #include "StreamDetection.h"
 #include "TclapHelper.h"
 
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <optional>
