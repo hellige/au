@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdio>
 #include <fcntl.h>
+#include <memory>
 #include <optional>
 #include <unistd.h>
 #include <sys/stat.h>
