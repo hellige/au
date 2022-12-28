@@ -13,8 +13,10 @@ std::string str(const au::TimestampPattern &tp) {
 
   std::tm startTm;
   std::tm endTm;
-  std::time_t ttstart = system_clock::to_time_t(tp.start);
-  std::time_t ttend = system_clock::to_time_t(tp.end);
+  std::time_t ttstart = system_clock::to_time_t(
+    time_point_cast<system_clock::duration>(tp.start));
+  std::time_t ttend = system_clock::to_time_t(
+    time_point_cast<system_clock::duration>(tp.end));
   gmtime_r(&ttstart, &startTm);
   gmtime_r(&ttend, &endTm);
 
