@@ -2,6 +2,7 @@
 
 #include "TimestampPattern.h"
 
+#include <inttypes.h>
 #include <optional>
 #include <string_view>
 
@@ -23,8 +24,8 @@ std::string str(const au::TimestampPattern &tp) {
   char buf[64], buf2[64], buf3[256];
   strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &startTm);
   strftime(buf2, sizeof(buf2), "%Y-%m-%d %H:%M:%S", &endTm);
-  snprintf(buf3, sizeof(buf3), "%s.%09ld - %s.%09ld", buf, startNanos,
-    buf2, endNanos);
+  snprintf(buf3, sizeof(buf3), "%s.%09" PRId64 " - %s.%09" PRId64, buf,
+    startNanos, buf2, endNanos);
   return buf3;
 }
 
