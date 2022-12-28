@@ -2,7 +2,7 @@
 
 #include "TimestampPattern.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 #include <optional>
 #include <string_view>
 
