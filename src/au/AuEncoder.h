@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 #include <stdio.h>
+#include <string>
 
 namespace au {
 
