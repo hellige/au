@@ -40,7 +40,9 @@ bool setUnsignedPattern(Pattern &pattern, std::string &intPat) {
 }
 
 bool setIntPattern(Pattern &pattern, std::string &intPat) {
-  return setSignedPattern(pattern, intPat) |
+  // clang hates bitwise-or of booleans. casting one to int is the recommended
+  // way to insist that this is really what i want.
+  return static_cast<int>(setSignedPattern(pattern, intPat)) |
     setUnsignedPattern(pattern, intPat);
 }
 

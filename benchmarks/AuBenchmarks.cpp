@@ -18,6 +18,8 @@ static void BM_FileByteSource(benchmark::State &state) {
       sum += src.next().charValue();
     }
   }
+
+  (void)sum;
 }
 BENCHMARK(BM_FileByteSource)->RangeMultiplier(2)->Range(16, 1<<8);
 
