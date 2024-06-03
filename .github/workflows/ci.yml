@@ -62,4 +62,4 @@ jobs:
         [[ -z "${GCOV}" ]] || find . -type f -name '*.gcno' -exec ${GCOV} -pabcfu '{}' +
     - name: Codecov Upload
       if: contains(matrix.name, 'Coverage')
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v4
