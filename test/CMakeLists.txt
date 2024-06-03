@@ -13,7 +13,7 @@ add_executable(Test
         AuUnitTests.cpp AuEncoderTests.cpp
         AuDecoderTests.cpp AuDecoderTestCases.cpp
         HelpersTest.cpp TimestampPatternTest.cpp)
-target_link_libraries(Test libau gtest gtest_main gmock ${CXX_FS_LIB})
+target_link_libraries(Test libau gtest gtest_main gmock pthread ${CXX_FS_LIB})
 add_test(NAME Tests
         COMMAND Test
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
