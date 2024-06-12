@@ -116,9 +116,9 @@ public:
   void onDouble(size_t, double v) {
     using namespace std::literals;
     if (std::isfinite(v)) writer_.Double(v);
-    else if (std::isnan(v)) writer_.Raw("nan"sv);
-    else if (v < 0) writer_.Raw("-inf"sv);
-    else writer_.Raw("inf"sv);
+    else if (std::isnan(v)) writer_.Raw("NaN"sv);
+    else if (v < 0) writer_.Raw("-Infinity"sv);
+    else writer_.Raw("Infinity"sv);
   }
 
   void onTime(size_t, time_point timestamp) {
