@@ -10,3 +10,9 @@
 [submodule "external/tclap"]
 	path = external/tclap
 	url = https://github.com/gburca/tclap
+[submodule "external/re2"]
+	path = external/re2
+	url = https://github.com/google/re2.git
+[submodule "external/abseil-cpp"]
+	path = external/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
