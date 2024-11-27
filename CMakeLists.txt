@@ -18,7 +18,7 @@ endif ()
 
 message(STATUS, "Coverage: ${COVERAGE}")
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXE_LINKER_FLAGS "${EXTRA_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}")
@@ -36,7 +36,8 @@ else ()
 endif ()
 
 # Common flags shared across all builds
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -g")
+set(DEFAULT_CXX_FLAGS -Wall -Wextra -Werror)
 
 # Debug flags
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
@@ -58,6 +59,12 @@ set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
 add_subdirectory(external/benchmark)
 add_subdirectory(external/googletest)
 
+set(CMAKE_INSTALL_PREFIX ${PROJECT_BINARY_DIR}/dist)
+
+set(ABSL_ENABLE_INSTALL ON)
+add_subdirectory(external/abseil-cpp)
+add_subdirectory(external/re2)
+
 # au configuration
 include_directories(src)
 link_directories(${PROJECT_BINARY_DIR}/lib)
@@ -66,5 +73,3 @@ add_subdirectory(src)
 add_subdirectory(benchmarks)
 enable_testing()
 add_subdirectory(test)
-
-set(CMAKE_INSTALL_PREFIX ${PROJECT_BINARY_DIR}/dist)
