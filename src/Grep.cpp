@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <optional>
-#include <regex>
+#include <tclap/SwitchArg.h>
 
 namespace au {
 
@@ -116,7 +116,28 @@ int grepFile(Pattern &pattern,
   }
 }
 
+bool isRePattern(std::string_view sv, const TCLAP::SwitchArg &noRegexFlag) {
+  // R(...)
+  if (!noRegexFlag.isSet() && sv.starts_with("R")) {
+    const std::string_view remaining{sv.begin() + 1, sv.end()};
+    return remaining.starts_with("(") && remaining.ends_with(")");
+  }
+  return false;
+}
+
+std::unique_ptr<re2::RE2> tryMakeRe(std::string_view sv) {
+  const std::string_view actualPattern{sv.begin() + 2, sv.end() - 1};
+  auto re = std::make_unique<re2::RE2>(actualPattern, re2::RE2::Quiet);
+  if (!re->ok()) {
+    std::cerr << "regex failed to compile: " << actualPattern << std::endl;
+    std::cerr << "  error: " << re->error() << std::endl;
+    return nullptr;
+  }
+  return re;
+}
+
 void usage(const char *cmd) {
+  // clang-format off
   std::cout
       << "usage: au " << cmd << " [options] [--] <pattern> <path>...\n"
       << "\n"
@@ -145,6 +166,8 @@ void usage(const char *cmd) {
       << "                      non-matching record (i.e., record with matching key\n"
       << "                      but non-matching value)\n"
       << "  -c --count          print count of matching records per file\n"
+      << "  -r --no-regex       explicitly disable regex matching for all arguments,\n"
+      << "                      even if they look like R(...)\n"
       << "  -x --index <path>   use gzip index in <path> (only for zgrep)\n"
       << "\n"
       << "  Timestamps may be specified without a date (e.g., 18:45:00.123), in which \n"
@@ -159,16 +182,34 @@ void usage(const char *cmd) {
       << "  beginning of each line. <pattern> is expected to be a timestamp (or prefix\n"
       << "  thereof, as with -t). Files are binary searched for lines with timestamps\n"
       << "  matching <pattern>. Most output-controlling arguments (e.g., -m, -F, -C, -c)\n"
-      << "  are accepted in combination with -l.\n";
+      << "  are accepted in combination with -l.\n"
+      << "\n"
+      << "  Regular Expressions:\n"
+      << "    Most string patterns support regular expression mode. To enable, specify the\n"
+      << "    string in the form \"R(...)\", where ... can be any regular expression. For\n"
+      << "    example, the following could be used to ignore case while matching a value:\n"
+      << "\n"
+      << "      au " << cmd << " \"R((?i)somevalue)\" <path>...\n"
+      << "\n"
+      << "    Note that while -o/--ordered supports a regex key, the corresponding \n"
+      << "    <pattern> must not be a regular expression. The same is true for a <pattern>\n"
+      << "    when -g/--or-greater is specified.\n"
+      << "\n"
+      << "    By default, a regex pattern must match the entire string. -u/--substring\n"
+      << "    can be used to only match part of the string. This utility uses the \"re2\"\n"
+      << "    library for matching, so consult their documentation for specifics about\n"
+      << "    supported syntax."
+      ;
+  // clang-format on
 }
 
-int grepCmd(int argc, const char * const *argv, bool compressed) {
+int grepCmd(int argc, const char *const *argv, bool compressed) {
   TclapHelper tclap([compressed]() { usage(compressed ? "zgrep" : "grep"); });
 
   TCLAP::ValueArg<std::string> key(
       "k", "key", "key", false, "", "string", tclap.cmd());
   TCLAP::ValueArg<std::string> ordered(
-      "o", "ordered", "oredered", false, "", "string", tclap.cmd());
+      "o", "ordered", "ordered", false, "", "string", tclap.cmd());
   TCLAP::ValueArg<uint32_t> context(
       "C", "context", "context", false, 0, "uint32_t", tclap.cmd());
   TCLAP::ValueArg<uint32_t> before(
@@ -191,6 +232,7 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
   TCLAP::SwitchArg matchDouble("d", "double", "double", tclap.cmd());
   TCLAP::SwitchArg matchString("s", "string", "string", tclap.cmd());
   TCLAP::SwitchArg matchSubstring("u", "substring", "substring", tclap.cmd());
+  TCLAP::SwitchArg noRegex("r", "no-regex", "no-regex", tclap.cmd());
   TCLAP::UnlabeledValueArg<std::string> pat(
       "pattern", "", true, "", "pattern", tclap.cmd());
   TCLAP::UnlabeledMultiArg<std::string> fileNames(
@@ -210,9 +252,24 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
   }
 
   Pattern pattern;
-  if (key.isSet()) pattern.keyPattern = key.getValue();
+
+  if (key.isSet()) {
+    if (isRePattern(key.getValue(), noRegex)) {
+      pattern.keyPattern = tryMakeRe(key.getValue());
+      if (!pattern.keyPattern)
+        return 1;
+    } else {
+      pattern.keyPattern = key.getValue();
+    }
+  }
   if (ordered.isSet()) {
-    pattern.keyPattern = ordered.getValue();
+    if (isRePattern(ordered.getValue(), noRegex)) {
+      pattern.keyPattern = tryMakeRe(ordered.getValue());
+      if (!pattern.keyPattern)
+        return 1;
+    } else {
+      pattern.keyPattern = ordered.getValue();
+    }
     pattern.bisect = true;
   }
   if (asciiLog.isSet()) {
@@ -236,12 +293,29 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
     return 1;
   }
 
+  const bool patIsRegex = isRePattern(pat.getValue(), noRegex);
+  if (patIsRegex && ordered.isSet()) {
+    std::cerr << "Pattern for -o/--ordered cannot be regex" << std::endl;
+    return 1;
+  }
+  if (patIsRegex && pattern.matchOrGreater) {
+    std::cerr << "Pattern for -g/--or-greater cannot be regex" << std::endl;
+    return 1;
+  }
+
   // by default, we'll try to match anything, but won't be upset if the
   // pattern fails to parse as any particular thing...
 
   if (defaultMatch || explicitStringMatch) {
-    pattern.strPattern = Pattern::StrPattern{
-        pat.getValue(), !matchSubstring.isSet()};
+    if (patIsRegex) {
+      auto re = tryMakeRe(pat.getValue());
+      if (!re) return 1;
+      pattern.strPattern =
+          Pattern::StrPattern{std::move(re), !matchSubstring.isSet()};
+    } else {
+      pattern.strPattern =
+          Pattern::StrPattern{pat.getValue(), !matchSubstring.isSet()};
+    }
   }
 
   if (defaultMatch || matchInt.isSet()) {
@@ -311,7 +385,6 @@ int grepCmd(int argc, const char * const *argv, bool compressed) {
 
   return 0;
 }
-
 }
 
 int grep(int argc, const char * const *argv) {
