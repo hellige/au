@@ -247,7 +247,7 @@ public:
     return v.data() + front;
   }
   void write(const char *data, size_t size) {
-    memcpy(raw(size), data, size);
+    if (data && size) memcpy(raw(size), data, size);
   }
   size_t tellp() const {
     return idx;
