@@ -134,7 +134,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
     str_.insert(str_.end(), frag.data(), frag.data() + frag.size());
   }
   void onStringEnd() override {
-    std::string_view sv(&str_.front(), str_.size());
+    std::string_view sv(str_.data(), str_.size());
     if (isKey()) {
       context_.back().key = sv;
     } else {
