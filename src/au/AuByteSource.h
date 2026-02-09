@@ -94,6 +94,7 @@ public:
   /// Seek to length bytes from the end of the stream
   void tail(size_t length) {
     auto end = endPos();
+    if (end == 0) return;
     length = std::min(length, end);
     seek(end - length);
   }

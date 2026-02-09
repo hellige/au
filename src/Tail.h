@@ -169,6 +169,8 @@ public:
   }
 
   bool sync() {
+    if (source_.peek().isEof()) return true;
+
     while (true) {
       size_t sor = source_.pos();
       try {

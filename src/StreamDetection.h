@@ -8,6 +8,8 @@ namespace au {
 namespace {
 
 static inline bool isAuFile(AuByteSource &source) {
+  if (source.peek().isEof()) return false;
+
   auto headerMatched = false;
   auto pos = source.pos();
   try {
@@ -22,6 +24,8 @@ static inline bool isAuFile(AuByteSource &source) {
 }
 
 static inline bool isGzipFile(AuByteSource &source) {
+  if (source.peek().isEof()) return false;
+
   auto magicMatched = false;
   auto pos = source.pos();
   try {
@@ -51,6 +55,8 @@ static inline std::unique_ptr<FileByteSource> detectSource(
 }
 
 static inline bool checkAuFile(AuByteSource &source) {
+  if (source.peek().isEof()) return true;
+
   if (isAuFile(source)) return true;
   std::cerr << source.name() << " does not appear to be an au-encoded file"
     " (gzipped or otherwise)\n";

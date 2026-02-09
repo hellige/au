@@ -337,6 +337,8 @@ public:
 
 private:
   void performDateScan() {
+    if (source.peek().isEof()) return;
+
     constexpr size_t DATE_SCAN_RECORDS = 100;
     constexpr size_t DATE_SCAN_BYTES = 256 * 1024;
 
