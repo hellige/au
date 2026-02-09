@@ -111,7 +111,7 @@ struct Pattern {
     daytm.tm_mday = tm.tm_mday;
     auto base = duration_cast<nanoseconds>(seconds(timegm(&daytm)));
 
-    if (timestampPattern->start + base < val) {
+    if (timestampPattern->end + base < val) {
       // if the time is less than the first matching timestamp, then roll to
       // the next day
       daytm.tm_mday += 1;
