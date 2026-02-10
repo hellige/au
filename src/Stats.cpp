@@ -110,7 +110,7 @@ struct VarintHistogram {
     for (auto i = 0u; i < onePastLastPopulated; i++) {
       auto bytes = buckets[i] * (i + 1);
       totalIntBytes += bytes;
-      printf("        %3d: %s (%zu%%) %s\n", i + 1, commafy(buckets[i]).c_str(),
+      printf("        %3u: %s (%zu%%) %s\n", i + 1, commafy(buckets[i]).c_str(),
              100 * buckets[i] / totalInts, prettyBytes(bytes).c_str());
     }
     std::cout << "       Total bytes: " << prettyBytes(totalIntBytes)
