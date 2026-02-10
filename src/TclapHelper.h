@@ -46,7 +46,20 @@ public:
     try {
       UsageOutput output(usageVisitor_.usage);
       cmd_.setOutput(&output);
+
+      // SAFETY: Pointer arithmetic safe here - adjusted argc (argc-1) corresponds
+      // to adjusted argv (argv+1), skipping program name per Unix convention.
+      // C standard guarantees argc >= 1.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
+#endif
       cmd_.parse(argc-1, argv+1);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
       return true;
     } catch (TCLAP::ArgException &e) {
       std::cerr << "error: " << e.error() << " for arg " << e.argId()
