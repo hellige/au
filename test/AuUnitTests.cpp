@@ -181,7 +181,7 @@ TEST_F(AuFormatterTest, NaN) {
       std::numeric_limits<float>::quiet_NaN(),
       std::numeric_limits<double>::quiet_NaN(),
       std::numeric_limits<long double>::quiet_NaN(), // converted to double
-      std::sqrt(-1)
+      std::copysign(std::numeric_limits<double>::quiet_NaN(), -1.0)
   );
 
   std::vector<char> NaNs = {
