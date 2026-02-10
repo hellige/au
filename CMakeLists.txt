@@ -40,7 +40,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wextra -Werror -g")
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     # Disable Clang's unsafe-buffer-usage warning (Clang 16+)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unsafe-buffer-usage")
+    # Also suppress unknown-warning-option for older Clang versions
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-warning-option -Wno-unsafe-buffer-usage")
     # Disable bogus cross-compilation warning on macOS
     if (APPLE)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-poison-system-directories")
