@@ -64,19 +64,7 @@ int main(int argc, char **argv) {
   commands["zcat"] = au::zcat;
   commands["ztail"] = au::ztail;
 
-  // SAFETY: argc >= 2 guaranteed by check above. Suppressing false positive
-  // from Clang's -Wunsafe-buffer-usage static analysis.
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunknown-warning-option"
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-
   std::string cmd(argv[1]);
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
   auto it = commands.find(cmd);
   if (it == commands.end()) {
     std::cerr << "Unknown option or command: " << cmd << std::endl;
