@@ -8,14 +8,21 @@
 
 #include <cassert>
 #include <chrono>
+#include <iostream>
+#include <memory>
 #include <optional>
+#include <re2/re2.h>
+#include <regex>
+#include <string>
 #include <variant>
 
 namespace au {
 
 struct Pattern {
+  using StrOrRegex = std::variant<std::string, std::unique_ptr<re2::RE2>>;
+
   struct StrPattern {
-    std::string pattern;
+    StrOrRegex pattern;
     bool fullMatch;
   };
 
@@ -23,7 +30,7 @@ struct Pattern {
     True, False, Null
   };
 
-  std::optional<std::string> keyPattern;
+  std::optional<StrOrRegex> keyPattern;
   std::optional<Atom> atomPattern;
   std::optional<int64_t> intPattern;
   std::optional<uint64_t> uintPattern;
@@ -40,7 +47,30 @@ struct Pattern {
   bool forceFollow = false;
   bool matchOrGreater = false;
 
-  bool requiresKeyMatch() const { return static_cast<bool>(keyPattern); }
+  struct StrOrRegexVisitor {
+    std::string_view value;
+    bool fullMatch;
+    bool matchOrGreater;
+
+    bool operator()(const std::string &s) const {
+      if (fullMatch) {
+        if (matchOrGreater) return value >= s;
+        return s == value;
+      }
+
+      // substring search is incompatible with binary search...
+      if (matchOrGreater) return false;
+      return value.find(s) != std::string::npos;
+    }
+
+    bool operator()(const std::unique_ptr<re2::RE2> &re) const {
+      if (fullMatch)
+        return re2::RE2::FullMatch(value, *re);
+      return re2::RE2::PartialMatch(value, *re);
+    }
+  };
+
+  bool requiresKeyMatch() const { return keyPattern.has_value(); }
 
   bool needsDateScan() const {
     return timestampPattern && timestampPattern->isRelativeTime;
@@ -48,7 +78,9 @@ struct Pattern {
 
   bool matchesKey(std::string_view key) const {
     if (!keyPattern) return true;
-    return *keyPattern == key;
+    StrOrRegexVisitor visitor{
+        .value = key, .fullMatch = true, .matchOrGreater = false};
+    return std::visit(visitor, *keyPattern);
   }
 
   bool matchesValue(Atom val) const {
@@ -84,15 +116,13 @@ struct Pattern {
   }
 
   bool matchesValue(std::string_view sv) const {
-    if (!strPattern) return false;
-    if (strPattern->fullMatch) {
-      if (matchOrGreater) return sv >= strPattern->pattern;
-      return strPattern->pattern == sv;
-    }
+    if (!strPattern)
+      return false;
 
-    // substring search is incompatible with binary search...
-    if (matchOrGreater) return false;
-    return sv.find(strPattern->pattern) != std::string::npos;
+    StrOrRegexVisitor visitor{.value = sv,
+                              .fullMatch = strPattern->fullMatch,
+                              .matchOrGreater = matchOrGreater};
+    return std::visit(visitor, strPattern->pattern);
   }
 
   void guessDate(time_point val) {
