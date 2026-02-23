@@ -90,11 +90,25 @@ TEST_F(AuEncoderTest, bigNegInt) {
   ASSERT_EQ("-99999", getJson());
 }
 
+TEST_F(AuEncoderTest, reallyBigNegInt) {
+    au.encode([&](AuWriter &writer) {
+    writer.value(std::numeric_limits<int64_t>::min());
+  }, AuEncoderTest::write);
+  ASSERT_EQ("-9223372036854775808", getJson());
+}
+
 TEST_F(AuEncoderTest, bigInt) {
   au.encode([](AuWriter &writer) {
     writer.value(299792458);
   }, AuEncoderTest::write);
   ASSERT_EQ("299792458", getJson());
+}
+
+TEST_F(AuEncoderTest, emptyString) {
+  au.encode([](AuWriter &writer) {
+    writer.value(std::string_view());
+  }, AuEncoderTest::write);
+  ASSERT_EQ("\"\"", getJson());
 }
 
 TEST_F(AuEncoderTest, array1) {

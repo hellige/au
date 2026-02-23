@@ -242,7 +242,8 @@ public:
           AU_THROW("Signed int overflows int64_t: (-)" << val << " 0x"
                 << std::setfill('0') << std::setw(16) << std::hex << val);
         }
-        handler_.onInt(sov, -static_cast<int64_t>(val));
+        // 0 should be encoded as PosInt64, so we expect val >= 1 for NegInt64.
+        handler_.onInt(sov, -static_cast<int64_t>(val - 1) - 1);
         break;
       }
       case marker::Double:

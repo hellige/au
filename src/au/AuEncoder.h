@@ -606,7 +606,9 @@ private:
       bool neg = false;
       uint64_t val = static_cast<uint64_t>(i);
       if (i < 0) {
-        val = static_cast<uint64_t>(-i);
+        // If i == int64_t::min() we can't just take its negative value since
+        // that is not representable as an int64_t and is UB.
+        val = static_cast<uint64_t>(-(i + 1)) + 1;
         neg = true;
       }
       if (val >= 1ull << 48) {
