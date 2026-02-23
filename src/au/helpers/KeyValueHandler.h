@@ -35,7 +35,7 @@ struct KeyValueHandler : public au::NoopValueHandler {
   enum class Context : uint8_t { BARE, OBJECT, ARRAY };
   struct ContextMarker {
     Context context;
-    size_t counter;
+    size_t counter = 0;
     std::string parent;
     std::string key;
     ContextMarker(Context context, const std::string &parent,
