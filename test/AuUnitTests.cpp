@@ -83,6 +83,71 @@ TEST(AuStringIntern, ReIndex) {
   EXPECT_EQ(2, *si.idx("quadrice"s, AuIntern::ForceIntern));
 }
 
+// when a purge creates a divergence between dictionary_ size and dictInOrder_
+// size, and then idx() hits the capacity-triggered doReIndex, the nextEntry
+// variable was captured BEFORE doReIndex shrank dictInOrder_.
+// This produced an internIndex exceeding the actual vector size, leading to
+// out-of-bounds access on a subsequent doReIndex.
+TEST(AuStringIntern, NextEntryValidAfterPurgeTriggeredDoReIndex) {
+  // clearThreshold=20 → initial reserve = floor(20 * 1.2) = 24
+  AuStringIntern si(AuStringIntern::Config{1, 1, 100, 20});
+  auto &dict = si.dict();
+
+  using namespace std::string_literals;
+
+  // Fill 20 of the 24 capacity slots
+  for (int i = 0; i < 20; i++) {
+    si.idx("entry_" + std::to_string(i), AuIntern::ForceIntern);
+  }
+  ASSERT_EQ(20u, dict.size());
+
+  // Bump occurrence counts on the first 15 entries so they survive purge
+  for (int round = 0; round < 5; round++) {
+    for (int i = 0; i < 15; i++) {
+      si.idx("entry_" + std::to_string(i), AuIntern::ForceIntern);
+    }
+  }
+
+  // Purge entries with < 2 occurrences (removes entries 15-19 from dictionary_)
+  // After: dictionary_.size()=15, dictInOrder_.size()=20 (diverged!)
+  si.purge(2);
+
+  // Fill remaining capacity: 4 new entries bring dictInOrder_ to 24 (== capacity)
+  // dictionary_ grows to 19, dictInOrder_ grows to 24
+  for (int i = 20; i < 24; i++) {
+    si.idx("entry_" + std::to_string(i), AuIntern::ForceIntern);
+  }
+  ASSERT_EQ(24u, dict.size());
+
+  // This intern triggers the capacity-based doReIndex inside idx().
+  // doReIndex rebuilds dictInOrder_ from dictionary_ (19 entries), shrinking it.
+  // BUG: nextEntry was captured as 24 (pre-doReIndex dictInOrder_.size()),
+  //      but the new entry is emplaced at index 19 (post-doReIndex size).
+  //      The stored internIndex (24) exceeds dictInOrder_.size() (20).
+  auto result = si.idx("trigger_string_xx"s, AuIntern::ForceIntern);
+  ASSERT_TRUE(result.has_value());
+
+  // The intern index must be a valid index into dict()
+  EXPECT_LT(*result, dict.size())
+      << "internIndex " << *result << " >= dict size " << dict.size()
+      << ": nextEntry was stale after capacity-triggered doReIndex";
+
+  // The string at the returned index must be our string
+  if (*result < dict.size()) {
+    EXPECT_EQ("trigger_string_xx"s, dict[*result]);
+  }
+
+  // A subsequent reIndex must not crash (it accesses dictInOrder_[internIndex]
+  // for every entry; a stale index would be out of bounds here).
+  si.reIndex(1);
+
+  // After reindex, the string should still be findable
+  auto result2 = si.idx("trigger_string_xx"s, AuIntern::ForceIntern);
+  ASSERT_TRUE(result2.has_value());
+  EXPECT_LT(*result2, dict.size());
+  EXPECT_EQ("trigger_string_xx"s, dict[*result2]);
+}
+
 struct AuFormatterTest : public ::testing::Test {
   AuVectorBuffer buf;
   AuStringIntern stringIntern;

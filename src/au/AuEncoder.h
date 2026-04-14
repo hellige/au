@@ -144,7 +144,6 @@ public:
     }
 
     if (intern == AuIntern::ForceIntern || internCache_.shouldIntern(sv)) {
-      auto nextEntry = dictInOrder_.size();
       if (dictInOrder_.size() == dictInOrder_.capacity()) {
         // about to resize... need to reconstruct dictionary_ since string_view
         // might point to a SSO std::string. might as well reIndex. If we
@@ -153,6 +152,7 @@ public:
         dictInOrder_.reserve(dictInOrder_.size() * 2);
         doReIndex();
       }
+      auto nextEntry = dictInOrder_.size();
       const auto &s = dictInOrder_.emplace_back(std::string(sv));
       dictionary_.emplace(s, InternEntry{nextEntry, 1});
       return nextEntry;
