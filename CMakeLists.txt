@@ -75,6 +75,12 @@ set(ABSL_ENABLE_INSTALL ON)
 add_subdirectory(external/abseil-cpp)
 add_subdirectory(external/re2)
 
+# re2 exposes its include path as a normal (non-SYSTEM) interface include,
+# which causes our strict warning flags (e.g. -Wzero-as-null-pointer-constant
+# under clang's -Weverything) to fire on re2's own headers. Mark it SYSTEM.
+get_target_property(_re2_inc re2 INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(re2 PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_re2_inc}")
+
 # au configuration
 include_directories(src)
 link_directories(${PROJECT_BINARY_DIR}/lib)
