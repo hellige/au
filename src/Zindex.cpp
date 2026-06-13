@@ -166,6 +166,7 @@ int zindexFile(const std::string &fileName,
   ZStream zs(ZStream::Type::ZlibOrGzip);
   uint8_t input[ChunkSize];
   uint8_t window[WindowSize];
+  std::vector<uint8_t> apWindow(compressBound(WindowSize));
 
   int ret = 0;
   uint64_t totalIn = 0;
@@ -207,11 +208,10 @@ int zindexFile(const std::string &fileName,
       if (endOfBlock && !lastBlockInStream && needsIndex) {
         std::cout << "Creating checkpoint at " << totalOut <<
           " (compressed offset " << totalIn << ")\n";
-        uint8_t apWindow[compressBound(WindowSize)];
-        auto size = makeWindow(apWindow, sizeof(apWindow), window,
+        auto size = makeWindow(apWindow.data(), apWindow.size(), window,
             zs.stream.avail_out);
         auto windowStr =
-            std::string_view(reinterpret_cast<char *>(apWindow), size);
+            std::string_view(reinterpret_cast<char *>(apWindow.data()), size);
         emit([&](AuWriter &au) {
           au.map(
             "uncompressedOffset", totalOut,

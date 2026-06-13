@@ -9,7 +9,7 @@
 	url = https://github.com/google/benchmark
 [submodule "external/tclap"]
 	path = external/tclap
-	url = https://github.com/gburca/tclap
+	url = https://github.com/mirror/tclap
 [submodule "external/re2"]
 	path = external/re2
 	url = https://github.com/google/re2.git
