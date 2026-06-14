@@ -15,15 +15,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux GCC 14 Debug/Coverage
-            os: ubuntu-24.04
-            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-14 CC=gcc-14 CXX=g++-14
+          - name: Linux GCC 16 Debug/Coverage
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-16 CC=gcc-16 CXX=g++-16
+          - name: Linux GCC 16 Release
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-16 CXX=g++-16
+          - name: Linux GCC 15 Release
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-15 CXX=g++-15
           - name: Linux GCC 14 Release
             os: ubuntu-24.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-14 CXX=g++-14
-          - name: Linux GCC 13 Release
-            os: ubuntu-24.04
-            env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-13 CXX=g++-13
+          - name: Linux Clang 22 Release
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-22
           - name: Linux Clang 18 Release
             os: ubuntu-24.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-18
