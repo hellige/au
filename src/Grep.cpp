@@ -126,7 +126,7 @@ std::unique_ptr<re2::RE2> tryMakeRe(std::string_view sv) {
   if (!re->ok()) {
     std::cerr << "regex failed to compile: " << actualPattern << std::endl;
     std::cerr << "  error: " << re->error() << std::endl;
-    return nullptr;
+    re.reset();
   }
   return re;
 }
