@@ -15,30 +15,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux GCC 16 Debug/Coverage
+          - name: Linux GCC 15 Debug/Coverage
             os: ubuntu-26.04
-            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-16 CC=gcc-16 CXX=g++-16
-          - name: Linux GCC 16 Release
-            os: ubuntu-26.04
-            env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-16 CXX=g++-16
+            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-15 CC=gcc-16 CXX=g++-15
           - name: Linux GCC 15 Release
             os: ubuntu-26.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-15 CXX=g++-15
           - name: Linux GCC 14 Release
             os: ubuntu-24.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-14 CXX=g++-14
-          - name: Linux Clang 22 Release
+          - name: Linux Clang 21 Release
             os: ubuntu-26.04
-            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-22
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-21
+          - name: Linux Clang 20 Release
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-20
+          - name: Linux Clang 19 Release
+            os: ubuntu-26.04
+            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-19
           - name: Linux Clang 18 Release
             os: ubuntu-24.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-18 CXX=clang++-18
-          - name: Linux Clang 17 Release
-            os: ubuntu-24.04
-            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-17 CXX=clang++-17
-          - name: Linux Clang 16 Release
-            os: ubuntu-24.04
-            env: BUILD_TYPE=Release STATIC=On LTO=On CC=clang-16 CXX=clang++-16
           - name: macOS Latest Release
             os: macos-latest
             env: BUILD_TYPE=Release
