@@ -17,7 +17,7 @@ jobs:
         include:
           - name: Linux GCC 15 Debug/Coverage
             os: ubuntu-26.04
-            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-15 CC=gcc-16 CXX=g++-15
+            env: BUILD_TYPE=Debug EXTRA_CMAKE=-DCOVERAGE=On GCOV=gcov-15 CC=gcc-15 CXX=g++-15
           - name: Linux GCC 15 Release
             os: ubuntu-26.04
             env: BUILD_TYPE=Release STATIC=On LTO=On CC=gcc-15 CXX=g++-15
