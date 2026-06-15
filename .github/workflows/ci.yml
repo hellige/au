@@ -37,7 +37,7 @@ jobs:
             os: macos-latest
             env: BUILD_TYPE=Release
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
     - name: CMake Build
