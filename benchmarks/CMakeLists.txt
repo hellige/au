@@ -1,2 +1,3 @@
 add_executable(aubenchmark AuBenchmarks.cpp)
 target_link_libraries(aubenchmark libau benchmark)
+au_enable_sanitizers(aubenchmark)

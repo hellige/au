@@ -14,6 +14,7 @@ add_executable(Test
         AuDecoderTests.cpp AuDecoderTestCases.cpp
         HelpersTest.cpp TimestampPatternTest.cpp)
 target_link_libraries(Test libau gtest gtest_main gmock pthread ${CXX_FS_LIB})
+au_enable_sanitizers(Test)
 add_test(NAME Tests
         COMMAND Test
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

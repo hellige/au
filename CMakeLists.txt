@@ -23,16 +23,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXE_LINKER_FLAGS "${EXTRA_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}")
 
-# All the sanitizer flags in one place
+# Sanitizer flags (Debug only; applied to our own code below, not to vendored externals)
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=address")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=undefined")
+    set(SANITIZE_FLAGS -fsanitize=address -fsanitize=undefined)
 else ()
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libasan")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -static-libubsan")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=address")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=signed-integer-overflow")
-    set(SANITIZE_FLAGS "${SANITIZE_FLAGS} -fsanitize=bounds-strict -fsanitize=undefined")
+    set(SANITIZE_FLAGS
+            -static-libasan -static-libubsan
+            -fsanitize=address
+            -fsanitize=signed-integer-overflow
+            -fsanitize=bounds-strict -fsanitize=undefined)
 endif ()
 
 # Common flags shared across all builds
@@ -49,8 +48,13 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     endif ()
 endif ()
 
-# Debug flags
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
+# Helper: apply sanitizer flags to a target in Debug builds. Scoped to our own
+# targets so vendored externals (abseil, re2, ...) stay un-instrumented; some
+# of them have constexpr code that breaks under sanitizer instrumentation.
+function(au_enable_sanitizers target)
+    target_compile_options(${target} PRIVATE $<$<CONFIG:Debug>:${SANITIZE_FLAGS}>)
+    target_link_options(${target} PRIVATE $<$<CONFIG:Debug>:${SANITIZE_FLAGS}>)
+endfunction()
 
 include(CTest)
 
