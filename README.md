@@ -11,6 +11,9 @@ binary search within large files, and the ability to index and offer random
 access to gzipped files, make this a very useful tool even for plain ASCII
 logs!
 
+A rust port of the encoder/decoder library is available
+[here](https://github.com/mrettig/au-rs).
+
 
 ## Motivation and usage
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9.1)
 
-project(au VERSION 0.2.4 LANGUAGES CXX)
+project(au VERSION 0.5.0 LANGUAGES CXX)
 
 option(STATIC "Build statically linked binary" OFF)
 option(COVERAGE "Build with code coverage enabled" OFF)
