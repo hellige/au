@@ -1,3 +1,4 @@
+#include "DoubleAnalysis.h"
 #include "DoubleEncoding.h"
 
 #include <gmock/gmock.h>
@@ -6,6 +7,7 @@
 #include <cstring>
 #include <limits>
 #include <random>
+#include <sstream>
 #include <vector>
 
 namespace au {
@@ -224,6 +226,41 @@ TEST(DoubleEncoding, FindDecimalAgreesWithClassify) {
       EXPECT_EQ(significand, enc.significand);
     }
   }
+}
+
+
+/// Real logs contain plenty of NaNs: in one production audit file NaN was the
+/// fourth most common double value.
+TEST(DoubleAnalysisJson, NonFiniteValuesDoNotBreakJson) {
+  DoubleAnalysis a;
+  a.onRecordStart();
+  for (int i = 0; i < 3; i++)
+    a.onDouble("k", std::numeric_limits<double>::quiet_NaN(), false, 1, 0);
+  a.onDouble("k", std::numeric_limits<double>::infinity(), false, 1, 0);
+  a.onDouble("k", -std::numeric_limits<double>::infinity(), false, 1, 0);
+  a.onDouble("k", 1.5, false, 1, 0);
+  a.onRecordEnd();
+
+  std::ostringstream os;
+  a.reportJson(os, "test", 1000);
+  const auto json = os.str();
+  EXPECT_EQ(std::string::npos, json.find("nan")) << json;
+  EXPECT_EQ(std::string::npos, json.find("inf")) << json;
+  EXPECT_NE(std::string::npos, json.find("\"value\":null")) << json;
+  EXPECT_NE(std::string::npos, json.find("7ff8000000000000")) << json;
+}
+
+/// Keys come straight out of the file, so they can contain anything.
+TEST(DoubleAnalysisJson, AwkwardKeysAreEscaped) {
+  DoubleAnalysis a;
+  a.onRecordStart();
+  a.onDouble("has \"quotes\" and \\ and \n newline", 1.0, false, 1, 0);
+  a.onRecordEnd();
+  std::ostringstream os;
+  a.reportJson(os, "na\"me", 10);
+  const auto json = os.str();
+  EXPECT_NE(std::string::npos, json.find("\\\"quotes\\\"")) << json;
+  EXPECT_NE(std::string::npos, json.find("\\n")) << json;
 }
 
 }

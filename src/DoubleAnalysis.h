@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cinttypes>
+#include <cmath>
 #include <cstdio>
 #include <ostream>
 #include <string>
@@ -452,9 +453,17 @@ public:
     for (auto &[count, bits] : topValues(TOP_N)) {
       double d;
       std::memcpy(&d, &bits, sizeof(d));
-      char buf[128];
+      // %g renders non-finite values as nan/inf, which aren't json; the bit
+      // pattern below carries them exactly anyway
+      char formatted[64];
+      const char *value = "null";
+      if (std::isfinite(d)) {
+        snprintf(formatted, sizeof(formatted), "%.17g", d);
+        value = formatted;
+      }
+      char buf[160];
       snprintf(buf, sizeof(buf), "%s{\"count\":%zu,\"bits\":\"%016" PRIx64
-               "\",\"value\":%.17g}", first ? "" : ",", count, bits, d);
+               "\",\"value\":%s}", first ? "" : ",", count, bits, value);
       os << buf;
       first = false;
     }
