@@ -366,6 +366,8 @@ struct StatsRecordHandler {
   StatsValueHandler vh;
   AuRecordHandler<StatsValueHandler> next;
   bool fullDictDump;
+  /// The dictionary reports would otherwise corrupt machine-readable output.
+  bool quiet;
   SizeHistogram valueHist {"Value records"};
   size_t numRecords = 0;
   size_t dictClears = 0;
@@ -373,10 +375,11 @@ struct StatsRecordHandler {
   std::vector<Header> headers;
   size_t sor = 0;
 
-  explicit StatsRecordHandler(bool fullDictDump, bool analyzeDoubles)
+  StatsRecordHandler(bool fullDictDump, bool analyzeDoubles, bool quiet)
   : vh(dictFrequency),
     next(dictionary, vh),
-    fullDictDump(fullDictDump) {
+    fullDictDump(fullDictDump),
+    quiet(quiet) {
     vh.analyzeDoubles = analyzeDoubles;
   }
 
@@ -394,7 +397,7 @@ struct StatsRecordHandler {
   void onDictClear() {
     dictClears++;
     auto *dict = dictionary.latest();
-    if (dict && dict->size())
+    if (!quiet && dict && dict->size())
       dictStats(*dict, dictFrequency, "upon clear", fullDictDump);
     dictFrequency.clear();
     next.onDictClear();
@@ -435,18 +438,22 @@ public:
   int decode(StatsRecordHandler &handler) const {
     auto source = detectSource(filename_, std::nullopt, false);
     if (!checkAuFile(*source)) return 1;
+    bool truncated = false;
     try {
       RecordParser(*source, handler).parseStream();
     } catch (parse_error &e) {
-      std::cerr << e.what() << std::endl;
-      return 1;
+      // report what we did read rather than discarding it, which is what
+      // makes sampling a prefix of a very large file practical
+      std::cerr << filename_ << ": stopped after "
+                << prettyBytes(source->pos()) << ": " << e.what() << std::endl;
+      truncated = true;
     }
 
     if (json_) {
       // one object per file, so a corpus aggregates by concatenation
       handler.vh.doubleAnalysis.reportJson(std::cout, filename_,
-                                           source->pos());
-      return 0;
+                                           source->pos(), truncated);
+      return truncated ? 1 : 0;
     }
 
     auto *dict = handler.dictionary.latest();
@@ -454,9 +461,11 @@ public:
       dictStats(*dict, handler.dictFrequency, "at end of file",
                 handler.fullDictDump);
 
-    std::cout
-        << "Stats for " << filename_ << ":\n"
-        << "  Headers seen:\n";
+    std::cout << "Stats for " << filename_ << ":\n";
+    if (truncated)
+      std::cout << "  NOTE: input ended mid-stream; figures below cover only"
+                   " the part that was read.\n";
+    std::cout << "  Headers seen:\n";
 
     for (const auto &h : handler.headers) {
       std::cout
@@ -479,7 +488,7 @@ public:
     if (handler.vh.analyzeDoubles)
       handler.vh.doubleAnalysis.report(std::cout, source->pos());
 
-    return 0;
+    return truncated ? 1 : 0;
   }
 };
 
@@ -516,7 +525,8 @@ int stats(int argc, const char * const *argv) {
   if (fileNames.isSet()) inputFiles = fileNames.getValue();
 
   for (auto &f : inputFiles) {
-    StatsRecordHandler handler(dictDump.isSet(), doubles.isSet());
+    StatsRecordHandler handler(dictDump.isSet(), doubles.isSet(),
+                               json.isSet());
     auto result = StatsDecoder(f, json.isSet()).decode(handler);
     if (result) return result;
   }

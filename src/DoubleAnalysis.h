@@ -411,8 +411,9 @@ public:
   }
 
   void reportJson(std::ostream &os, const std::string &filename,
-                  size_t streamBytes) const {
+                  size_t streamBytes, bool truncated = false) const {
     os << "{\"file\":\"" << escapeJson(filename) << "\""
+       << ",\"truncated\":" << (truncated ? "true" : "false")
        << ",\"streamBytes\":" << streamBytes
        << ",\"records\":" << records_
        << ",\"recordsWithDoubles\":" << recordsWithDoubles_
