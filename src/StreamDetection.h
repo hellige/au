@@ -1,27 +1,12 @@
 #pragma once
 
+#include "AuMagic.h"
 #include "Zindex.h"
 #include "au/FileByteSource.h"
 
 namespace au {
 
 namespace {
-
-static inline bool isAuFile(AuByteSource &source) {
-  if (source.peek().isEof()) return false;
-
-  auto headerMatched = false;
-  auto pos = source.pos();
-  try {
-    source.readFunc(4, [&](auto fragment) {
-      if (fragment == "HAU\x61") {
-        headerMatched = true;
-      }
-    });
-  } catch (parse_error &) {}
-  source.seek(pos);
-  return headerMatched;
-}
 
 static inline bool isGzipFile(AuByteSource &source) {
   if (source.peek().isEof()) return false;

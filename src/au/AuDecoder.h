@@ -113,8 +113,8 @@ protected:
     // do the right thing for tail as well as for other use sites.
 
     if (version != AU_FORMAT_VERSION) {
-      AU_THROW("Bad format version: expected " << AU_FORMAT_VERSION
-                                            << ", got " << version);
+      throw bad_version(AU_STR("Bad format version: expected "
+                               << AU_FORMAT_VERSION << ", got " << version));
     }
     return version;
   }
@@ -395,6 +395,10 @@ private:
     HeaderHandler hh;
     try {
       RecordParser<HeaderHandler>(source_, hh).record();
+    } catch (const au::bad_version &) {
+      // we read a version, so it really is an au file, just not a readable
+      // one. worth saying so rather than claiming it isn't au at all.
+      throw;
     } catch (const au::parse_error &) {
       // don't care what it was...
     }

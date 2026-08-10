@@ -26,4 +26,12 @@ struct parse_error : std::runtime_error {
       : std::runtime_error(what) {}
 };
 
+/** Distinguished from a generic parse_error so that callers still deciding
+ * whether a stream is au at all can tell "not an au file" apart from "an au
+ * file we can't read". */
+struct bad_version : parse_error {
+  explicit bad_version(const std::string &what)
+      : parse_error(what) {}
+};
+
 }
