@@ -2,6 +2,7 @@
 #include "AuOutputHandler.h"
 #include "JsonOutputHandler.h"
 #include "GrepHandler.h"
+#include "NumericPattern.h"
 #include "StreamDetection.h"
 #include "TclapHelper.h"
 #include "TimestampPattern.h"
@@ -33,7 +34,9 @@ bool setUnsignedPattern(Pattern &pattern, std::string &intPat) {
   errno = 0;
   uint64_t val = strtoull(str, &end, 10);
   if (errno == ERANGE) return false;
-  if (!isdigit(*str)) return false; // don't allow negatives
+  // strtoull silently wraps negatives around rather than failing, so we have
+  // to reject them ourselves.
+  if (!isdigit(static_cast<unsigned char>(*str))) return false;
   if (end != str + intPat.size()) return false;
   pattern.uintPattern = val;
   return true;
@@ -46,15 +49,10 @@ bool setIntPattern(Pattern &pattern, std::string &intPat) {
     setUnsignedPattern(pattern, intPat);
 }
 
-bool setDoublePattern(Pattern &pattern, std::string &intPat) {
-  const char *str = intPat.c_str();
-  char *end;
-  errno = 0;
-  double val = strtod(str, &end);
-  if (errno == ERANGE) return false;
-  if (!isdigit(*str)) return false; // don't allow negatives
-  if (end != str + intPat.size()) return false;
-  pattern.doublePattern = val;
+bool setDoublePattern(Pattern &pattern, std::string &doublePat) {
+  auto val = parseDoublePattern(doublePat);
+  if (!val) return false;
+  pattern.doublePattern = *val;
   return true;
 }
 

@@ -12,7 +12,7 @@ endif()
 add_executable(Test
         AuUnitTests.cpp AuEncoderTests.cpp
         AuDecoderTests.cpp AuDecoderTestCases.cpp
-        AuMagicTest.cpp
+        AuMagicTest.cpp NumericPatternTest.cpp
         HelpersTest.cpp TimestampPatternTest.cpp)
 target_link_libraries(Test libau gtest gtest_main gmock pthread ${CXX_FS_LIB})
 au_enable_sanitizers(Test)
