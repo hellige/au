@@ -1,5 +1,6 @@
 #include "au/AuDecoder.h"
 #include "AuRecordHandler.h"
+#include "DoubleAnalysis.h"
 #include "StreamDetection.h"
 #include "TclapHelper.h"
 
@@ -29,6 +30,12 @@ std::string commafy(uint64_t val) {
   std::string result(buf);
   std::reverse(result.begin(), result.end());
   return result;
+}
+
+/// An empty file legitimately reaches here with a total size of zero.
+size_t percent(size_t part, size_t whole) {
+  if (!whole) return 0;
+  return 100 * part / whole;
 }
 
 std::string prettyBytes(size_t bytes) {
@@ -75,12 +82,12 @@ struct SizeHistogram {
       auto bytes = buckets[i] * (i+1);
       printf("        %10s: %s (%zu%%) %s\n", prettyBytes(1u << i).c_str(),
              commafy(buckets[i]).c_str(),
-             100*buckets[i]/totalStrings,
+             percent(buckets[i], totalStrings),
              prettyBytes(bytes).c_str());
     }
     if (totalBytes) {
     std::cout << "       Total bytes: " << prettyBytes(totalValBytes)
-                << " (" << (100 * totalValBytes / *totalBytes)
+                << " (" << percent(totalValBytes, *totalBytes)
                 << "% of stream)\n";
     }
   }
@@ -111,10 +118,10 @@ struct VarintHistogram {
       auto bytes = buckets[i] * (i + 1);
       totalIntBytes += bytes;
       printf("        %3u: %s (%zu%%) %s\n", i + 1, commafy(buckets[i]).c_str(),
-             100 * buckets[i] / totalInts, prettyBytes(bytes).c_str());
+             percent(buckets[i], totalInts), prettyBytes(bytes).c_str());
     }
     std::cout << "       Total bytes: " << prettyBytes(totalIntBytes)
-              << " (" << (100 * totalIntBytes / totalBytes)
+              << " (" << percent(totalIntBytes, totalBytes)
               << "% of stream)\n";
   }
 };
@@ -148,8 +155,28 @@ void dictStats(const Dictionary::Dict &dictionary,
 }
 
 struct StatsValueHandler : public NoopValueHandler {
+  /** Keys and values arrive through the same callbacks, so counting them is
+   * the only way to tell which key a double sits under. Also lets us spot runs
+   * of adjacent doubles in an array. Same approach as GrepHandler. */
+  struct Context {
+    enum class Kind { Bare, Object, Array };
+    Kind kind;
+    size_t counter = 0;      //< values seen; in an object, keys are even
+    std::string key;         //< most recent key, for Object contexts
+    bool prevWasDouble = false;
+    uint64_t prevDoubleBits = 0;
+    size_t doubleRun = 0;    //< length of the current run of adjacent doubles
+
+    explicit Context(Kind k) : kind(k) {}
+  };
+
   std::vector<size_t> &dictFrequency;
   const Dictionary::Dict *dictionary = nullptr;
+  bool analyzeDoubles = false;
+  DoubleAnalysis doubleAnalysis;
+  std::vector<Context> context;
+  std::string pendingString;
+  bool capturingKey = false;
   size_t doubles = 0;
   size_t doubleBytes = 0;
   size_t timestamps = 0;
@@ -168,51 +195,139 @@ struct StatsValueHandler : public NoopValueHandler {
   StatsValueHandler(std::vector<size_t> &dictFrequency)
       : dictFrequency(dictFrequency) {}
 
+  bool isKey() const {
+    auto &c = context.back();
+    return c.kind == Context::Kind::Object && c.counter % 2 == 0;
+  }
+
+  /// Correct attribution whether the double sits under the key directly or in
+  /// an array beneath it.
+  const std::string &enclosingKey() const {
+    static const std::string none;
+    for (auto it = context.rbegin(); it != context.rend(); ++it)
+      if (it->kind == Context::Kind::Object) return it->key;
+    return none;
+  }
+
+  /// Once per completed value, and once per key.
+  void advance(bool wasDouble = false, uint64_t bits = 0) {
+    auto &c = context.back();
+    c.counter++;
+    if (c.kind == Context::Kind::Array) {
+      c.doubleRun = wasDouble ? (c.prevWasDouble ? c.doubleRun + 1 : 1) : 0;
+      c.prevWasDouble = wasDouble;
+      c.prevDoubleBits = bits;
+    }
+  }
+
   void onValue(AuByteSource &source, const Dictionary::Dict &dict) {
     dictionary = &dict;
     source_ = &source;
+    if (analyzeDoubles) {
+      context.clear();
+      context.emplace_back(Context::Kind::Bare);
+      doubleAnalysis.onRecordStart();
+    }
     ValueParser<StatsValueHandler> parser(source, *this);
     parser.value();
+    if (analyzeDoubles) doubleAnalysis.onRecordEnd();
     source_ = nullptr;
   }
 
   void onBool(size_t pos, bool) override {
     bools++;
     boolBytes += source_->pos() - pos;
+    if (analyzeDoubles) advance();
   }
 
   void onNull(size_t pos) override {
     nulls++;
     nullBytes += source_->pos() - pos;
+    if (analyzeDoubles) advance();
   }
 
   void onInt(size_t pos, int64_t) override {
     intValues.add(source_->pos() - pos);
+    if (analyzeDoubles) advance();
   }
 
   void onUint(size_t pos, uint64_t) override {
     intValues.add(source_->pos() - pos);
+    if (analyzeDoubles) advance();
   }
 
-  void onDouble(size_t pos, double) override {
+  void onDouble(size_t pos, double value) override {
     doubles++;
     doubleBytes += source_->pos() - pos;
+    if (!analyzeDoubles) return;
+    auto &c = context.back();
+    const bool inRun =
+        c.kind == Context::Kind::Array && c.prevWasDouble;
+    const size_t runLength = inRun ? c.doubleRun + 1 : 1;
+    doubleAnalysis.onDouble(enclosingKey(), value, inRun, runLength,
+                            c.prevDoubleBits);
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    advance(true, bits);
   }
 
   void onTime(size_t pos, time_point) override {
     timestamps++;
     timestampBytes += source_->pos() - pos;
+    if (analyzeDoubles) advance();
   }
 
   void onDictRef(size_t pos, size_t idx) override {
     dictStringHist.add(dictionary->at(idx).size());
     dictRefs.add(source_->pos() - pos);
     dictFrequency[idx]++;
+    if (!analyzeDoubles) return;
+    if (isKey()) context.back().key = dictionary->at(idx);
+    advance();
   }
 
   void onStringStart(size_t pos, size_t len) override {
     stringHist.add(len);
     stringLengths.add(source_->pos() - pos);
+    if (!analyzeDoubles) return;
+    capturingKey = isKey();
+    if (capturingKey) {
+      pendingString.clear();
+      pendingString.reserve(len);
+    }
+  }
+
+  void onStringFragment(std::string_view frag) override {
+    if (capturingKey) pendingString.append(frag);
+  }
+
+  void onStringEnd() override {
+    if (!analyzeDoubles) return;
+    if (capturingKey) {
+      context.back().key = pendingString;
+      capturingKey = false;
+    }
+    advance();
+  }
+
+  void onObjectStart() override {
+    if (analyzeDoubles) context.emplace_back(Context::Kind::Object);
+  }
+
+  void onObjectEnd() override {
+    if (!analyzeDoubles) return;
+    context.pop_back();
+    advance();
+  }
+
+  void onArrayStart() override {
+    if (analyzeDoubles) context.emplace_back(Context::Kind::Array);
+  }
+
+  void onArrayEnd() override {
+    if (!analyzeDoubles) return;
+    context.pop_back();
+    advance();
   }
 
   void dumpStats(size_t totalBytes) {
@@ -220,16 +335,16 @@ struct StatsValueHandler : public NoopValueHandler {
         << "  Values:\n"
         << "     Doubles: " << commafy(doubles) << '\n'
         << "       Total bytes: " << prettyBytes(doubleBytes)
-        << " (" << (100 * doubleBytes / totalBytes) << "% of stream)\n"
+        << " (" << percent(doubleBytes, totalBytes) << "% of stream)\n"
         << "     Timestamps: " << commafy(timestamps) << '\n'
         << "       Total bytes: " << prettyBytes(timestampBytes)
-        << " (" << (100 * timestampBytes / totalBytes) << "% of stream)\n"
+        << " (" << percent(timestampBytes, totalBytes) << "% of stream)\n"
         << "     Bools: " << commafy(bools) << '\n'
         << "       Total bytes: " << prettyBytes(boolBytes)
-        << " (" << (100 * boolBytes / totalBytes) << "% of stream)\n"
+        << " (" << percent(boolBytes, totalBytes) << "% of stream)\n"
         << "     Nulls: " << commafy(nulls) << '\n'
         << "       Total bytes: " << prettyBytes(nullBytes)
-        << " (" << (100 * nullBytes / totalBytes) << "% of stream)\n";
+        << " (" << percent(nullBytes, totalBytes) << "% of stream)\n";
     intValues.dumpStats(totalBytes);
     dictRefs.dumpStats(totalBytes);
     dictStringHist.dumpStats({});
@@ -258,10 +373,12 @@ struct StatsRecordHandler {
   std::vector<Header> headers;
   size_t sor = 0;
 
-  explicit StatsRecordHandler(bool fullDictDump)
+  explicit StatsRecordHandler(bool fullDictDump, bool analyzeDoubles)
   : vh(dictFrequency),
     next(dictionary, vh),
-    fullDictDump(fullDictDump) {}
+    fullDictDump(fullDictDump) {
+    vh.analyzeDoubles = analyzeDoubles;
+  }
 
   void onRecordStart(size_t pos) {
     sor = pos;
@@ -309,10 +426,11 @@ struct StatsRecordHandler {
 
 class StatsDecoder {
   std::string filename_;
+  bool json_;
 
 public:
-  StatsDecoder(const std::string &filename)
-      : filename_(filename) {}
+  StatsDecoder(const std::string &filename, bool json)
+      : filename_(filename), json_(json) {}
 
   int decode(StatsRecordHandler &handler) const {
     auto source = detectSource(filename_, std::nullopt, false);
@@ -322,6 +440,13 @@ public:
     } catch (parse_error &e) {
       std::cerr << e.what() << std::endl;
       return 1;
+    }
+
+    if (json_) {
+      // one object per file, so a corpus aggregates by concatenation
+      handler.vh.doubleAnalysis.reportJson(std::cout, filename_,
+                                           source->pos());
+      return 0;
     }
 
     auto *dict = handler.dictionary.latest();
@@ -351,6 +476,8 @@ public:
         << "     Dictionary adds: " << commafy(handler.dictAdds) << '\n';
     handler.valueHist.dumpStats(source->pos());
     handler.vh.dumpStats(source->pos());
+    if (handler.vh.analyzeDoubles)
+      handler.vh.doubleAnalysis.report(std::cout, source->pos());
 
     return 0;
   }
@@ -361,7 +488,10 @@ void usage() {
       << "usage: au stats [options] [--] <path>...\n"
       << "\n"
       << "  -h --help        show usage and exit\n"
-      << "  -d --dict        dump full dictionary\n";
+      << "  -d --dict        dump full dictionary\n"
+      << "     --doubles     analyze how well doubles would compress\n"
+      << "     --json        emit the --doubles analysis as json, one\n"
+      << "                   object per file, for aggregation\n";
 }
 
 }
@@ -370,17 +500,24 @@ int stats(int argc, const char * const *argv) {
   TclapHelper tclap(usage);
 
   TCLAP::SwitchArg dictDump("d", "dict", "dict", tclap.cmd(), false);
+  TCLAP::SwitchArg doubles("", "doubles", "doubles", tclap.cmd(), false);
+  TCLAP::SwitchArg json("", "json", "json", tclap.cmd(), false);
   TCLAP::UnlabeledMultiArg<std::string> fileNames(
       "path", "", false, "path", tclap.cmd());
 
   if (!tclap.parse(argc, argv)) return 1;
 
+  if (json.isSet() && !doubles.isSet()) {
+    std::cerr << "--json currently only applies to --doubles.\n";
+    return 1;
+  }
+
   std::vector<std::string> inputFiles{"-"};
   if (fileNames.isSet()) inputFiles = fileNames.getValue();
 
-  for (auto &f : fileNames.getValue()) {
-    StatsRecordHandler handler(dictDump.isSet());
-    auto result = StatsDecoder(f).decode(handler);
+  for (auto &f : inputFiles) {
+    StatsRecordHandler handler(dictDump.isSet(), doubles.isSet());
+    auto result = StatsDecoder(f, json.isSet()).decode(handler);
     if (result) return result;
   }
 
