@@ -98,7 +98,8 @@ private:
   static std::string escapeJson(const std::string &s) {
     std::string out;
     out.reserve(s.size() + 2);
-    for (unsigned char c : s) {
+    for (char ch : s) {
+      const auto c = static_cast<unsigned char>(ch);
       switch (c) {
         case '"':  out += "\\\""; break;
         case '\\': out += "\\\\"; break;
@@ -164,6 +165,7 @@ public:
         byScale_[enc.scale]++;
         sigLen_[doubleenc::varintLen(doubleenc::zigzag(enc.significand))]++;
         break;
+      default: break;  //< unreachable, every tier is handled above
     }
 
     // (b) scan backwards so the nearest match wins and the distance stays
@@ -232,7 +234,9 @@ public:
       switch (enc.tier) {
         case Tier::Decimal: case Tier::Zero: ks->decimal++; break;
         case Tier::Float32: ks->float32++; break;
-        default: ks->raw++; break;
+        case Tier::NegZero: case Tier::NonFinite: case Tier::Raw:
+          ks->raw++; break;
+        default: break;  //< unreachable, every tier is handled above
       }
     }
 
