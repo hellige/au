@@ -638,6 +638,13 @@ private:
 };
 
 class AuEncoder {
+public:
+  /** Backrefs are stored in 32 bits, so a dictionary record has to be emitted
+   * before the running distance from the last one can overflow. Half the
+   * available range leaves room for any plausible single record. */
+  static constexpr size_t DEFAULT_BACKREF_THRESHOLD = 1ull << 31;
+
+private:
   static constexpr uint32_t AU_FORMAT_VERSION
       = FormatVersion1::AU_FORMAT_VERSION;
   AuStringIntern stringIntern_;
@@ -650,6 +657,7 @@ class AuEncoder {
   size_t purgeThreshold_;
   size_t reindexInterval_;
   size_t clearThreshold_;
+  size_t backrefThreshold_;
 
   void exportDict() {
     auto &dict = stringIntern_.dict();
@@ -670,6 +678,12 @@ class AuEncoder {
 
   template <typename F>
   ssize_t finalizeAndWrite(F &&write) {
+    // Any dictionary record resets the backref, so emit one before the
+    // running distance outgrows the 32 bits it's stored in. It has to be a
+    // clear rather than an empty dict-add: readers only extend a dictionary's
+    // range when strings are actually added to it, so an empty add would
+    // leave this value record pointing outside any known dictionary.
+    if (backref_ > backrefThreshold_) emitDictClear();
     exportDict();
     auto sor = dictBuf_.tellp();
     AuWriter af(dictBuf_, stringIntern_);
@@ -714,6 +728,10 @@ public:
    * records. A value of 0 means "never". A re-index involves a purge.
    * @param clearThreshold When the dictionary grows beyond this size, it will
    * be cleared. Large dictionaries slow down encoding.
+   * @param backrefThreshold A dictionary record will be emitted once this many
+   * bytes have accumulated since the last one, whether or not there is
+   * anything to add, so that the 32-bit backref can't overflow. Injectable
+   * mainly so tests don't have to encode gigabytes.
    */
   AuEncoder(std::string metadata = std::string{},
             size_t purgeInterval = 250'000,
@@ -730,13 +748,15 @@ public:
             size_t purgeInterval,
             size_t purgeThreshold,
             size_t reindexInterval,
-            AuStringIntern::Config stringInternConfig)
+            AuStringIntern::Config stringInternConfig,
+            size_t backrefThreshold = DEFAULT_BACKREF_THRESHOLD)
       : stringIntern_(stringInternConfig),
         backref_(0), lastDictSize_(0), records_(0),
         purgeInterval_(purgeInterval),
         purgeThreshold_(purgeThreshold),
         reindexInterval_(reindexInterval),
-        clearThreshold_(stringInternConfig.clearThreshold)
+        clearThreshold_(stringInternConfig.clearThreshold),
+        backrefThreshold_(backrefThreshold)
   {
     if (metadata.size() > FormatVersion1::MAX_METADATA_SIZE)
       metadata.resize(FormatVersion1::MAX_METADATA_SIZE);

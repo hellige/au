@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 
+#include <sstream>
 #include <vector>
 
 namespace au {
@@ -182,6 +183,65 @@ TEST_F(AuEncoderTest, MultiRecord) {
   }, AuEncoderTest::write);
   ASSERT_EQ(R"_({"1st":"record","key":3.141})_" "\n"
             R"_({"2nd":"record","transcends":2.71828})_", getJson());
+}
+
+namespace {
+
+/** Interns a stable string so the dictionary stops growing after the first few
+ * records, which is what leaves the backref running unchecked. */
+std::vector<char> encodeWithBackrefThreshold(size_t threshold, int records) {
+  AuEncoder au("", 0, 50, 0, AuStringIntern::Config{}, threshold);
+  std::vector<char> storage;
+  for (int n = 0; n < records; n++) {
+    au.encode([&](AuWriter &w) {
+      w.startMap();
+      w.key("n");
+      w.value(n);
+      w.key("stable");
+      w.value(std::string_view("a value long enough to get interned"));
+      w.endMap();
+    }, [&](std::string_view a, std::string_view b) {
+      storage.insert(storage.end(), a.begin(), a.end());
+      storage.insert(storage.end(), b.begin(), b.end());
+      return a.size() + b.size();
+    });
+  }
+  return storage;
+}
+
+std::string decodeToJson(const std::vector<char> &storage) {
+  std::stringstream ss;
+  JsonOutputHandler handler(ss);
+  Dictionary dictionary;
+  AuRecordHandler recordHandler(dictionary, handler);
+  BufferByteSource source(storage.data(), storage.size());
+  RecordParser(source, recordHandler).parseStream();
+  return ss.str();
+}
+
+}
+
+/** Backrefs are stored in 32 bits, so the encoder emits a dictionary record
+ * once enough bytes have accumulated since the last one. Driving that with a
+ * tiny threshold gets the same coverage as encoding gigabytes.
+ *
+ * Note this also pins down *which* record it emits: a dict clear works, while
+ * an empty dict-add does not, because readers only extend a dictionary's range
+ * when strings are added to it. */
+TEST(AuEncoderBackref, ExtraDictionaryRecordsDoNotBreakDecoding) {
+  const auto relaxed = encodeWithBackrefThreshold(1u << 20, 500);
+  const auto frequent = encodeWithBackrefThreshold(256, 500);
+
+  EXPECT_GT(frequent.size(), relaxed.size())
+      << "a small threshold should have forced extra dictionary records";
+  EXPECT_EQ(decodeToJson(relaxed), decodeToJson(frequent));
+}
+
+TEST(AuEncoderBackref, DefaultThresholdLeavesRoomForALargeRecord) {
+  constexpr size_t limit = 1ull << 32;
+  EXPECT_LT(AuEncoder::DEFAULT_BACKREF_THRESHOLD, limit);
+  EXPECT_GE(limit - AuEncoder::DEFAULT_BACKREF_THRESHOLD, 1ull << 30)
+      << "a single record could push past the limit after the last check";
 }
 
 }

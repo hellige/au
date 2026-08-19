@@ -4,8 +4,6 @@
  - Detect non-json, non-au files, at least simple cases.
  - Compressed encoding of doubles: measured, and not worth doing. See
    "Compressed doubles" below.
- - Add checks to emit empty dict-add record if backref approaches max? (Has
-   something like this already been done? I can't remember...)
  - The json parser in the encoder chokes on `nan` rather than `NaN`, but there
    isn't any kind of error. Why? Note it's worse than that: `au enc` on a
    document containing `NaN` writes a *malformed* record (an object start with
