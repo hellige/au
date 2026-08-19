@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -235,6 +236,14 @@ TEST(AuEncoderBackref, ExtraDictionaryRecordsDoNotBreakDecoding) {
   EXPECT_GT(frequent.size(), relaxed.size())
       << "a small threshold should have forced extra dictionary records";
   EXPECT_EQ(decodeToJson(relaxed), decodeToJson(frequent));
+}
+
+TEST(AuEncoderBackref, NarrowingIsChecked) {
+  constexpr size_t limit = std::numeric_limits<uint32_t>::max();
+  EXPECT_EQ(0u, AuEncoder::checkedBackref(0));
+  EXPECT_EQ(limit, AuEncoder::checkedBackref(limit));
+  EXPECT_THROW(AuEncoder::checkedBackref(limit + 1), std::runtime_error);
+  EXPECT_THROW(AuEncoder::checkedBackref(1ull << 40), std::runtime_error);
 }
 
 TEST(AuEncoderBackref, DefaultThresholdLeavesRoomForALargeRecord) {

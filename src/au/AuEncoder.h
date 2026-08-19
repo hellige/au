@@ -1,10 +1,12 @@
 #pragma once
 
 #include "au/AuCommon.h"
+#include "au/ParseError.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <limits>
 #include <ctime>
 #include <list>
 #include <map>
@@ -644,6 +646,18 @@ public:
    * available range leaves room for any plausible single record. */
   static constexpr size_t DEFAULT_BACKREF_THRESHOLD = 1ull << 31;
 
+  /** Backrefs go on the wire as 32 bits. Checking the narrowing here means
+   * that a mistake in the threshold logic, or a single record big enough to
+   * blow past it, fails loudly instead of silently writing a file that can't
+   * be decoded past that point. */
+  static uint32_t checkedBackref(size_t backref) {
+    if (backref > std::numeric_limits<uint32_t>::max())
+      THROW_RT("backref " << backref << " exceeds the 32 bits it is stored in."
+               " A dictionary record should have been emitted before this"
+               " point; is backrefThreshold set too high?");
+    return static_cast<uint32_t>(backref);
+  }
+
 private:
   static constexpr uint32_t AU_FORMAT_VERSION
       = FormatVersion1::AU_FORMAT_VERSION;
@@ -665,7 +679,7 @@ private:
       auto sor = dictBuf_.tellp();
       AuWriter af(dictBuf_, stringIntern_);
       af.raw('A');
-      af.backref(static_cast<uint32_t>(backref_)); // TODO do we guarantee elsewhere that this is never allowed to exceed 32 bits?
+      af.backref(checkedBackref(backref_));
       for (size_t i = lastDictSize_; i < dict.size(); ++i) {
         auto &s = dict[i];
         af.value(std::string_view(s.c_str(), s.length()), false);
@@ -688,7 +702,7 @@ private:
     auto sor = dictBuf_.tellp();
     AuWriter af(dictBuf_, stringIntern_);
     af.raw('V');
-    af.backref(static_cast<uint32_t>(backref_));  // TODO as above, do we guarantee elsewhere that this is never allowed to exceed 32 bits?
+    af.backref(checkedBackref(backref_));
     af.valueInt(buf_.tellp());
     backref_ += dictBuf_.tellp() - sor;
 
