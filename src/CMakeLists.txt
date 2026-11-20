@@ -64,8 +64,9 @@ target_include_directories(libau INTERFACE .)
 target_compile_options(libau INTERFACE ${DEFAULT_CXX_FLAGS})
 install(DIRECTORY au DESTINATION include)
 
-add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp ZindexCmd.cpp Zindex.cpp)
-target_link_libraries(au libau ${ZLIB_LIBRARIES} re2::re2)
+add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp ZindexCmd.cpp Zindex.cpp
+        ZstdCmd.cpp Zstd.cpp)
+target_link_libraries(au libau ${ZLIB_LIBRARIES} re2::re2 zstd_seekable)
 au_enable_sanitizers(au)
 install(TARGETS au
         RUNTIME DESTINATION bin)

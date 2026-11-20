@@ -2,6 +2,7 @@
 
 #include "AuMagic.h"
 #include "Zindex.h"
+#include "Zstd.h"
 #include "au/FileByteSource.h"
 
 namespace au {
@@ -24,13 +25,27 @@ static inline bool isGzipFile(AuByteSource &source) {
   return magicMatched;
 }
 
+static inline bool isZstdFile(AuByteSource &source) {
+  if (source.peek().isEof()) return false;
+
+  std::string prefix;
+  auto pos = source.pos();
+  try {
+    source.readFunc(4, [&](auto fragment) { prefix.append(fragment); });
+  } catch (parse_error &) {}
+  source.seek(pos);
+  return looksLikeZstd(prefix);
+}
+
 static inline std::unique_ptr<FileByteSource> detectSource(
     const std::string &fileName,
     const std::optional<std::string> &indexFile,
     bool compressed) {
   std::unique_ptr<FileByteSource> source;
   auto fbs = std::make_unique<FileByteSourceImpl>(fileName);
-  if (compressed || isGzipFile(*fbs)) {
+  if (isZstdFile(*fbs)) {
+    source.reset(new ZstdByteSource(*fbs));
+  } else if (compressed || isGzipFile(*fbs)) {
     auto *ptr = fbs.get();
     source.reset(new ZipByteSource(*ptr, indexFile));
   } else {

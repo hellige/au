@@ -33,6 +33,8 @@ int help(int, char **) {
     << "   zindex   Build an index of a gzipped file (to support grep -o)\n"
     << "            Works for .json and .au files. Index will be written to <file>.auzx\n"
     << "            unless specified with -x <index>\n"
+    << "   zstd     Compress a file in seekable zstd format (supports grep -o\n"
+    << "            and tail without an index)\n"
     << "\n"
     << "   zcat     cat gzipped au file (deprecated, just use cat)\n"
     << "   zgrep    grep in gzipped file (deprecated, just use grep)\n"
@@ -60,6 +62,7 @@ int main(int argc, char **argv) {
   commands["json2au"] = au::json2au;
   commands["stats"] = au::stats;
   commands["zindex"] = au::zindex;
+  commands["zstd"] = au::zstd;
   commands["zgrep"] = au::zgrep;
   commands["zcat"] = au::zcat;
   commands["ztail"] = au::ztail;

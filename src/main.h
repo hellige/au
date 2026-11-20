@@ -11,5 +11,6 @@ int ztail(int argc, const char * const *argv);
 int cat(int argc, const char * const *argv);
 int zcat(int argc, const char * const *argv);
 int zindex(int argc, const char * const *argv);
+int zstd(int argc, const char * const *argv);
 
 }

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9.1)
 
-project(au VERSION 0.5.0 LANGUAGES CXX)
+project(au VERSION 0.5.0 LANGUAGES C CXX)
 
 option(STATIC "Build statically linked binary" OFF)
 option(COVERAGE "Build with code coverage enabled" OFF)
@@ -84,6 +84,26 @@ add_subdirectory(external/re2)
 # under clang's -Weverything) to fire on re2's own headers. Mark it SYSTEM.
 get_target_property(_re2_inc re2 INTERFACE_INCLUDE_DIRECTORIES)
 set_target_properties(re2 PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_re2_inc}")
+
+# zstd: only the static library; we build the seekable-format contrib code
+# ourselves, since zstd's cmake doesn't expose it as a library.
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_DICTBUILDER OFF CACHE BOOL "" FORCE)
+set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/zstd/build/cmake external/zstd EXCLUDE_FROM_ALL)
+set(ZSTD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/zstd)
+add_library(zstd_seekable STATIC
+        ${ZSTD_DIR}/contrib/seekable_format/zstdseek_compress.c
+        ${ZSTD_DIR}/contrib/seekable_format/zstdseek_decompress.c)
+target_compile_definitions(zstd_seekable PRIVATE XXH_NAMESPACE=ZSTD_)
+# lib/common is needed for xxhash.h (we compute frame checksums ourselves) and
+# for mem.h (used internally by the seekable code).
+target_include_directories(zstd_seekable SYSTEM PUBLIC
+        ${ZSTD_DIR}/lib ${ZSTD_DIR}/lib/common ${ZSTD_DIR}/contrib/seekable_format)
+target_link_libraries(zstd_seekable PUBLIC libzstd_static)
 
 # au configuration
 include_directories(src)

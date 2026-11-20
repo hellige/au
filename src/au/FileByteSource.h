@@ -231,6 +231,7 @@ using File = std::unique_ptr<FILE, Closer>;
 
 class FileByteSourceImpl : public FileByteSource {
   friend class ZipByteSource;
+  friend class ZstdByteSource;
   File file_;
 
 public:
