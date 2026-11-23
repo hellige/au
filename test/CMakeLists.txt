@@ -14,7 +14,7 @@ add_executable(Test
         AuDecoderTests.cpp AuDecoderTestCases.cpp
         AuMagicTest.cpp NumericPatternTest.cpp DoubleEncodingTest.cpp
         HelpersTest.cpp TimestampPatternTest.cpp ZstdTests.cpp
-        ../src/Zstd.cpp ../src/Zindex.cpp)
+        ../src/ZstdSeekable.cpp ../src/Zindex.cpp)
 target_link_libraries(Test libau gtest gtest_main gmock pthread ${CXX_FS_LIB}
         ${ZLIB_LIBRARIES} re2::re2 zstd_seekable)
 au_enable_sanitizers(Test)

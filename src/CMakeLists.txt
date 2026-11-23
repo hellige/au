@@ -60,12 +60,12 @@ include_directories(au)
 target_sources(libau INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuEncoder.h
         ${CMAKE_CURRENT_SOURCE_DIR}/au/AuDecoder.h)
-target_include_directories(libau INTERFACE .)
+target_include_directories(libau INTERFACE . ${PROJECT_BINARY_DIR})
 target_compile_options(libau INTERFACE ${DEFAULT_CXX_FLAGS})
 install(DIRECTORY au DESTINATION include)
 
 add_executable(au main.cpp CatCmd.cpp Json2Au.cpp Stats.cpp Grep.cpp Tail.cpp ZindexCmd.cpp Zindex.cpp
-        ZstdCmd.cpp Zstd.cpp)
+        ZstdCmd.cpp ZstdSeekable.cpp)
 target_link_libraries(au libau ${ZLIB_LIBRARIES} re2::re2 zstd_seekable)
 au_enable_sanitizers(au)
 install(TARGETS au

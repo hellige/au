@@ -1,4 +1,4 @@
-#include "Zstd.h"
+#include "ZstdSeekable.h"
 
 #include "au/AuCommon.h"
 #include "au/ParseError.h"

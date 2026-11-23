@@ -1,5 +1,5 @@
 #include "TclapHelper.h"
-#include "Zstd.h"
+#include "ZstdSeekable.h"
 
 #include <thread>
 

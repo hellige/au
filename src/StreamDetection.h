@@ -2,7 +2,7 @@
 
 #include "AuMagic.h"
 #include "Zindex.h"
-#include "Zstd.h"
+#include "ZstdSeekable.h"
 #include "au/FileByteSource.h"
 
 namespace au {

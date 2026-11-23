@@ -3,7 +3,7 @@
 #include "GrepHandler.h"
 #include "JsonOutputHandler.h"
 #include "StreamDetection.h"
-#include "Zstd.h"
+#include "ZstdSeekable.h"
 #include "au/AuDecoder.h"
 #include "au/AuEncoder.h"
 #include "au/BufferByteSource.h"

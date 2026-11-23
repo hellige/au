@@ -66,7 +66,6 @@ if (STATIC)
     SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif ()
 find_package(ZLIB REQUIRED)
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(SYSTEM ${ZLIB_INCLUDE_DIRS} external/rapidjson/include external/tclap/include)
 set(BENCHMARK_ENABLE_GTEST_TESTS CACHE BOOL OFF)
 set(BENCHMARK_ENABLE_TESTING CACHE BOOL OFF)
@@ -106,7 +105,11 @@ target_include_directories(zstd_seekable SYSTEM PUBLIC
 target_link_libraries(zstd_seekable PUBLIC libzstd_static)
 
 # au configuration
-include_directories(src)
+# Note: our include paths (src/, and the build dir for the generated
+# au/Version.h) are attached to the libau target rather than set globally
+# with include_directories(), so they don't leak into external targets. In
+# particular, src/ZstdSeekable.h must not be visible to zstd's own sources,
+# which include "zstd.h": on case-insensitive filesystems the two collide.
 link_directories(${PROJECT_BINARY_DIR}/lib)
 
 add_subdirectory(src)
