@@ -328,10 +328,9 @@ ZstdByteSource::ZstdByteSource(FileByteSourceImpl &source)
     : FileByteSource(source.name()) {
   // we can only take over the buffered data if nothing has been consumed yet
   // (detection peeks and then seeks back to the start).
-  if (source.pos() != static_cast<size_t>(source.cur_ - source.buf_))
+  if (source.pos() != source.bufferOffset())
     THROW_RT("ZstdByteSource must be created from a source at position 0");
-  std::string_view buffered(
-      source.buf_, static_cast<size_t>(source.limit_ - source.buf_));
+  auto buffered = source.bufferedFromStart();
   impl_ = std::make_unique<Impl>(std::move(source.file_), buffered,
                                  source.name());
 }

@@ -7,41 +7,41 @@
 
 namespace au {
 
+/// A byte source over an in-memory buffer. The whole buffer is the readable
+/// window, so underflow() only ever happens at eof. (The buffer is never
+/// written through, despite cur_ and limit_ being non-const in the base.)
 class BufferByteSource : public AuByteSource {
   const char *buf_; //< Underlying source buffer
   size_t bufLen_;   //< Underlying source buffer length
-  size_t pos_ = 0;  //< Current position (this may be 1 past the end of buf_)
+
+  void setPos(size_t p) {
+    cur_ = const_cast<char *>(buf_) + p;
+    pos_ = p;
+  }
+
+protected:
+  bool underflow() override { return false; }
 
 public:
-  BufferByteSource(const char *buf, size_t len) : buf_(buf), bufLen_(len) {}
+  BufferByteSource(const char *buf, size_t len) : buf_(buf), bufLen_(len) {
+    setPos(0);
+    limit_ = const_cast<char *>(buf_) + bufLen_;
+  }
 
   BufferByteSource(std::string_view buf)
-  : buf_(buf.data()), bufLen_(buf.length())
+  : BufferByteSource(buf.data(), buf.length())
   {}
 
   std::string name() const override {
     return "<buffer>";
   }
 
-  size_t pos() const override {
-    assert(pos_ <= bufLen_);
-    return pos_;
-  }
-
   size_t endPos() const override { return bufLen_; }
-
-  Byte peek() override {
-    return pos_ < bufLen_ ? Byte(buf_[pos_]) : Byte::Eof();
-  }
-
-  Byte next() override {
-    return pos_ < bufLen_ ? Byte(buf_[pos_++]) : Byte::Eof();
-  }
 
   void readFunc(size_t len, Fn &&func) override {
     size_t sz = std::min(len, bufLen_ - pos_);
     func(std::string_view(buf_ + pos_, sz));
-    pos_ += sz;
+    setPos(pos_ + sz);
   }
 
   // ignored, the whole buffer is always available...
@@ -59,17 +59,17 @@ public:
     if (abspos >= bufLen_) {
       THROW_RT("failed to seek to desired location: " << abspos);
     }
-    pos_ = abspos;
+    setPos(abspos);
   }
 
   void skip(size_t len) override { seek(pos_ + len); }
 
   bool scanTo(std::string_view needle) override {
-    char *found = static_cast<char *>(memmem(buf_ + pos_, bufLen_ - pos_,
+    auto found = static_cast<const char *>(memmem(buf_ + pos_, bufLen_ - pos_,
                         needle.data(), needle.length()));
     if (found) {
       assert(found >= buf_);
-      pos_ = static_cast<size_t>(found - buf_);
+      setPos(static_cast<size_t>(found - buf_));
       return true;
     }
     return false;

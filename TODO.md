@@ -24,11 +24,10 @@
    in the FileByteSource and then an `output_` buffer in ZipByteSource, and
    data is pointlessly copied between. This is an artifact of lifting the gzip
    code from `zindex`, but it would be good to clean that up and eliminate the
-   intermediate buffer.
- - Get rid of the pure virtual AuByteSource and make BufferByteSource a subtype
-   like the other two. The buffer case is much less common, and I don't think
-   it's worth adding lots of virtual calls in the common case just to keep that
-   code simple.
+   intermediate buffer. (Seekable zstd has the same copy, from its frame
+   buffer.) Low priority: the copy is a few percent of decompression time at
+   most. Now that AuByteSource owns the read window, the decompressing sources
+   could point it directly at their own output instead.
 
 ### Consider
 

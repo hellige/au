@@ -12,7 +12,23 @@
 
 namespace au {
 
+/** A source of bytes for the decoder.
+ *
+ * next() and peek() are called for nearly every byte parsed, so they're
+ * inline and non-virtual: they read directly from a window of buffered bytes
+ * [cur_, limit_) that the subclass maintains, and only call the virtual
+ * underflow() to refill the window when it's exhausted. (This is the same
+ * approach as std::streambuf.) Everything else is virtual. */
 class AuByteSource {
+protected:
+  char *cur_ = nullptr;   //< Next byte to be read
+  char *limit_ = nullptr; //< End of the readable window
+  size_t pos_ = 0;        //< Stream position of cur_
+
+  /// Make at least one more byte available in [cur_, limit_), keeping
+  /// pos_ consistent. Called only when cur_ == limit_. Returns false at eof.
+  virtual bool underflow() = 0;
+
 public:
   class Byte {
     int value_;
@@ -22,18 +38,26 @@ public:
     Byte() : value_(-1) {}
   public:
     bool isEof() const { return value_ == -1; }
-    char charValue() const {
-      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+    // these are called for nearly every byte parsed, so they must be inlined,
+    // with the (never expected) throw kept out of line. otherwise gcc emits
+    // them as real calls, which costs 10-25% of linear parse time.
+    [[gnu::always_inline]] char charValue() const {
+      if (isEof()) [[unlikely]] throwEof();
       return static_cast<char>(value_);
     }
-    std::byte byteValue() const {
-      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+    [[gnu::always_inline]] std::byte byteValue() const {
+      if (isEof()) [[unlikely]] throwEof();
       return static_cast<std::byte>(value_);
     }
-    uint8_t uint8Value() const {
-      if (isEof()) throw std::runtime_error("Tried to get value of eof");
+    [[gnu::always_inline]] uint8_t uint8Value() const {
+      if (isEof()) [[unlikely]] throwEof();
       return static_cast<uint8_t>(value_);
     }
+  private:
+    [[noreturn, gnu::noinline, gnu::cold]] static void throwEof() {
+      throw std::runtime_error("Tried to get value of eof");
+    }
+  public:
     static Byte Eof() { return Byte(); }
     friend bool operator ==(Byte b, char c) {
       return b.value_ == c;
@@ -60,15 +84,22 @@ public:
 
   /// The current position of the byte source. [0..sourceLen] (i.e. up to 1 past
   /// the end of the source - when at EOF).
-  virtual size_t pos() const = 0;
+  size_t pos() const { return pos_; }
   /// The length of the byte source (the position of the EOF)
   virtual size_t endPos() const = 0;
   /// The current byte
-  virtual Byte peek() = 0;
+  [[gnu::always_inline]] Byte peek() {
+    if (cur_ == limit_ && !underflow()) [[unlikely]] return Byte::Eof();
+    return Byte(*cur_);
+  }
   /// The next byte. Calling this on a newly created source should return the
   /// very first char in the source the 1st time it is called and then
   /// subsequent characters on each invocation.
-  virtual Byte next() = 0;
+  [[gnu::always_inline]] Byte next() {
+    if (cur_ == limit_ && !underflow()) [[unlikely]] return Byte::Eof();
+    pos_++;
+    return Byte(*cur_++);
+  }
 
   template<typename T>
   void read(T *t, size_t len) {

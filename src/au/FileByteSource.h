@@ -21,10 +21,7 @@ protected:
   const size_t INIT_BUFFER_SIZE;
   std::string name_;
   size_t bufSize_; //< Allocated size of current working buffer
-  char *buf_;      //< Working buffer
-  size_t pos_;     //< Current position in the underlying data stream
-  char *cur_;      //< Current position in the working buffer
-  char *limit_;    //< End of the current working buffer
+  char *buf_;      //< Working buffer; cur_ and limit_ point into it
   std::optional<size_t> pinPos_;
 
   bool waitForData_;
@@ -36,7 +33,9 @@ public:
         name_(fname == "-" ? "<stdin>" : fname),
         bufSize_(INIT_BUFFER_SIZE),
         buf_(static_cast<char *>(malloc(bufSize_))),
-        pos_(0), cur_(buf_), limit_(buf_), waitForData_(false) {}
+        waitForData_(false) {
+    cur_ = limit_ = buf_;
+  }
 
   FileByteSource(const FileByteSource &) = delete;
   FileByteSource(FileByteSource &&) = delete;
@@ -53,20 +52,6 @@ public:
 
   void setFollow(bool follow) {
     waitForData_ = follow;
-  }
-
-  /// Position in the underlying data stream
-  size_t pos() const override { return pos_; }
-
-  Byte next() override {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    pos_++;
-    return Byte(*cur_++);
-  }
-
-  Byte peek() override {
-    while (cur_ == limit_) if (!read()) return Byte::Eof();
-    return Byte(*cur_);
   }
 
   void readFunc(size_t len, Fn &&func) override {
@@ -178,6 +163,20 @@ public:
       }
     }
   }
+
+protected:
+  bool underflow() override {
+    while (cur_ == limit_) if (!read()) return false;
+    return true;
+  }
+
+  /// Everything currently in the buffer, consumed or not, and the offset of
+  /// the next unconsumed byte within it. Used when handing a file over to a
+  /// decompressing source after peeking at its first few bytes.
+  std::string_view bufferedFromStart() const {
+    return {buf_, static_cast<size_t>(limit_ - buf_)};
+  }
+  size_t bufferOffset() const { return static_cast<size_t>(cur_ - buf_); }
 
 private:
   virtual size_t doRead(char *buf, size_t len) = 0;

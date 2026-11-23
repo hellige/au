@@ -402,11 +402,12 @@ struct ZipByteSource::Impl {
     // TODO all of this, and the friend declaration in FileByteSourceImpl, is
     // quite ugly. find a cleaner way to upgrade a file byte source to a
     // ZipByteSource...
-    auto len = static_cast<size_t>(source.limit_ - source.cur_);
+    auto buffered = source.bufferedFromStart().substr(source.bufferOffset());
+    auto len = buffered.size();
     if (len > sizeof(input_))
       THROW_RT("Initializing ZipByteStream from FileInputSream with too much"
         " buffered data (" << len << " > " << sizeof(input_) << ")");
-    ::memcpy(input_, source.cur_, len);
+    ::memcpy(input_, buffered.data(), len);
     context_->zs_.stream.avail_in = static_cast<uint32_t>(len);
     context_->zs_.stream.next_in = input_;
   }
