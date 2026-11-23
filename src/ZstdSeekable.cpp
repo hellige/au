@@ -1,5 +1,6 @@
 #include "ZstdSeekable.h"
 
+#include "CpuAffinity.h"
 #include "au/AuCommon.h"
 #include "au/ParseError.h"
 
@@ -433,11 +434,18 @@ size_t readFully(FILE *f, char *buf, size_t len) {
 
 /// Compresses frames in parallel (up to opts.threads in flight) and writes
 /// them in order, followed by a seek table on finish().
+///
+/// Each frame gets a fresh thread. (A persistent thread pool measured 5-10%
+/// slower, apparently because the kernel places newly created threads on idle
+/// CPUs, but tends to wake existing ones on the waker's CPU.) If opts.cpus is
+/// set, frame k's thread pins itself to cpus[k % threads]: at most `threads`
+/// consecutive frames are ever in flight, so no two share a CPU.
 class FrameSink {
   FILE *out_;
   const ZstdCompressOptions &opts_;
   std::unique_ptr<ZSTD_frameLog, FrameLogDeleter> frameLog_;
   std::deque<std::future<CompressedFrame>> inFlight_;
+  size_t submitted_ = 0;
 
 public:
   size_t totalIn = 0;
@@ -448,7 +456,21 @@ public:
       : out_(out), opts_(opts),
         frameLog_(ZSTD_seekable_createFrameLog(0)) {
     if (!frameLog_) THROW_RT("Unable to create zstd seekable frame log");
+    if (!opts.cpus.empty() && opts.cpus.size() < threads())
+      THROW_RT(threads() << " threads requested, but only " << opts.cpus.size()
+               << " CPUs given to pin them to");
   }
+
+  ~FrameSink() {
+    // if we're unwinding, let in-flight compressions finish before their
+    // inputs and our options go away. (the futures from std::async would
+    // block in their destructors anyway; this just makes it explicit.)
+    for (auto &f : inFlight_)
+      if (f.valid()) f.wait();
+  }
+
+  FrameSink(const FrameSink &) = delete;
+  FrameSink &operator=(const FrameSink &) = delete;
 
   void add(std::vector<char> frame) {
     if (frame.empty()) return;
@@ -456,9 +478,19 @@ public:
       THROW_RT("Frame of " << frame.size() << " bytes exceeds the seekable"
                " format's maximum of "
                << ZSTD_SEEKABLE_MAX_FRAME_DECOMPRESSED_SIZE);
-    if (inFlight_.size() >= std::max(1u, opts_.threads)) writeOldest();
-    inFlight_.push_back(std::async(std::launch::async, compressFrame,
-                                   std::move(frame), std::cref(opts_)));
+    // bound memory: at most `threads` frames being compressed, plus however
+    // many are finished and waiting to be written in order
+    if (inFlight_.size() >= threads()) writeOldest();
+    std::optional<int> cpu;
+    if (!opts_.cpus.empty()) cpu = opts_.cpus[submitted_ % threads()];
+    submitted_++;
+    inFlight_.push_back(std::async(
+        std::launch::async,
+        [this, cpu](std::vector<char> src) {
+          if (cpu) pinThisThreadToCpu(*cpu);
+          return compressFrame(std::move(src), opts_);
+        },
+        std::move(frame)));
   }
 
   void finish() {
@@ -478,9 +510,14 @@ public:
   }
 
 private:
+  unsigned threads() const { return std::max(1u, opts_.threads); }
+
   void writeOldest() {
-    auto frame = inFlight_.front().get();
+    // take the future out of the queue before get(), which rethrows any error
+    // from the compression thread and leaves the future empty either way
+    auto future = std::move(inFlight_.front());
     inFlight_.pop_front();
+    auto frame = future.get();
     writeAll(out_, frame.data.data(), frame.data.size());
     check(ZSTD_seekable_logFrame(frameLog_.get(),
                                  static_cast<unsigned>(frame.data.size()),

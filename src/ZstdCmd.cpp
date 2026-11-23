@@ -1,7 +1,9 @@
+#include "CpuAffinity.h"
 #include "TclapHelper.h"
 #include "ZstdSeekable.h"
 
-#include <thread>
+#include <algorithm>
+#include <unistd.h>
 
 namespace au {
 
@@ -19,7 +21,12 @@ void usage() {
       << "  -h --help              show usage and exit\n"
       << "  -o --output <path>     write to <path> (\"-\" for stdout)\n"
       << "  -l --level <n>         compression level (default 9)\n"
-      << "  -T --threads <n>       compression threads (default 1, 0 = #cores)\n"
+      << "  -T --threads <n>       compression threads (default 1, or the number\n"
+      << "                         of --cpus if given). 0 = one per CPU this\n"
+      << "                         process may run on (respects taskset, etc.)\n"
+      << "     --cpus <list>       pin compression threads to these CPUs, one\n"
+      << "                         thread per CPU, e.g. 2,3,40-47 or 0-15:2\n"
+      << "                         (same syntax as taskset -c). Linux only.\n"
       << "  -f --frame-size <n>    uncompressed bytes per frame; accepts K/M/G\n"
       << "                         suffixes (default 16M)\n"
       << "     --long <n>          enable long-distance matching with window\n"
@@ -64,14 +71,52 @@ int zstd(int argc, const char * const *argv) {
   TCLAP::SwitchArg noCheck("", "no-check", "no-check", tclap.cmd());
   TCLAP::SwitchArg verbose("v", "verbose", "verbose", tclap.cmd());
   TCLAP::SwitchArg au("", "au", "au", tclap.cmd());
+  TCLAP::ValueArg<std::string> cpus(
+      "", "cpus", "cpus", false, "", "list", tclap.cmd());
 
   if (!tclap.parse(argc, argv)) return 1;
 
   ZstdCompressOptions opts;
   opts.level = level.getValue();
-  opts.threads = threads.getValue();
-  if (opts.threads == 0)
-    opts.threads = std::max(1u, std::thread::hardware_concurrency());
+  if (cpus.isSet()) {
+    if (!cpuPinningSupported()) {
+      std::cerr << "--cpus isn't supported on this platform\n";
+      return 1;
+    }
+    opts.cpus = parseCpuList(cpus.getValue());
+    if (opts.cpus.empty()) {
+      std::cerr << "--cpus: empty CPU list\n";
+      return 1;
+    }
+    // a thread can pin itself to any CPU in its cgroup, even outside an
+    // affinity mask set with taskset. that's surprising if someone combines
+    // the two, so insist that --cpus stays within the current mask.
+    auto allowed = allowedCpus();
+    if (!allowed.empty()) {
+      for (auto cpu : opts.cpus) {
+        if (!std::binary_search(allowed.begin(), allowed.end(), cpu)) {
+          std::cerr << "--cpus: CPU " << cpu << " isn't in this process's"
+                    << " allowed CPU set (see taskset -p " << ::getpid()
+                    << ")\n";
+          return 1;
+        }
+      }
+    }
+  }
+  if (!threads.isSet()) {
+    opts.threads = opts.cpus.empty()
+        ? 1u : static_cast<unsigned>(opts.cpus.size());
+  } else if (threads.getValue() == 0) {
+    opts.threads = opts.cpus.empty()
+        ? usableCpuCount() : static_cast<unsigned>(opts.cpus.size());
+  } else {
+    opts.threads = threads.getValue();
+    if (!opts.cpus.empty() && opts.threads > opts.cpus.size()) {
+      std::cerr << "-T " << opts.threads << " is more threads than --cpus gives"
+                << " CPUs (" << opts.cpus.size() << ")\n";
+      return 1;
+    }
+  }
   opts.frameSize = parseSize(frameSize.getValue());
   opts.longWindowLog = longWindow.getValue();
   opts.checksum = !noCheck.getValue();

@@ -107,7 +107,15 @@ same as the original's, but the decompressed *bytes* are not, so don't use
 `--au`, the output always decompresses to the exact input bytes.
 
 Useful options (see `au zstd --help`):
- - `-T <n>`: compress with `n` threads (`0` for all cores).
+ - `-T <n>`: compress with `n` threads. `0` means one per CPU the process is
+   allowed to use, so `taskset -c 8-15 au zstd -T 0 ...` uses 8 threads, on
+   those CPUs.
+ - `--cpus <list>`: pin each compression thread to its own CPU, e.g.
+   `--cpus 2,3,40-47` (same syntax as `taskset -c`; Linux only). `-T`
+   defaults to the number of CPUs listed. This is mainly useful for isolated
+   CPUs (`isolcpus`), where the kernel won't spread threads across the CPUs
+   in an ordinary affinity mask by itself, so `taskset` alone can leave some
+   of them idle.
  - `-l <n>`: compression level (default 9). Higher levels are smaller but
    slower to compress, and are no slower to read. The default takes a few
    seconds per GB with all cores, and on our logs is about 10% smaller than

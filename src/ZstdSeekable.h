@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace au {
 
@@ -51,6 +52,9 @@ struct ZstdCompressOptions {
   // and still fast with threads, and level doesn't affect read speed.
   int level = 9;
   unsigned threads = 1;
+  /// If non-empty, compression thread i is pinned to cpus[i]. Must have at
+  /// least `threads` entries. (Linux only.)
+  std::vector<int> cpus;
   size_t frameSize = 16 * 1024 * 1024;
   bool checksum = true; // per-frame content checksums
   int longWindowLog = 0; // if non-zero, enable long distance matching
