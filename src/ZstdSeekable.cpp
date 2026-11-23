@@ -159,6 +159,31 @@ struct ZstdByteSource::Impl {
       }
       cOffsets_.push_back(cEnd);
       dOffsets_.push_back(dEnd);
+
+      // The seek table describes frames starting at offset 0, so the frames
+      // it lists must end exactly where the seek table itself begins. If not,
+      // the file isn't what the table describes: most likely several files
+      // concatenated together (which is valid zstd, but only the last file's
+      // table is at the end). We can still read it as a stream, but seeking
+      // would read garbage, so ignore the table.
+      // footer: numFrames (4 bytes), descriptor (1), magic (4). bit 7 of the
+      // descriptor says whether each table entry includes a checksum.
+      unsigned char footer[ZSTD_seekTableFooterSize];
+      if (::fseeko(f, -static_cast<off_t>(sizeof(footer)), SEEK_END) != 0
+          || ::fread(footer, 1, sizeof(footer), f) != sizeof(footer))
+        THROW_RT("Unable to read seek table of " << name);
+      auto fileSize = static_cast<uint64_t>(::ftello(f));
+      uint64_t entrySize = (footer[4] & 0x80) ? 12 : 8;
+      auto tableSize = ZSTD_SKIPPABLEHEADERSIZE + ZSTD_seekTableFooterSize
+          + static_cast<uint64_t>(n) * entrySize;
+      if (cEnd + tableSize != fileSize) {
+        std::cerr << "Warning: the zstd seek table in " << name
+                  << " doesn't describe the whole file (was it made by"
+                     " concatenating several files?). Reading it as a plain"
+                     " zstd stream; binary search and tail won't work.\n";
+        cOffsets_.clear();
+        dOffsets_.clear();
+      }
     }
 
     if (::fseeko(f, here, SEEK_SET) != 0)

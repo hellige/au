@@ -18,7 +18,7 @@ void usage() {
       << "\n"
       << "  -h --help              show usage and exit\n"
       << "  -o --output <path>     write to <path> (\"-\" for stdout)\n"
-      << "  -l --level <n>         compression level (default 3)\n"
+      << "  -l --level <n>         compression level (default 9)\n"
       << "  -T --threads <n>       compression threads (default 1, 0 = #cores)\n"
       << "  -f --frame-size <n>    uncompressed bytes per frame; accepts K/M/G\n"
       << "                         suffixes (default 16M)\n"
@@ -54,7 +54,7 @@ int zstd(int argc, const char * const *argv) {
   TCLAP::ValueArg<std::string> output(
       "o", "output", "output", false, "", "path", tclap.cmd());
   TCLAP::ValueArg<int> level(
-      "l", "level", "level", false, 3, "int", tclap.cmd());
+      "l", "level", "level", false, 9, "int", tclap.cmd());
   TCLAP::ValueArg<unsigned> threads(
       "T", "threads", "threads", false, 1, "int", tclap.cmd());
   TCLAP::ValueArg<std::string> frameSize(

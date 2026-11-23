@@ -47,7 +47,9 @@ private:
 };
 
 struct ZstdCompressOptions {
-  int level = 3;
+  // higher than zstd's own default of 3: it's ~10% smaller on typical logs
+  // and still fast with threads, and level doesn't affect read speed.
+  int level = 9;
   unsigned threads = 1;
   size_t frameSize = 16 * 1024 * 1024;
   bool checksum = true; // per-frame content checksums

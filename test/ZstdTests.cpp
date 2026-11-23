@@ -417,6 +417,39 @@ TEST(ZstdTest, TruncatedAndCorruptFiles) {
   EXPECT_THROW(auCat(tmp / "bad.zst"), std::runtime_error);
 }
 
+TEST(ZstdTest, ConcatenatedSeekableFilesFallBackToStreaming) {
+  // concatenating seekable files is valid zstd, but the seek table at the end
+  // only describes the last file. we must notice and read as a stream rather
+  // than seeking to the wrong places.
+  TempDir tmp;
+  GenOptions g;
+  g.records = 2000;
+  auto a = genAu(g);
+  auto b = genAu(g);
+  writeFile(tmp / "a.au", a);
+  writeFile(tmp / "b.au", b);
+  for (bool au : {false, true}) {
+    SCOPED_TRACE(au ? "--au" : "plain");
+    zstdCompressFile(tmp / "a.au", tmp / "a.zst", opts(4096, au));
+    zstdCompressFile(tmp / "b.au", tmp / "b.zst", opts(4096, au));
+    writeFile(tmp / "ab.zst", readFile(tmp / "a.zst") + readFile(tmp / "b.zst"));
+
+    testing::internal::CaptureStderr();
+    auto source = detectSource(tmp / "ab.zst", std::nullopt, false);
+    auto err = testing::internal::GetCapturedStderr();
+    EXPECT_FALSE(source->isSeekable());
+    EXPECT_NE(err.find("doesn't describe the whole file"), std::string::npos);
+
+    testing::internal::CaptureStderr();
+    auto decoded = auCat(tmp / "ab.zst");
+    testing::internal::GetCapturedStderr();
+    EXPECT_EQ(decoded, auCatBytes(a) + auCatBytes(b));
+
+    // each part on its own is still seekable
+    EXPECT_TRUE(detectSource(tmp / "b.zst", std::nullopt, false)->isSeekable());
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Binary search
 

@@ -7,9 +7,9 @@
 working with sequential record-oriented data, primarily log files. The tool
 supports grepping in `.au` files, and for convenience supports grepping normal
 JSON files and plain timestamped ASCII log files as well. The combination of
-binary search within large files, and the ability to index and offer random
-access to gzipped files, make this a very useful tool even for plain ASCII
-logs!
+binary search within large files, and random access to compressed files
+(seekable zstd, or gzip with an index), make this a very useful tool even for
+plain ASCII logs!
 
 A rust port of the encoder/decoder library is available
 [here](https://github.com/mrettig/au-rs).
@@ -77,20 +77,63 @@ or au-encoded.
 ### Compressed files
 
 When your files are big enough to be annoying, you'll probably also want to
-compress them after writing.  In order to keep supporting binary search, `au`
-can read and index gzipped files, after which binary search is supported there
-too:
+compress them after writing. `au` reads gzip and zstd files transparently
+(`cat`, `grep`, `tail`, ...), but binary search needs random access, which
+plain compressed files don't support. There are two ways to get it.
+
+#### Seekable zstd (recommended)
+
+`au zstd` compresses a file in the
+[zstd seekable format](https://github.com/facebook/zstd/blob/dev/contrib/seekable_format/zstd_seekable_compression_format.md):
+a series of independently compressed frames with a seek table at the end. The
+result is an ordinary zstd file that any zstd tool can decompress, but `au`
+can jump straight to any frame, so binary search works with no separate index:
+
+    # compress an au file (writes biglog.au.zst):
+    $ au zstd --au -T 0 biglog.au
+    $ au grep -o eventTime 2018-07-16T08:01:23.102 biglog.au.zst
+
+    # any other file (json, ascii logs) is compressed byte-for-byte:
+    $ au zstd -T 0 biglog.json
+    $ au grep -o eventTime 2018-07-16T08:01:23.102 biglog.json.zst
+
+`--au` is strongly recommended for au files. It starts every frame with a copy
+of the current au dictionary, so each frame can be decoded on its own and
+binary search only ever has to look at one frame at a time. This typically
+makes `grep -o` 5-10x faster than without it, and well over 10x faster than
+gzip, especially on network filesystems. The decoded records are exactly the
+same as the original's, but the decompressed *bytes* are not, so don't use
+`--au` if you need `zstd -d` to reproduce the original file exactly. Without
+`--au`, the output always decompresses to the exact input bytes.
+
+Useful options (see `au zstd --help`):
+ - `-T <n>`: compress with `n` threads (`0` for all cores).
+ - `-l <n>`: compression level (default 9). Higher levels are smaller but
+   slower to compress, and are no slower to read. The default takes a few
+   seconds per GB with all cores, and on our logs is about 10% smaller than
+   zstd's usual default of 3. `-l 19` is another ~13% smaller but around 15x
+   slower to compress.
+ - `-f <size>`: uncompressed bytes per frame (default 16M). Smaller frames
+   make each binary search step a little cheaper but compress slightly worse;
+   the default is a good balance.
+
+Note that seekable zstd files can't simply be concatenated (as plain zstd and
+gzip files can): the seek table at the end of the result only describes the
+last file. `au` detects this and refuses to binary search the result, but you
+can still decompress it with `zstd -dc` and recompress, or pipe it through
+`au cat -`.
+
+#### Indexed gzip
+
+For existing gzipped files, `au` can build a separate index, after which
+binary search works there too:
 
     # build an index of the file, written to biglog.au.gz.auzx:
     $ au zindex biglog.au.gz
+    $ au grep -o eventTime 2018-07-16T08:01:23.102 biglog.au.gz
 
-    # note grep is now zgrep! this is still a binary search:
-    $ au zgrep -o eventTime 2018-07-16T08:01:23.102 biglog.au.gz
-
-And, once again, we can do this with normal JSON files as well:
-
-    $ au zindex biglog.json.gz
-    $ au zgrep -o eventTime 2018-07-16T08:01:23.102 biglog.json.gz
+Building the index requires reading the whole file, and searches are
+considerably slower than with seekable zstd.
 
 
 ### Patterns
