@@ -16,6 +16,7 @@ namespace au {
 class FileByteSource : public AuByteSource { // TODO rename this and FileByteSourceImpl
 protected:
   static constexpr size_t MIN_HIST_SIZE = 1 * 1024;
+  static constexpr size_t BACKFILL_MAX = 4 * 1024 * 1024;
 
   const size_t INIT_BUFFER_SIZE;
   std::string name_;
@@ -111,6 +112,27 @@ public:
     auto bufStartPos = pos_ - static_cast<size_t>(cur_ - buf_);
     if (abspos >= bufStartPos && abspos < (pos_ + buffAvail())) {
       cur_ = buf_ + (abspos - bufStartPos);
+      pos_ = abspos;
+      return;
+    }
+
+    // a short backward seek (e.g., walking the dictionary chain back towards
+    // the last dict-clear) is likely to be followed by another one. fill the
+    // buffer so that abspos lands near its end rather than its start, so
+    // subsequent backward hops stay within the buffer.
+    if (abspos < bufStartPos && bufStartPos - abspos < BACKFILL_MAX) {
+      // don't back up into a previous chunk: that could cost a whole chunk
+      // decompression just to fill the buffer
+      auto backoff = std::min(abspos - chunkStartFor(abspos),
+                              INIT_BUFFER_SIZE - MIN_HIST_SIZE);
+      auto start = abspos - backoff;
+      doSeek(start);
+      cur_ = limit_ = buf_;
+      pos_ = start;
+      while (static_cast<size_t>(limit_ - buf_) <= backoff) {
+        if (!read()) THROW_RT("failed to read from new location");
+      }
+      cur_ = buf_ + backoff;
       pos_ = abspos;
       return;
     }

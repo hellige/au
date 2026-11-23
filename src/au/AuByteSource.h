@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -90,6 +91,17 @@ public:
   virtual bool scanTo(std::string_view needle) = 0;
 
   virtual void skip(size_t len) = 0;
+
+  /// For sources made of independently decodable chunks (e.g., zstd frames):
+  /// returns a chunk start position strictly within (lo, hi), preferring one
+  /// near the middle, or nullopt if there is none. Seeking to a chunk start
+  /// is much cheaper than seeking to an arbitrary position.
+  virtual std::optional<size_t> chunkBoundaryWithin(size_t, size_t) const {
+    return std::nullopt;
+  }
+
+  /// The start of the chunk containing pos (0 for unchunked sources).
+  virtual size_t chunkStartFor(size_t) const { return 0; }
 
   /// Seek to length bytes from the end of the stream
   void tail(size_t length) {

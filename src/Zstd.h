@@ -37,6 +37,9 @@ public:
 
   bool isSeekable() const override;
   size_t endPos() const override;
+  std::optional<size_t> chunkBoundaryWithin(size_t lo,
+                                            size_t hi) const override;
+  size_t chunkStartFor(size_t pos) const override;
 
 private:
   size_t doRead(char *buf, size_t len) override;
@@ -50,6 +53,10 @@ struct ZstdCompressOptions {
   bool checksum = true; // per-frame content checksums
   int longWindowLog = 0; // if non-zero, enable long distance matching
   bool verbose = false;
+  /// Treat the input as au and make each frame independently decodable by
+  /// starting it with the full current dictionary. Decoded records are
+  /// unchanged, but the decompressed bytes differ from the input.
+  bool auFrames = false;
 };
 
 /// Compresses `inFile` ("-" for stdin) to `outFile` ("-" for stdout) in the

@@ -25,6 +25,11 @@ void usage() {
       << "     --long <n>          enable long-distance matching with window\n"
       << "                         log <n> (only useful for large frames)\n"
       << "     --no-check          don't write per-frame content checksums\n"
+      << "     --au                input is au: start each frame with the full\n"
+      << "                         dictionary so frames decode independently,\n"
+      << "                         which makes binary search much faster. The\n"
+      << "                         decoded records are unchanged, but the\n"
+      << "                         decompressed bytes will differ from the input.\n"
       << "  -v --verbose           print progress and stats to stderr\n";
 }
 
@@ -58,6 +63,7 @@ int zstd(int argc, const char * const *argv) {
       "", "long", "long", false, 0, "int", tclap.cmd());
   TCLAP::SwitchArg noCheck("", "no-check", "no-check", tclap.cmd());
   TCLAP::SwitchArg verbose("v", "verbose", "verbose", tclap.cmd());
+  TCLAP::SwitchArg au("", "au", "au", tclap.cmd());
 
   if (!tclap.parse(argc, argv)) return 1;
 
@@ -70,6 +76,7 @@ int zstd(int argc, const char * const *argv) {
   opts.longWindowLog = longWindow.getValue();
   opts.checksum = !noCheck.getValue();
   opts.verbose = verbose.getValue();
+  opts.auFrames = au.getValue();
 
   std::string outFile;
   if (output.isSet()) outFile = output.getValue();

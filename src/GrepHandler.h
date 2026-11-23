@@ -495,7 +495,18 @@ private:
       size_t start = 0;
       size_t end = source.endPos();
       while (end > start) {
-        if (end - start <= SCAN_THRESHOLD) {
+        // for chunked sources (e.g., seekable zstd), probing at a chunk
+        // boundary is much cheaper than at an arbitrary position. we don't
+        // need to split the range exactly in half, so probe at boundaries
+        // while there are any, then bisect within the final chunk.
+        auto boundary = source.chunkBoundaryWithin(start, end);
+
+        if (!boundary && end - start <= SCAN_THRESHOLD) {
+          // back up a bit to allow for roughly-ordered records. for chunked
+          // sources this may cross into the previous chunk, which costs a
+          // partial decode of that chunk, but measurements show it's
+          // negligible, and it matters for correctness with out-of-order
+          // records near a chunk boundary.
           static_cast<This *>(this)->seekSync(
                   start > PREFIX_AMOUNT ? start - PREFIX_AMOUNT : 0);
           pattern.scanSuffixAmount = SUFFIX_AMOUNT;
@@ -503,7 +514,7 @@ private:
           return reallyDoGrep();
         }
 
-        size_t next = start + (end-start)/2;
+        size_t next = boundary ? *boundary : start + (end-start)/2;
         static_cast<This *>(this)->seekSync(next);
 
         auto startOfScan = source.pos();
@@ -518,6 +529,12 @@ private:
           if (grepHandler.matched()) {
             if (startOfScan < end) {
               end = startOfScan;
+            } else if (boundary) {
+              // the chunk boundary fell inside the record that ends at (or
+              // spans) `end`, so the first record we found is at or past end.
+              // no record starts in [next, startOfScan), so next is still a
+              // valid upper bound, and since next < end, this makes progress.
+              end = next;
             } else {
               // this is an indication that we've jumped back to bisect the range
               // (start, end) but that in scanning forward to find the first record,

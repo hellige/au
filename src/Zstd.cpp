@@ -1,5 +1,6 @@
 #include "Zstd.h"
 
+#include "au/AuCommon.h"
 #include "au/ParseError.h"
 
 #define ZSTD_STATIC_LINKING_ONLY // for ZSTD_d_windowLogMax, ZSTD_WINDOWLOG_MAX
@@ -13,7 +14,7 @@
 #include <deque>
 #include <future>
 #include <iostream>
-#include <thread>
+#include <limits>
 #include <vector>
 
 namespace au {
@@ -63,25 +64,50 @@ struct ZstdByteSource::Impl {
   std::vector<uint64_t> cOffsets_;
   std::vector<uint64_t> dOffsets_;
 
+  /// A byte buffer that grows without initializing its contents.
+  class Buffer {
+    std::unique_ptr<char[]> buf_;
+    size_t size_ = 0, capacity_ = 0;
+  public:
+    void resize(size_t n) {
+      if (n > capacity_) {
+        buf_.reset(new char[n]); // default-init: not zeroed
+        capacity_ = n;
+      }
+      size_ = n;
+    }
+    char *data() { return buf_.get(); }
+    const char *data() const { return buf_.get(); }
+    size_t size() const { return size_; }
+  };
+
   // A frame being (lazily) decompressed. We only decompress as far into the
   // frame as we've been asked to read, so a seek costs on average half a
   // frame of decompression rather than a whole one.
   struct Frame {
     std::optional<size_t> index;
     std::unique_ptr<ZSTD_DCtx, DCtxDeleter> dctx{ZSTD_createDCtx()};
-    std::vector<char> compressed;
-    std::vector<char> data; // sized to the full decompressed frame
+    // buffers are reused across frames and never zero-filled: a probe
+    // touches only a small prefix of a frame, so zeroing (or even faulting
+    // in) the whole thing would dominate the cost.
+    Buffer compressed;            // sized to the full compressed frame
+    size_t compressedRead = 0;    // bytes of compressed that are valid
+    Buffer data;                  // sized to the full decompressed frame
     ZSTD_inBuffer in{nullptr, 0, 0};
-    size_t decoded = 0; // bytes of data that are valid
+    size_t decoded = 0;           // bytes of data that are valid
     uint64_t lastUse = 0;
   };
+  // compressed data is read lazily too, growing geometrically from this size.
+  // a probe at a frame start (to inspect the first record or two) then only
+  // costs a small read, which matters a lot on high-latency filesystems.
+  static constexpr size_t InitialCompressedRead = 64 * 1024;
   // binary search over an au file bounces between a probe point and the
   // dictionary preceding it, which is often in an earlier frame, so we keep a
   // few frames around.
   static constexpr size_t FrameCacheSize = 4;
   // when we need more of a frame, decompress at least this much more, to
   // amortize per-call overhead
-  static constexpr size_t MinDecodeChunk = 1024 * 1024;
+  static constexpr size_t MinDecodeChunk = 64 * 1024;
   std::vector<Frame> frames_;
   uint64_t useCounter_ = 0;
 
@@ -140,6 +166,26 @@ struct ZstdByteSource::Impl {
   }
 
   bool isSeekable() const { return !dOffsets_.empty(); }
+
+  size_t chunkStartFor(size_t pos) const {
+    if (!isSeekable() || pos >= dOffsets_.back()) return 0;
+    return static_cast<size_t>(dOffsets_[frameFor(pos)]);
+  }
+
+  std::optional<size_t> chunkBoundaryWithin(size_t lo, size_t hi) const {
+    if (dOffsets_.size() < 3 || hi <= lo + 1) return std::nullopt;
+    // frame starts strictly within (lo, hi). the sentinel (end of file) is
+    // excluded, as is frame 0 (position 0 is never > lo).
+    auto first = std::upper_bound(dOffsets_.begin(), dOffsets_.end() - 1, lo);
+    auto last = std::lower_bound(first, dOffsets_.end() - 1, hi);
+    if (first == last) return std::nullopt;
+    auto mid = lo + (hi - lo) / 2;
+    // the boundary closest to the middle
+    auto it = std::lower_bound(first, last, mid);
+    if (it == last) --it;
+    else if (it != first && mid - *(it - 1) < *it - mid) --it;
+    return static_cast<size_t>(*it);
+  }
 
   size_t endPos() const {
     if (!isSeekable())
@@ -205,18 +251,32 @@ struct ZstdByteSource::Impl {
     auto cSize = static_cast<size_t>(cOffsets_[index + 1] - cOffsets_[index]);
     auto dSize = static_cast<size_t>(dOffsets_[index + 1] - dOffsets_[index]);
     f.compressed.resize(cSize);
+    f.compressedRead = 0;
     f.data.resize(dSize);
-    if (::fseeko(file_.get(), static_cast<off_t>(cOffsets_[index]),
-                 SEEK_SET) != 0)
-      THROW_RT("Error seeking in zstd file: " << strerror(errno));
-    if (::fread(f.compressed.data(), 1, cSize, file_.get()) != cSize)
-      THROW_RT("Error reading zstd frame " << index << ": "
-               << (::ferror(file_.get()) ? strerror(errno) : "truncated file"));
-    f.in = ZSTD_inBuffer{f.compressed.data(), cSize, 0};
+    f.in = ZSTD_inBuffer{f.compressed.data(), 0, 0};
     f.decoded = 0;
     f.index = index;
     f.lastUse = ++useCounter_;
     return f;
+  }
+
+  /// Read more of the frame's compressed data. Returns false if it's all
+  /// been read already.
+  bool readMoreCompressed(Frame &f) {
+    auto total = f.compressed.size();
+    if (f.compressedRead == total) return false;
+    auto want = std::max(InitialCompressedRead, f.compressedRead);
+    want = std::min(want, total - f.compressedRead);
+    auto off = cOffsets_[*f.index] + f.compressedRead;
+    if (::fseeko(file_.get(), static_cast<off_t>(off), SEEK_SET) != 0)
+      THROW_RT("Error seeking in zstd file: " << strerror(errno));
+    if (::fread(f.compressed.data() + f.compressedRead, 1, want, file_.get())
+        != want)
+      THROW_RT("Error reading zstd frame " << *f.index << ": "
+               << (::ferror(file_.get()) ? strerror(errno) : "truncated file"));
+    f.compressedRead += want;
+    f.in.size = f.compressedRead;
+    return true;
   }
 
   /// Ensure at least `upTo` bytes of the frame are decompressed.
@@ -225,10 +285,10 @@ struct ZstdByteSource::Impl {
     auto target = std::min(f.data.size(), std::max(upTo, f.decoded + MinDecodeChunk));
     ZSTD_outBuffer out{f.data.data(), target, f.decoded};
     while (out.pos < target) {
-      auto before = out.pos;
+      if (f.in.pos == f.in.size && !readMoreCompressed(f)) break;
       auto ret = check(ZSTD_decompressStream(f.dctx.get(), &out, &f.in),
                        "zstd decompression failed");
-      if (ret == 0 || (out.pos == before && f.in.pos == f.in.size)) break;
+      if (ret == 0) break;
     }
     f.decoded = out.pos;
     if (f.decoded < upTo)
@@ -243,7 +303,11 @@ struct ZstdByteSource::Impl {
     auto &f = getFrame(index);
     auto offset = static_cast<size_t>(pos_ - dOffsets_[index]);
     auto n = std::min(len, f.data.size() - offset);
-    decodeTo(f, offset + n);
+    // only decode as much as needed to return *something*: the caller asks
+    // for its whole free buffer, but a probe might only look at one record.
+    // anything already decoded is returned too.
+    decodeTo(f, offset + std::min(n, MinDecodeChunk));
+    n = std::min(n, f.decoded - offset);
     ::memcpy(buf, f.data.data() + offset, n);
     pos_ += n;
     return n;
@@ -280,6 +344,13 @@ size_t ZstdByteSource::doRead(char *buf, size_t len) {
   return impl_->doRead(buf, len);
 }
 void ZstdByteSource::doSeek(size_t abspos) { impl_->doSeek(abspos); }
+size_t ZstdByteSource::chunkStartFor(size_t pos) const {
+  return impl_->chunkStartFor(pos);
+}
+std::optional<size_t> ZstdByteSource::chunkBoundaryWithin(size_t lo,
+                                                          size_t hi) const {
+  return impl_->chunkBoundaryWithin(lo, hi);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Compression
@@ -336,6 +407,349 @@ size_t readFully(FILE *f, char *buf, size_t len) {
   return total;
 }
 
+/// Compresses frames in parallel (up to opts.threads in flight) and writes
+/// them in order, followed by a seek table on finish().
+class FrameSink {
+  FILE *out_;
+  const ZstdCompressOptions &opts_;
+  std::unique_ptr<ZSTD_frameLog, FrameLogDeleter> frameLog_;
+  std::deque<std::future<CompressedFrame>> inFlight_;
+
+public:
+  size_t totalIn = 0;
+  size_t totalOut = 0;
+  size_t numFrames = 0;
+
+  FrameSink(FILE *out, const ZstdCompressOptions &opts)
+      : out_(out), opts_(opts),
+        frameLog_(ZSTD_seekable_createFrameLog(0)) {
+    if (!frameLog_) THROW_RT("Unable to create zstd seekable frame log");
+  }
+
+  void add(std::vector<char> frame) {
+    if (frame.empty()) return;
+    if (frame.size() > ZSTD_SEEKABLE_MAX_FRAME_DECOMPRESSED_SIZE)
+      THROW_RT("Frame of " << frame.size() << " bytes exceeds the seekable"
+               " format's maximum of "
+               << ZSTD_SEEKABLE_MAX_FRAME_DECOMPRESSED_SIZE);
+    if (inFlight_.size() >= std::max(1u, opts_.threads)) writeOldest();
+    inFlight_.push_back(std::async(std::launch::async, compressFrame,
+                                   std::move(frame), std::cref(opts_)));
+  }
+
+  void finish() {
+    while (!inFlight_.empty()) writeOldest();
+    std::vector<char> tableBuf(64 * 1024);
+    while (true) {
+      ZSTD_outBuffer tableOut{tableBuf.data(), tableBuf.size(), 0};
+      auto remaining = check(
+          ZSTD_seekable_writeSeekTable(frameLog_.get(), &tableOut),
+          "Writing seek table");
+      writeAll(out_, tableBuf.data(), tableOut.pos);
+      totalOut += tableOut.pos;
+      if (remaining == 0) break;
+    }
+    if (::fflush(out_) != 0)
+      THROW_RT("Error writing output: " << strerror(errno));
+  }
+
+private:
+  void writeOldest() {
+    auto frame = inFlight_.front().get();
+    inFlight_.pop_front();
+    writeAll(out_, frame.data.data(), frame.data.size());
+    check(ZSTD_seekable_logFrame(frameLog_.get(),
+                                 static_cast<unsigned>(frame.data.size()),
+                                 static_cast<unsigned>(frame.srcSize), 0),
+          "Logging seekable frame");
+    totalIn += frame.srcSize;
+    totalOut += frame.data.size();
+    numFrames++;
+    if (opts_.verbose)
+      std::cerr << "\rframes: " << numFrames << ", in: " << totalIn
+                << ", out: " << totalOut << std::flush;
+  }
+};
+
+/// Buffered reader over the raw input, used to split an au stream into
+/// records without decoding values.
+class RecordReader {
+  FILE *in_;
+  std::vector<char> buf_;
+  size_t start_ = 0; // start of unconsumed data in buf_
+  size_t end_ = 0;   // end of valid data in buf_
+  bool eof_ = false;
+
+public:
+  explicit RecordReader(FILE *in) : in_(in), buf_(1 << 20) {}
+
+  /// Make at least n bytes available past the start. False if we hit eof.
+  bool ensure(size_t n) {
+    while (end_ - start_ < n) {
+      if (eof_) return false;
+      if (start_ > 0) {
+        ::memmove(buf_.data(), buf_.data() + start_, end_ - start_);
+        end_ -= start_;
+        start_ = 0;
+      }
+      if (buf_.size() < n) buf_.resize(std::max(n, buf_.size() * 2));
+      auto got = ::fread(buf_.data() + end_, 1, buf_.size() - end_, in_);
+      if (got == 0) {
+        if (::ferror(in_)) THROW_RT("Error reading input: " << strerror(errno));
+        eof_ = true;
+      }
+      end_ += got;
+    }
+    return true;
+  }
+
+  size_t available() const { return end_ - start_; }
+  const char *data() const { return buf_.data() + start_; }
+  uint8_t at(size_t i) const { return static_cast<uint8_t>(buf_[start_ + i]); }
+  void consume(size_t n) { start_ += n; }
+};
+
+/// Thrown when the input ends partway through a record.
+struct TruncatedRecord {};
+
+/// Helpers to measure the encoded length of au fields at an offset into the
+/// reader's buffer (relative to its current start).
+struct AuScanner {
+  RecordReader &r;
+
+  uint8_t byte(size_t off) {
+    if (!r.ensure(off + 1)) throw TruncatedRecord{};
+    return r.at(off);
+  }
+
+  /// Returns the offset just past a varint starting at off.
+  size_t varint(size_t off, uint64_t *value = nullptr) {
+    uint64_t result = 0;
+    unsigned shift = 0;
+    while (true) {
+      auto b = byte(off++);
+      if (shift >= 64) THROW_RT("Bad varint in au input");
+      result |= static_cast<uint64_t>(b & 0x7f) << shift;
+      shift += 7;
+      if (!(b & 0x80)) break;
+    }
+    if (value) *value = result;
+    return off;
+  }
+
+  size_t formatVersion(size_t off) {
+    auto c = byte(off);
+    if ((c & ~0x1fu) == marker::SmallInt::Positive) return off + 1;
+    if (c == marker::Varint) return varint(off + 1);
+    THROW_RT("Expected au format version");
+  }
+
+  size_t string(size_t off) {
+    auto c = byte(off);
+    uint64_t len;
+    if ((c & ~0x1fu) == 0x20) {
+      len = c & 0x1fu;
+      off += 1;
+    } else if (c == marker::String) {
+      off = varint(off + 1, &len);
+    } else {
+      THROW_RT("Expected a string in au dictionary record");
+    }
+    if (!r.ensure(off + len)) throw TruncatedRecord{};
+    return off + len;
+  }
+
+  size_t term(size_t off) {
+    if (byte(off) != marker::RecordEnd || byte(off + 1) != '\n')
+      THROW_RT("Expected end of au record");
+    return off + 2;
+  }
+
+  uint32_t backref(size_t off) {
+    if (!r.ensure(off + 4)) throw TruncatedRecord{};
+    uint32_t v;
+    ::memcpy(&v, r.data() + off, 4);
+    return v;
+  }
+};
+
+template <typename Buf>
+void appendBackref(Buf &out, size_t backref) {
+  if (backref > std::numeric_limits<uint32_t>::max())
+    THROW_RT("au backref " << backref << " doesn't fit in 32 bits");
+  auto v = static_cast<uint32_t>(backref);
+  const char *p = reinterpret_cast<const char *>(&v);
+  out.insert(out.end(), p, p + 4);
+}
+
+/// Splits an au stream into frames such that every frame can be decoded
+/// independently: each frame after the first begins with a dictionary clear
+/// followed by the complete current dictionary (preserving entry order, hence
+/// indices). Backrefs are rewritten to match. The decoded records are
+/// unchanged, but the bytes are not identical to the input.
+void auFrames(FILE *in, FrameSink &sink, const ZstdCompressOptions &opts) {
+  RecordReader r(in);
+  AuScanner sc{r};
+
+  if (!r.ensure(1)) return; // empty input: empty output
+  if (!r.ensure(3) || ::memcmp(r.data(), "HAU", 3) != 0)
+    THROW_RT("Input doesn't look like an au file (no au header). Use au zstd"
+             " without --au to compress other files.");
+
+  std::vector<char> frame;
+  frame.reserve(opts.frameSize + opts.frameSize / 8);
+  size_t frameStartOut = 0; // output position of the start of `frame`
+  auto outPos = [&] { return frameStartOut + frame.size(); };
+
+  size_t inPos = 0;
+  std::optional<size_t> inLastDict, outLastDict;
+  // raw encoded strings of the current dictionary, in order, and the
+  // version bytes of the most recent clear (to replicate it)
+  std::string dictBytes;
+  std::string clearVersion;
+  size_t records = 0, checkpoints = 0;
+
+  auto emitFrame = [&] {
+    frameStartOut += frame.size();
+    sink.add(std::move(frame));
+    frame = std::vector<char>();
+    frame.reserve(opts.frameSize + opts.frameSize / 8);
+  };
+
+  auto checkBackref = [&](uint32_t backref, char type) {
+    if (!inLastDict)
+      THROW_RT("au '" << type << "' record at " << inPos
+               << " precedes any dictionary record");
+    if (backref != inPos - *inLastDict)
+      THROW_RT("Unexpected backref in au '" << type << "' record at " << inPos
+               << ": " << backref << " (expected " << inPos - *inLastDict
+               << "). This au layout isn't supported by --au.");
+  };
+
+  while (r.ensure(1)) {
+    auto type = static_cast<char>(r.at(0));
+    size_t len = 0;
+    try {
+      switch (type) {
+        case 'H': {
+          if (!r.ensure(3) || ::memcmp(r.data(), "HAU", 3) != 0)
+            THROW_RT("Bad au header at " << inPos);
+          len = sc.term(sc.string(sc.formatVersion(3)));
+          break;
+        }
+        case 'C':
+          len = sc.term(sc.formatVersion(1));
+          break;
+        case 'A': {
+          size_t off = 5;
+          sc.backref(1);
+          while (sc.byte(off) != marker::RecordEnd) off = sc.string(off);
+          len = sc.term(off);
+          break;
+        }
+        case 'V': {
+          sc.backref(1);
+          uint64_t valueLen;
+          auto off = sc.varint(5, &valueLen);
+          len = off + valueLen;
+          if (!r.ensure(len)) throw TruncatedRecord{};
+          break;
+        }
+        default:
+          THROW_RT("Unexpected au record type 0x" << std::hex
+                   << static_cast<int>(static_cast<uint8_t>(type)) << std::dec
+                   << " at input position " << inPos);
+      }
+    } catch (TruncatedRecord &) {
+      std::cerr << "Warning: input ends with a partial au record at position "
+                << inPos << "; copying the remaining " << r.available()
+                << " bytes as-is\n";
+      frame.insert(frame.end(), r.data(), r.data() + r.available());
+      r.consume(r.available());
+      break;
+    }
+
+    // cut a new frame before this record if the current one is full. a 'C'
+    // or 'H' record needs no preceding dictionary, so only checkpoint before
+    // 'A' and 'V'.
+    if (frame.size() >= opts.frameSize) {
+      emitFrame();
+      if (type == 'A' || type == 'V') {
+        // re-establish the current dictionary at the start of the frame
+        checkpoints++;
+        std::string cp;
+        cp.reserve(dictBytes.size() + clearVersion.size() + 16);
+        cp += 'C';
+        cp += clearVersion;
+        cp += static_cast<char>(marker::RecordEnd);
+        cp += '\n';
+        outLastDict = outPos();
+        if (!dictBytes.empty()) {
+          auto addPos = outPos() + cp.size();
+          cp += 'A';
+          appendBackref(cp, addPos - *outLastDict);
+          cp += dictBytes;
+          cp += static_cast<char>(marker::RecordEnd);
+          cp += '\n';
+          outLastDict = addPos;
+        }
+        frame.insert(frame.end(), cp.begin(), cp.end());
+      }
+    }
+
+    const char *rec = r.data();
+    switch (type) {
+      case 'H':
+        frame.insert(frame.end(), rec, rec + len);
+        break;
+      case 'C':
+        clearVersion.assign(rec + 1, len - 3);
+        dictBytes.clear();
+        inLastDict = inPos;
+        outLastDict = outPos();
+        frame.insert(frame.end(), rec, rec + len);
+        break;
+      case 'A':
+      case 'V': {
+        uint32_t backref;
+        ::memcpy(&backref, rec + 1, 4);
+        checkBackref(backref, type);
+        auto here = outPos();
+        frame.push_back(type);
+        appendBackref(frame, here - *outLastDict);
+        frame.insert(frame.end(), rec + 5, rec + len);
+        if (type == 'A') {
+          dictBytes.append(rec + 5, len - 7); // strings, without the term
+          inLastDict = inPos;
+          outLastDict = here;
+        } else {
+          records++;
+        }
+        break;
+      }
+      default: break; // unreachable
+    }
+    inPos += len;
+    r.consume(len);
+  }
+  emitFrame();
+
+  if (opts.verbose)
+    std::cerr << "\nau: " << records << " value records, " << checkpoints
+              << " dictionary checkpoints\n";
+}
+
+void plainFrames(FILE *in, FrameSink &sink, const ZstdCompressOptions &opts) {
+  while (true) {
+    std::vector<char> buf(opts.frameSize);
+    auto n = readFully(in, buf.data(), buf.size());
+    if (n == 0) break;
+    buf.resize(n);
+    sink.add(std::move(buf));
+    if (n < opts.frameSize) break;
+  }
+}
+
 }
 
 int zstdCompressFile(const std::string &inFile, const std::string &outFile,
@@ -361,68 +775,17 @@ int zstdCompressFile(const std::string &inFile, const std::string &outFile,
     out = outOwner.get();
   }
 
-  std::unique_ptr<ZSTD_frameLog, FrameLogDeleter> frameLog(
-      ZSTD_seekable_createFrameLog(0));
-  if (!frameLog) THROW_RT("Unable to create zstd seekable frame log");
+  FrameSink sink(out, opts);
+  if (opts.auFrames) auFrames(in, sink, opts);
+  else plainFrames(in, sink, opts);
+  sink.finish();
 
-  auto threads = std::max(1u, opts.threads);
-  size_t totalIn = 0;
-  size_t totalOut = 0;
-  size_t numFrames = 0;
-
-  auto emit = [&](CompressedFrame frame) {
-    writeAll(out, frame.data.data(), frame.data.size());
-    check(ZSTD_seekable_logFrame(frameLog.get(),
-                                 static_cast<unsigned>(frame.data.size()),
-                                 static_cast<unsigned>(frame.srcSize), 0),
-          "Logging seekable frame");
-    totalIn += frame.srcSize;
-    totalOut += frame.data.size();
-    numFrames++;
-    if (opts.verbose)
-      std::cerr << "\rframes: " << numFrames << ", in: " << totalIn
-                << ", out: " << totalOut << std::flush;
-  };
-
-  // Read frames sequentially and compress them in parallel, keeping at most
-  // `threads` frames in flight. Output is written in order.
-  std::deque<std::future<CompressedFrame>> inFlight;
-  while (true) {
-    std::vector<char> buf(opts.frameSize);
-    auto n = readFully(in, buf.data(), buf.size());
-    if (n == 0) break;
-    buf.resize(n);
-    if (inFlight.size() >= threads) {
-      emit(inFlight.front().get());
-      inFlight.pop_front();
-    }
-    inFlight.push_back(std::async(std::launch::async, compressFrame,
-                                  std::move(buf), std::cref(opts)));
-    if (n < opts.frameSize) break;
-  }
-  while (!inFlight.empty()) {
-    emit(inFlight.front().get());
-    inFlight.pop_front();
-  }
-
-  std::vector<char> tableBuf(64 * 1024);
-  while (true) {
-    ZSTD_outBuffer tableOut{tableBuf.data(), tableBuf.size(), 0};
-    auto remaining = check(ZSTD_seekable_writeSeekTable(frameLog.get(), &tableOut),
-                           "Writing seek table");
-    writeAll(out, tableBuf.data(), tableOut.pos);
-    totalOut += tableOut.pos;
-    if (remaining == 0) break;
-  }
-
-  if (::fflush(out) != 0)
-    THROW_RT("Error writing output: " << strerror(errno));
   if (opts.verbose) {
-    std::cerr << "\r" << inFile << ": " << totalIn << " -> " << totalOut
-              << " bytes in " << numFrames << " frames";
-    if (totalIn)
-      std::cerr << " (" << 100.0 * static_cast<double>(totalOut)
-                         / static_cast<double>(totalIn) << "%)";
+    std::cerr << "\r" << inFile << ": " << sink.totalIn << " -> "
+              << sink.totalOut << " bytes in " << sink.numFrames << " frames";
+    if (sink.totalIn)
+      std::cerr << " (" << 100.0 * static_cast<double>(sink.totalOut)
+                         / static_cast<double>(sink.totalIn) << "%)";
     std::cerr << "\n";
   }
   return 0;
